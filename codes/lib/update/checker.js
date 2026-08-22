@@ -48,7 +48,7 @@ async function fetchJson(url) {
     const res = await fetch(url, {
         headers: {
             Accept: "application/vnd.github+json",
-            "User-Agent": "tabyagent-update-checker",
+            "User-Agent": "tabybot-update-checker",
         },
         signal: AbortSignal.timeout(30_000),
     });
@@ -168,8 +168,8 @@ export async function checkForUpdate() {
     const cfg = updateConfig();
     if (cfg.enabled === false) return null;
 
-    const githubRepo = cfg.githubRepo || "gpdir16/tabyAgent";
-    const imageName = normalizeImageName(cfg.imageName || "ghcr.io/gpdir16/tabyagent");
+    const githubRepo = cfg.githubRepo || "gpdir16/tabyBot";
+    const imageName = normalizeImageName(cfg.imageName || "ghcr.io/gpdir16/tabybot");
     const installScriptUrl = cfg.installScriptUrl || `https://raw.githubusercontent.com/${githubRepo}/main/scripts/install.sh`;
 
     const releases = await fetchReleases(githubRepo);

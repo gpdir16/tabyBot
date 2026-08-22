@@ -81,7 +81,7 @@ function loadState() {
         if (!("activeMessageId" in state)) state.activeMessageId = null;
         return state;
     } catch (err) {
-        console.error(`tabyAgent: invalid onboarding state:`, err.message);
+        console.error(`tabyBot: invalid onboarding state:`, err.message);
         return null;
     }
 }
@@ -191,7 +191,7 @@ async function applyConfig(partial) {
 function texts(lang) {
     const t = {
         en: {
-            welcome: "tabyAgent setup — choose your language:",
+            welcome: "tabyBot setup — choose your language:",
             provider: "Choose LLM provider:",
             baseURL: "Send your API base URL (e.g. https://api.example.com/v1)",
             apiKey: "Send your API key.",
@@ -222,7 +222,7 @@ function texts(lang) {
             grokLoginFailed: "❌ Login failed: {error}\n\nTap retry to try again.",
             grokLoginRetry: "Retry login",
             grokLoginCancel: "Cancel",
-            menuTitle: "tabyAgent settings",
+            menuTitle: "tabyBot settings",
             catLanguage: "Language",
             catThinking: "Thinking level",
             catModel: "Model",
@@ -246,7 +246,7 @@ function texts(lang) {
             toggleOff: "Off",
         },
         ko: {
-            welcome: "tabyAgent 설정 — 언어를 선택하세요:",
+            welcome: "tabyBot 설정 — 언어를 선택하세요:",
             provider: "LLM 제공자를 선택하세요:",
             baseURL: "API base URL을 보내주세요 (예: https://api.example.com/v1)",
             apiKey: "API 키를 보내주세요.",
@@ -277,7 +277,7 @@ function texts(lang) {
             grokLoginFailed: "❌ 로그인 실패: {error}\n\n다시 시도하려면 버튼을 누르세요.",
             grokLoginRetry: "다시 시도",
             grokLoginCancel: "취소",
-            menuTitle: "tabyAgent 설정",
+            menuTitle: "tabyBot 설정",
             catLanguage: "언어",
             catThinking: "사고 수준",
             catModel: "모델",
@@ -300,7 +300,7 @@ function texts(lang) {
             toggleOff: "끄기",
         },
         ja: {
-            welcome: "tabyAgent 設定 — 言語を選んでください:",
+            welcome: "tabyBot 設定 — 言語を選んでください:",
             provider: "LLM プロバイダを選んでください:",
             baseURL: "API base URL を送信 (例: https://api.example.com/v1)",
             apiKey: "API キーを送信してください。",
@@ -331,7 +331,7 @@ function texts(lang) {
             grokLoginFailed: "❌ ログイン失敗: {error}\n\n再試行ボタンを押してください。",
             grokLoginRetry: "再試行",
             grokLoginCancel: "キャンセル",
-            menuTitle: "tabyAgent 設定",
+            menuTitle: "tabyBot 設定",
             catLanguage: "言語",
             catThinking: "思考レベル",
             catModel: "モデル",

@@ -2,7 +2,7 @@
 // Loaded via Page.addScriptToEvaluateOnNewDocument on each CDP session,
 // so it survives navigation, SPA route changes, and iframe loads.
 (() => {
-    const STEALTH_UA = __TABYAGENT_USER_AGENT_JSON__;
+    const STEALTH_UA = __TABYBOT_USER_AGENT_JSON__;
 
     const define = (obj, key, value) => {
         try {

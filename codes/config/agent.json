@@ -17,8 +17,8 @@
         "enabled": true,
         "intervalCron": "0 * * * *",
         "initialDelayMs": 60000,
-        "githubRepo": "gpdir16/tabyAgent",
-        "imageName": "ghcr.io/gpdir16/tabyagent",
-        "installScriptUrl": "https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh"
+        "githubRepo": "gpdir16/tabyBot",
+        "imageName": "ghcr.io/gpdir16/tabybot",
+        "installScriptUrl": "https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh"
     }
 }

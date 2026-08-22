@@ -7,7 +7,7 @@ description: Proactively discover, install, and use agent skills from the ecosys
 
 Proactively discover, install, and use skills from the open agent skills ecosystem. Don't wait to be asked — when a non-trivial task arrives and no installed skill covers it, search the ecosystem yourself.
 
-## tabyAgent
+## tabyBot
 
 - Installed skills (built-in + user) are listed in the **system prompt** each turn; call `skills_read <name>` to load the full SKILL.md.
 - Install skills under **`{{SKILLS_DIR}}/<name>/SKILL.md`**.

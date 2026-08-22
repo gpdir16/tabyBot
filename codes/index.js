@@ -24,7 +24,7 @@ async function main() {
 
     while (!hasBotToken()) {
         console.error("");
-        console.error("tabyAgent: set TELEGRAM_BOT_TOKEN in .env (or config), then restart.");
+        console.error("tabyBot: set TELEGRAM_BOT_TOKEN in .env (or config), then restart.");
         console.error("  All other setup is done in Telegram after the bot is running.");
         console.error("");
         await sleep(10000);
@@ -35,7 +35,7 @@ async function main() {
             await startTelegramBot();
             return;
         } catch (err) {
-            console.error("tabyAgent: bot error:", err.message || err);
+            console.error("tabyBot: bot error:", err.message || err);
             console.error(`Retrying in ${RETRY_MS / 1000}s…`);
             await sleep(RETRY_MS);
         }

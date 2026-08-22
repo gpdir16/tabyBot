@@ -9,7 +9,7 @@ description: "Use this skill whenever the user wants to create, read, edit, or m
 
 A .docx file is a ZIP archive containing XML files.
 
-## tabyAgent tools
+## tabyBot tools
 
 - **`terminal_run`** — run all scripts (Python, pandoc, npm, LibreOffice).
 - **`file_read`** — read extracted XML or text output.

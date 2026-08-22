@@ -280,7 +280,7 @@ export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary)
     manifest.lastCompressedAt = now;
     saveManifest(chatId, manifest);
 
-    console.log(`tabyAgent: archived session ${oldId}, active session is now ${newId} (${turns.length} turns including compressed summary)`);
+    console.log(`tabyBot: archived session ${oldId}, active session is now ${newId} (${turns.length} turns including compressed summary)`);
     return { archivedSessionId: oldId, activeSessionId: newId, sessionFile: relFile };
 }
 

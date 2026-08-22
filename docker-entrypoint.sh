@@ -35,7 +35,7 @@ if should_launch_chrome "$1"; then
   mkdir -p /tmp/chrome-data /tmp/bh-runtime
   CHROME_BIN="$(find_chrome_bin)"
   if [ -z "${CHROME_BIN}" ]; then
-    echo "tabyAgent: Chromium binary not found; browser-use will fail until Chrome is installed." >&2
+    echo "tabyBot: Chromium binary not found; browser-use will fail until Chrome is installed." >&2
   else
     "$CHROME_BIN" \
       --headless=new \

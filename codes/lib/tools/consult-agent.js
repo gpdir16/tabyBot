@@ -37,8 +37,8 @@ export async function executeConsultAgent(_name, args, ctx = {}) {
 
     const lowered = query.toLowerCase();
     const target =
-        lowered === DEFAULT_AGENT_ID || lowered === "tabyagent"
-            ? { id: DEFAULT_AGENT_ID, name: "tabyAgent", persona: "" }
+        lowered === DEFAULT_AGENT_ID || lowered === "tabybot"
+            ? { id: DEFAULT_AGENT_ID, name: "tabyBot", persona: "" }
             : getAgent(query) || findAgentByNameOrId(query);
     if (!target) return { error: `unknown agent: ${query}` };
     if (target.id === (ctx.agentId || DEFAULT_AGENT_ID)) {

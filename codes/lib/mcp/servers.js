@@ -46,7 +46,7 @@ async function connectServer(server) {
         args: server.args || [],
         env: { ...process.env, ...(server.env || {}) },
     });
-    const client = new Client({ name: "tabyagent", version: "0.1.0" }, { capabilities: {} });
+    const client = new Client({ name: "tabybot", version: "0.1.0" }, { capabilities: {} });
     await client.connect(transport);
     const { tools } = await client.listTools();
     servers.set(server.name, {
@@ -70,7 +70,7 @@ export async function syncMcpServers() {
         try {
             await connectServer(server);
         } catch (err) {
-            console.error(`tabyAgent: MCP ${server.name} failed:`, err.message || err);
+            console.error(`tabyBot: MCP ${server.name} failed:`, err.message || err);
         }
     }
 }

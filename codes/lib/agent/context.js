@@ -89,7 +89,7 @@ function loadScopedMemory(raw, { truncateMemory = false, maxMemoryChars = 120000
 }
 
 function defaultIdentityText() {
-    return "You are the default **tabyAgent** (id: `main`). Handle general work. Consult a listed specialist when one fits better.";
+    return "You are the default **tabyBot** (id: `main`). Handle general work. Consult a listed specialist when one fits better.";
 }
 
 function agentIdentityText(agentId) {
@@ -97,7 +97,7 @@ function agentIdentityText(agentId) {
     const agent = getAgent(agentId);
     if (!agent) return defaultIdentityText();
     const job = agent.persona?.trim() || "Do the work the user assigned to this agent.";
-    return `You are **${agent.name}** (id: \`${agent.id}\`).\nYour job this turn: ${job}\nStay in this role. Shared tabyAgent rules still apply. Private memory: \`${agentMemoryFilePath(agent.id)}\``;
+    return `You are **${agent.name}** (id: \`${agent.id}\`).\nYour job this turn: ${job}\nStay in this role. Shared tabyBot rules still apply. Private memory: \`${agentMemoryFilePath(agent.id)}\``;
 }
 
 function agentMemoryText(agentId, opts) {

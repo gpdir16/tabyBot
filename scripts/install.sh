@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# tabyAgent — install or update (Docker or local; Linux / macOS)
+# tabyBot — install or update (Docker or local; Linux / macOS)
 set -euo pipefail
 
-INSTALLER_URL_DEFAULT="https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh"
+INSTALLER_URL_DEFAULT="https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh"
 
 # curl | bash: stdin is the script pipe (EOF for read). Re-run from a temp file with stdin = terminal.
 bootstrap_tty_installer() {
-    if [ -n "${TABYAGENT_INSTALL_REEXEC:-}" ]; then
+    if [ -n "${TABYBOT_INSTALL_REEXEC:-}" ]; then
         return 0
     fi
     if [ -t 0 ]; then
@@ -21,41 +21,41 @@ bootstrap_tty_installer() {
         echo "  TELEGRAM_BOT_TOKEN='your-token' curl -fsSL ${INSTALLER_URL_DEFAULT} | bash" >&2
         exit 1
     fi
-    local url="${TABYAGENT_INSTALLER_URL:-${INSTALLER_URL_DEFAULT}}"
+    local url="${TABYBOT_INSTALLER_URL:-${INSTALLER_URL_DEFAULT}}"
     local tmp
-    tmp="$(mktemp -t tabyagent-install.XXXXXX.sh)"
+    tmp="$(mktemp -t tabybot-install.XXXXXX.sh)"
     chmod 700 "${tmp}"
     if ! curl -fsSL "${url}" -o "${tmp}"; then
         rm -f "${tmp}"
         echo "Error: Could not download installer (${url})" >&2
         exit 1
     fi
-    exec env TABYAGENT_INSTALL_REEXEC=1 bash "${tmp}" "$@" 0</dev/tty
+    exec env TABYBOT_INSTALL_REEXEC=1 bash "${tmp}" "$@" 0</dev/tty
 }
 bootstrap_tty_installer
 
 REPO_OWNER="gpdir16"
-IMAGE_DEFAULT="ghcr.io/${REPO_OWNER}/tabyagent:latest"
-REPO_URL="https://github.com/${REPO_OWNER}/tabyAgent.git"
-REPO_BRANCH="${TABYAGENT_REPO_BRANCH:-main}"
-INSTALL_DIR="${TABYAGENT_HOME:-${HOME}/.tabyagent}"
+IMAGE_DEFAULT="ghcr.io/${REPO_OWNER}/tabybot:latest"
+REPO_URL="https://github.com/${REPO_OWNER}/tabyBot.git"
+REPO_BRANCH="${TABYBOT_REPO_BRANCH:-main}"
+INSTALL_DIR="${TABYBOT_HOME:-${HOME}/.tabybot}"
 APP_DIR="${INSTALL_DIR}/app"
 USER_DATA_DIR="${INSTALL_DIR}/user"
-TABYAGENT_CLI="${INSTALL_DIR}/tabyagent"
+TABYBOT_CLI="${INSTALL_DIR}/tabybot"
 USER_BIN="${HOME}/.local/bin"
 COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
 ENV_FILE="${INSTALL_DIR}/.env"
-LAUNCHD_LABEL="io.tabyagent"
+LAUNCHD_LABEL="io.tabybot"
 BROWSER_USE_PIP_SPEC="${BROWSER_USE_PIP_SPEC:-browser-use==0.13.3}"
 
 DOCKER_SHELL="docker"
-TABYAGENT_LANG_RESOLVED=""
+TABYBOT_LANG_RESOLVED=""
 
 resolve_lang() {
-    if [ -n "${TABYAGENT_LANG_RESOLVED}" ]; then
+    if [ -n "${TABYBOT_LANG_RESOLVED}" ]; then
         return
     fi
-    local lang="${TABYAGENT_LANG:-}"
+    local lang="${TABYBOT_LANG:-}"
     if [ -z "${lang}" ]; then
         case "${LANG:-${LC_ALL:-}}" in
             ko*|KO*) lang=ko ;;
@@ -63,27 +63,27 @@ resolve_lang() {
         esac
     fi
     case "${lang}" in
-        ko|ko_KR|korean) TABYAGENT_LANG_RESOLVED=ko ;;
-        *) TABYAGENT_LANG_RESOLVED=en ;;
+        ko|ko_KR|korean) TABYBOT_LANG_RESOLVED=ko ;;
+        *) TABYBOT_LANG_RESOLVED=en ;;
     esac
 }
 
 is_ko() {
     resolve_lang
-    [ "${TABYAGENT_LANG_RESOLVED}" = ko ]
+    [ "${TABYBOT_LANG_RESOLVED}" = ko ]
 }
 
 usage() {
     cat <<EOF
-Install or update tabyAgent.
+Install or update tabyBot.
 
   curl -fsSL ${INSTALLER_URL_DEFAULT} | bash
 
 Optional:
   TELEGRAM_BOT_TOKEN='...' curl -fsSL ... | bash
   curl -fsSL ... | bash -s -- '1234567890:ABC...'
-  TABYAGENT_MODE=docker|local  (default: docker, or prompt on first install; set explicitly to switch on update)
-Language: TABYAGENT_LANG=ko|en  (default: en, or ko if LANG is Korean)
+  TABYBOT_MODE=docker|local  (default: docker, or prompt on first install; set explicitly to switch on update)
+Language: TABYBOT_LANG=ko|en  (default: en, or ko if LANG is Korean)
 EOF
 }
 
@@ -142,7 +142,7 @@ prompt_yes_no() {
     local default="${2:-y}"
     local hint reply
 
-    if [ "${TABYAGENT_AUTO_INSTALL_DOCKER:-}" = "1" ]; then
+    if [ "${TABYBOT_AUTO_INSTALL_DOCKER:-}" = "1" ]; then
         return 0
     fi
     if ! can_prompt_user; then
@@ -298,7 +298,7 @@ is_installed() {
 read_install_mode() {
     if [ -f "${ENV_FILE}" ]; then
         local mode
-        mode="$(grep '^TABYAGENT_MODE=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        mode="$(grep '^TABYBOT_MODE=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
         mode="$(strip_env_scalar "${mode}" | tr '[:upper:]' '[:lower:]')"
         case "${mode}" in
             docker|local) printf '%s' "${mode}"; return 0 ;;
@@ -345,7 +345,7 @@ prompt_install_mode() {
 }
 
 resolve_install_mode() {
-    local updating="$1" mode="${TABYAGENT_MODE:-}"
+    local updating="$1" mode="${TABYBOT_MODE:-}"
 
     mode="$(printf '%s' "${mode}" | tr '[:upper:]' '[:lower:]')"
     case "${mode}" in
@@ -381,7 +381,7 @@ stop_local_runtime() {
             launchctl bootout "gui/$(id -u)/${LAUNCHD_LABEL}" 2>/dev/null || true
             ;;
         Linux)
-            systemctl --user stop tabyagent.service 2>/dev/null || true
+            systemctl --user stop tabybot.service 2>/dev/null || true
             ;;
     esac
     pkill -f "${index_pattern}" 2>/dev/null || true
@@ -395,8 +395,8 @@ uninstall_local_service() {
             ;;
         Linux)
             if command -v systemctl >/dev/null 2>&1; then
-                systemctl --user disable --now tabyagent.service 2>/dev/null || true
-                rm -f "${HOME}/.config/systemd/user/tabyagent.service"
+                systemctl --user disable --now tabybot.service 2>/dev/null || true
+                rm -f "${HOME}/.config/systemd/user/tabybot.service"
                 systemctl --user daemon-reload 2>/dev/null || true
             fi
             ;;
@@ -448,22 +448,22 @@ verify_install() {
                 launchctl print "gui/$(id -u)/${LAUNCHD_LABEL}" >/dev/null 2>&1 && return 0
                 ;;
             Linux)
-                systemctl --user is-active --quiet tabyagent.service 2>/dev/null && return 0
+                systemctl --user is-active --quiet tabybot.service 2>/dev/null && return 0
                 ;;
         esac
         if pgrep -f "${index_pattern}" >/dev/null 2>&1; then
             return 0
         fi
     else
-        if docker_daemon_ok && ${DOCKER_SHELL} ps --filter name=tabyagent --format '{{.Names}}' 2>/dev/null | grep -qx tabyagent; then
+        if docker_daemon_ok && ${DOCKER_SHELL} ps --filter name=tabybot --format '{{.Names}}' 2>/dev/null | grep -qx tabybot; then
             return 0
         fi
     fi
     if is_ko; then
-        echo "⚠ tabyAgent가 아직 실행 중이 아닐 수 있습니다. 로그: ${INSTALL_DIR}/logs/"
+        echo "⚠ tabyBot가 아직 실행 중이 아닐 수 있습니다. 로그: ${INSTALL_DIR}/logs/"
         [ -f "${INSTALL_DIR}/logs/stderr.log" ] && tail -n 5 "${INSTALL_DIR}/logs/stderr.log" 2>/dev/null || true
     else
-        echo "⚠ tabyAgent may not be running yet. Logs: ${INSTALL_DIR}/logs/"
+        echo "⚠ tabyBot may not be running yet. Logs: ${INSTALL_DIR}/logs/"
         [ -f "${INSTALL_DIR}/logs/stderr.log" ] && tail -n 5 "${INSTALL_DIR}/logs/stderr.log" 2>/dev/null || true
     fi
     return 1
@@ -554,7 +554,7 @@ prompt_host_workspace() {
         prompt_yes_no "호스트 폴더를 연결할까요?" n || return 0
         say_user ""
         say_user "⚠ 경고: 에이전트가 연결된 폴더의 파일을 수정할 수 있는 권한을 갖습니다."
-        say_user "  이 설정이 활성화되면 더 이상 tabyAgent가 격리 상태가 아니게 됩니다."
+        say_user "  이 설정이 활성화되면 더 이상 tabyBot가 격리 상태가 아니게 됩니다."
         say_user "  연결된 폴더의 파일을 파괴, 유출할 가능성이 존재합니다."
         prompt_yes_no "그래도 연결하시겠습니까?" n || return 0
     else
@@ -564,7 +564,7 @@ prompt_host_workspace() {
         prompt_yes_no "Connect a host folder?" n || return 0
         say_user ""
         say_user "⚠ Warning: The agent will be able to modify files in the mounted folder."
-        say_user "  Enabling this ends tabyAgent's isolation from your host."
+        say_user "  Enabling this ends tabyBot's isolation from your host."
         say_user "  Connected files may be destroyed or leaked."
         prompt_yes_no "Continue anyway?" n || return 0
     fi
@@ -674,22 +674,22 @@ write_compose() {
     mkdir -p "${INSTALL_DIR}"
     cat >"${COMPOSE_FILE}" <<EOF
 services:
-    tabyagent:
+    tabybot:
         image: ${image}
-        container_name: tabyagent
+        container_name: tabybot
         env_file:
             - .env
         environment:
             TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN:-}
-            TABYAGENT_MODE: docker
-            TABYAGENT_HOME: "${install_dir_escaped}"
-            TABYAGENT_DOCKER_SHELL: \${TABYAGENT_DOCKER_SHELL:-docker}
+            TABYBOT_MODE: docker
+            TABYBOT_HOME: "${install_dir_escaped}"
+            TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
 ${workspace_env}        volumes:
-            - tabyagent-user:/app/user
+            - tabybot-user:/app/user
 ${workspace_volumes}        restart: unless-stopped
 
 volumes:
-    tabyagent-user:
+    tabybot-user:
 EOF
 }
 
@@ -724,25 +724,25 @@ write_env() {
     if [ "${mode}" = local ] && [ -f "${APP_DIR}/VERSION" ]; then
         version="$(tr -d '\n' <"${APP_DIR}/VERSION")"
     elif [ "${mode}" = local ] && [ -f "${ENV_FILE}" ]; then
-        version="$(grep '^TABYAGENT_VERSION=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        version="$(grep '^TABYBOT_VERSION=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
         version="$(strip_env_scalar "${version}")"
     fi
     {
-        printf 'TABYAGENT_MODE=%s\n' "${mode}"
+        printf 'TABYBOT_MODE=%s\n' "${mode}"
         printf 'TELEGRAM_BOT_TOKEN=%s\n' "${token}"
         if [ "${mode}" = docker ]; then
-            write_env_quoted TABYAGENT_DOCKER_SHELL "${DOCKER_SHELL}"
-            write_env_quoted TABYAGENT_HOME "${INSTALL_DIR}"
+            write_env_quoted TABYBOT_DOCKER_SHELL "${DOCKER_SHELL}"
+            write_env_quoted TABYBOT_HOME "${INSTALL_DIR}"
         fi
         if [ "${mode}" = local ]; then
-            write_env_quoted TABYAGENT_HOME "${INSTALL_DIR}"
+            write_env_quoted TABYBOT_HOME "${INSTALL_DIR}"
             write_env_quoted APP_ROOT "${APP_DIR}"
             write_env_quoted USER_DIR "${USER_DATA_DIR}"
             write_env_quoted CODES_DIR "${APP_DIR}/codes"
             write_env_quoted CONFIG_DIR "${APP_DIR}/codes/config"
-            write_env_quoted TABYAGENT_NODE "$(resolve_node_bin)"
+            write_env_quoted TABYBOT_NODE "$(resolve_node_bin)"
             if [ -n "${version}" ]; then
-                printf 'TABYAGENT_VERSION=%s\n' "${version}"
+                printf 'TABYBOT_VERSION=%s\n' "${version}"
             fi
         fi
         if [ -n "${workspace}" ]; then
@@ -774,7 +774,7 @@ pull_image() {
     local compose="$1" image="$2"
     local attempt=1 max_attempts=3
 
-    if is_ko; then echo "==> 설치 파일 받는 중..."; else echo "==> Downloading tabyAgent..."; fi
+    if is_ko; then echo "==> 설치 파일 받는 중..."; else echo "==> Downloading tabyBot..."; fi
 
     while [ "${attempt}" -le "${max_attempts}" ]; do
         if ${compose} -f "${COMPOSE_FILE}" pull 2>/dev/null; then
@@ -797,13 +797,13 @@ pull_image() {
 · Wi‑Fi/인터넷 연결을 확인하세요.
 · Docker Desktop이 켜져 있는지 확인하세요.
 · 1~2분 뒤 같은 설치 명령을 다시 실행해 보세요.
-· 계속 안 되면: https://github.com/gpdir16/tabyAgent/issues"
+· 계속 안 되면: https://github.com/gpdir16/tabyBot/issues"
     else
-        die "Could not download tabyAgent.
+        die "Could not download tabyBot.
 · Check your internet connection.
 · Make sure Docker Desktop is running.
 · Run the same install command again in a minute or two.
-· Still stuck? https://github.com/gpdir16/tabyAgent/issues"
+· Still stuck? https://github.com/gpdir16/tabyBot/issues"
     fi
 }
 
@@ -812,9 +812,9 @@ ensure_node() {
 
     if ! command -v node >/dev/null 2>&1; then
         if is_ko; then
-            die "Node.js 22 이상이 필요합니다. https://nodejs.org 에서 설치하거나 TABYAGENT_MODE=docker 로 Docker 설치를 선택하세요."
+            die "Node.js 22 이상이 필요합니다. https://nodejs.org 에서 설치하거나 TABYBOT_MODE=docker 로 Docker 설치를 선택하세요."
         else
-            die "Node.js 22+ is required. Install from https://nodejs.org or choose Docker with TABYAGENT_MODE=docker."
+            die "Node.js 22+ is required. Install from https://nodejs.org or choose Docker with TABYBOT_MODE=docker."
         fi
     fi
 
@@ -837,15 +837,15 @@ resolve_node_bin() {
 
 download_source_tarball() {
     local url tmp extracted
-    url="https://github.com/${REPO_OWNER}/tabyAgent/archive/refs/heads/${REPO_BRANCH}.tar.gz"
-    tmp="$(mktemp -t tabyagent-src.XXXXXX.tar.gz)"
+    url="https://github.com/${REPO_OWNER}/tabyBot/archive/refs/heads/${REPO_BRANCH}.tar.gz"
+    tmp="$(mktemp -t tabybot-src.XXXXXX.tar.gz)"
     if is_ko; then echo "==> 소스 코드 받는 중..."; else echo "==> Downloading source..."; fi
     curl -fsSL "${url}" -o "${tmp}"
     rm -rf "${APP_DIR}"
     mkdir -p "${INSTALL_DIR}"
     tar -xzf "${tmp}" -C "${INSTALL_DIR}"
     rm -f "${tmp}"
-    extracted="$(find "${INSTALL_DIR}" -maxdepth 1 -mindepth 1 -type d -name 'tabyAgent-*' | head -1)"
+    extracted="$(find "${INSTALL_DIR}" -maxdepth 1 -mindepth 1 -type d -name 'tabyBot-*' | head -1)"
     [ -n "${extracted}" ] || die "$(if is_ko; then echo "소스 압축 해제에 실패했습니다."; else echo "Failed to extract source archive."; fi)"
     mv "${extracted}" "${APP_DIR}"
 }
@@ -901,10 +901,10 @@ install_local_deps() {
     fi
 }
 
-write_tabyagent_cli() {
-    cat >"${TABYAGENT_CLI}" <<'EOF'
+write_tabybot_cli() {
+    cat >"${TABYBOT_CLI}" <<'EOF'
 #!/usr/bin/env bash
-# tabyAgent CLI — manage an installed instance (~/.tabyagent)
+# tabyBot CLI — manage an installed instance (~/.tabybot)
 set -euo pipefail
 
 resolve_install_dir() {
@@ -924,15 +924,15 @@ resolve_install_dir() {
 INSTALL_DIR="$(resolve_install_dir)"
 ENV_FILE="${INSTALL_DIR}/.env"
 COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
-USER_BIN="${HOME}/.local/bin/tabyagent"
-LAUNCHD_LABEL="io.tabyagent"
+USER_BIN="${HOME}/.local/bin/tabybot"
+LAUNCHD_LABEL="io.tabybot"
 APP_DIR="${INSTALL_DIR}/app"
 LOG_DIR="${INSTALL_DIR}/logs"
 
 load_env() {
     # shellcheck disable=SC1091
     [ -f "${ENV_FILE}" ] && set -a && . "${ENV_FILE}" && set +a
-    export TABYAGENT_HOME="${TABYAGENT_HOME:-${INSTALL_DIR}}"
+    export TABYBOT_HOME="${TABYBOT_HOME:-${INSTALL_DIR}}"
     export APP_ROOT="${APP_ROOT:-${INSTALL_DIR}/app}"
     export USER_DIR="${USER_DIR:-${INSTALL_DIR}/user}"
     export CODES_DIR="${CODES_DIR:-${APP_ROOT}/codes}"
@@ -941,8 +941,8 @@ load_env() {
 
 resolve_node() {
     local candidate
-    if [ -n "${TABYAGENT_NODE:-}" ] && [ -x "${TABYAGENT_NODE}" ]; then
-        printf '%s' "${TABYAGENT_NODE}"
+    if [ -n "${TABYBOT_NODE:-}" ] && [ -x "${TABYBOT_NODE}" ]; then
+        printf '%s' "${TABYBOT_NODE}"
         return 0
     fi
     for candidate in /opt/homebrew/bin/node /usr/local/bin/node "$(command -v node 2>/dev/null || true)"; do
@@ -954,8 +954,8 @@ resolve_node() {
 require_node() {
     load_env
     NODE_BIN="$(resolve_node)" || {
-        if is_ko; then echo "node를 찾을 수 없습니다. ${ENV_FILE} 에 TABYAGENT_NODE 를 설정하거나 설치를 다시 실행하세요." >&2
-        else echo "node not found — set TABYAGENT_NODE in ${ENV_FILE} or re-run the installer." >&2; fi
+        if is_ko; then echo "node를 찾을 수 없습니다. ${ENV_FILE} 에 TABYBOT_NODE 를 설정하거나 설치를 다시 실행하세요." >&2
+        else echo "node not found — set TABYBOT_NODE in ${ENV_FILE} or re-run the installer." >&2; fi
         exit 1
     }
     INDEX_JS="${APP_ROOT}/codes/index.js"
@@ -963,7 +963,7 @@ require_node() {
 }
 
 resolve_lang() {
-    local lang="${TABYAGENT_LANG:-}"
+    local lang="${TABYBOT_LANG:-}"
     if [ -z "${lang}" ]; then
         case "${LANG:-${LC_ALL:-}}" in
             ko*|KO*) lang=ko ;;
@@ -998,7 +998,7 @@ read_install_mode() {
     load_env
     if [ -f "${ENV_FILE}" ]; then
         local mode
-        mode="$(grep '^TABYAGENT_MODE=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        mode="$(grep '^TABYBOT_MODE=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
         mode="$(strip_env_scalar "${mode}" | tr '[:upper:]' '[:lower:]')"
         case "${mode}" in
             docker|local) printf '%s' "${mode}"; return 0 ;;
@@ -1016,7 +1016,7 @@ read_install_mode() {
 }
 
 docker_daemon_ok() {
-    local shell="${TABYAGENT_DOCKER_SHELL:-docker}"
+    local shell="${TABYBOT_DOCKER_SHELL:-docker}"
     if ${shell} info >/dev/null 2>&1; then
         return 0
     fi
@@ -1024,7 +1024,7 @@ docker_daemon_ok() {
 }
 
 compose_cmd() {
-    local shell="${TABYAGENT_DOCKER_SHELL:-docker}"
+    local shell="${TABYBOT_DOCKER_SHELL:-docker}"
     if ${shell} compose version >/dev/null 2>&1; then
         printf '%s compose' "${shell}"
     elif command -v docker-compose >/dev/null 2>&1; then
@@ -1041,9 +1041,9 @@ regex_escape() {
 print_help() {
     if is_ko; then
         cat <<'TAA_HELP_KO'
-tabyAgent 명령줄 도구
+tabyBot 명령줄 도구
 
-사용법: tabyagent <명령> [인자]
+사용법: tabybot <명령> [인자]
 
 명령:
   start              백그라운드에서 시작
@@ -1053,19 +1053,19 @@ tabyAgent 명령줄 도구
   logs               로그 보기 (실시간)
   approve <코드>     접근 코드 승인
   foreground         포그라운드 실행 (디버그)
-  uninstall          tabyAgent 제거
+  uninstall          tabyBot 제거
   help               이 도움말
 
 설치/업데이트:
-  curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
 
-제거 시 사용자 데이터도 삭제: tabyagent uninstall --purge
+제거 시 사용자 데이터도 삭제: tabybot uninstall --purge
 TAA_HELP_KO
     else
         cat <<'TAA_HELP_EN'
-tabyAgent command-line tool
+tabyBot command-line tool
 
-Usage: tabyagent <command> [args]
+Usage: tabybot <command> [args]
 
 Commands:
   start              Start in the background
@@ -1075,24 +1075,24 @@ Commands:
   logs               Tail logs (follow)
   approve <code>     Approve an access code
   foreground         Run in foreground (debug)
-  uninstall          Remove tabyAgent from this machine
+  uninstall          Remove tabyBot from this machine
   help               Show this help
 
 Install/update:
-  curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
 
-Remove user data too: tabyagent uninstall --purge
+Remove user data too: tabybot uninstall --purge
 TAA_HELP_EN
     fi
 }
 
 not_installed_message() {
-    local url="https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh"
+    local url="https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh"
     if is_ko; then
-        echo "tabyAgent가 설치되어 있지 않습니다 (${INSTALL_DIR})." >&2
+        echo "tabyBot가 설치되어 있지 않습니다 (${INSTALL_DIR})." >&2
         echo "설치: curl -fsSL ${url} | bash" >&2
     else
-        echo "tabyAgent is not installed (${INSTALL_DIR})." >&2
+        echo "tabyBot is not installed (${INSTALL_DIR})." >&2
         echo "Install: curl -fsSL ${url} | bash" >&2
     fi
 }
@@ -1119,9 +1119,9 @@ docker_service_stop() {
 }
 
 docker_service_status() {
-    local shell="${TABYAGENT_DOCKER_SHELL:-docker}"
-    if docker_daemon_ok && ${shell} ps --filter name=tabyagent --format '{{.Names}}' 2>/dev/null | grep -qx tabyagent; then
-        if is_ko; then echo "실행 중 (Docker 컨테이너 tabyagent)"; else echo "running (Docker container tabyagent)"; fi
+    local shell="${TABYBOT_DOCKER_SHELL:-docker}"
+    if docker_daemon_ok && ${shell} ps --filter name=tabybot --format '{{.Names}}' 2>/dev/null | grep -qx tabybot; then
+        if is_ko; then echo "실행 중 (Docker 컨테이너 tabybot)"; else echo "running (Docker container tabybot)"; fi
         return 0
     fi
     if is_ko; then echo "실행 중 아님"; else echo "not running"; fi
@@ -1136,7 +1136,7 @@ stop_local_runtime() {
             launchctl bootout "gui/$(id -u)/${LAUNCHD_LABEL}" 2>/dev/null || true
             ;;
         Linux)
-            systemctl --user stop tabyagent.service 2>/dev/null || true
+            systemctl --user stop tabybot.service 2>/dev/null || true
             ;;
     esac
     pkill -f "${index_pattern}" 2>/dev/null || true
@@ -1153,7 +1153,7 @@ local_service_start() {
             fi
             ;;
         Linux)
-            systemctl --user start tabyagent.service
+            systemctl --user start tabybot.service
             ;;
         *)
             if is_ko; then echo "백그라운드 서비스를 지원하지 않는 OS입니다." >&2
@@ -1223,8 +1223,8 @@ uninstall_local_service() {
             ;;
         Linux)
             if command -v systemctl >/dev/null 2>&1; then
-                systemctl --user disable --now tabyagent.service 2>/dev/null || true
-                rm -f "${HOME}/.config/systemd/user/tabyagent.service"
+                systemctl --user disable --now tabybot.service 2>/dev/null || true
+                rm -f "${HOME}/.config/systemd/user/tabybot.service"
                 systemctl --user daemon-reload 2>/dev/null || true
             fi
             ;;
@@ -1233,15 +1233,15 @@ uninstall_local_service() {
 
 confirm_uninstall() {
     local purge="$1" reply
-    if [ "${TABYAGENT_UNINSTALL_YES:-}" = "1" ]; then
+    if [ "${TABYBOT_UNINSTALL_YES:-}" = "1" ]; then
         return 0
     fi
     if is_ko; then
-        echo "tabyAgent를 제거합니다: ${INSTALL_DIR}"
+        echo "tabyBot를 제거합니다: ${INSTALL_DIR}"
         [ "${purge}" = true ] && echo "  (--purge: Docker 볼륨·로컬 user 데이터도 삭제)"
         printf "계속할까요? [y/N] "
     else
-        echo "This will remove tabyAgent from: ${INSTALL_DIR}"
+        echo "This will remove tabyBot from: ${INSTALL_DIR}"
         [ "${purge}" = true ] && echo "  (--purge: also deletes Docker volume and local user data)"
         printf "Continue? [y/N] "
     fi
@@ -1250,8 +1250,8 @@ confirm_uninstall() {
     elif [ -t 0 ]; then
         IFS= read -r reply
     else
-        if is_ko; then echo "비대화형 환경입니다. TABYAGENT_UNINSTALL_YES=1 을 설정하세요." >&2
-        else echo "Non-interactive shell. Set TABYAGENT_UNINSTALL_YES=1 to confirm." >&2; fi
+        if is_ko; then echo "비대화형 환경입니다. TABYBOT_UNINSTALL_YES=1 을 설정하세요." >&2
+        else echo "Non-interactive shell. Set TABYBOT_UNINSTALL_YES=1 to confirm." >&2; fi
         return 1
     fi
     reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
@@ -1268,10 +1268,10 @@ do_uninstall() {
             --purge|-p) purge=true ;;
             -h|--help)
                 if is_ko; then
-                    echo "사용법: tabyagent uninstall [--purge]"
+                    echo "사용법: tabybot uninstall [--purge]"
                     echo "  --purge  Docker 볼륨·로컬 user/ 폴더까지 삭제"
                 else
-                    echo "Usage: tabyagent uninstall [--purge]"
+                    echo "Usage: tabybot uninstall [--purge]"
                     echo "  --purge  Also remove Docker volume and local user/ data"
                 fi
                 exit 0
@@ -1323,10 +1323,10 @@ do_uninstall() {
 
     if is_ko; then
         echo "제거 완료."
-        [ "${purge}" != true ] && [ "${mode}" = docker ] && echo "  (Docker 사용자 데이터 볼륨은 남아 있을 수 있습니다. 완전 삭제: tabyagent uninstall --purge)"
+        [ "${purge}" != true ] && [ "${mode}" = docker ] && echo "  (Docker 사용자 데이터 볼륨은 남아 있을 수 있습니다. 완전 삭제: tabybot uninstall --purge)"
     else
         echo "Uninstall complete."
-        [ "${purge}" != true ] && [ "${mode}" = docker ] && echo "  (Docker user-data volume may remain. Full removal: tabyagent uninstall --purge)"
+        [ "${purge}" != true ] && [ "${mode}" = docker ] && echo "  (Docker user-data volume may remain. Full removal: tabybot uninstall --purge)"
     fi
 }
 
@@ -1358,11 +1358,11 @@ run_docker_command() {
             ;;
         logs)
             docker_daemon_ok || exit 1
-            ${compose} -f "${COMPOSE_FILE}" logs -f --tail=80 tabyagent
+            ${compose} -f "${COMPOSE_FILE}" logs -f --tail=80 tabybot
             ;;
         approve)
             docker_daemon_ok || exit 1
-            exec ${compose} -f "${COMPOSE_FILE}" exec -T tabyagent approve "$@"
+            exec ${compose} -f "${COMPOSE_FILE}" exec -T tabybot approve "$@"
             ;;
         foreground|run)
             docker_daemon_ok || exit 1
@@ -1408,12 +1408,12 @@ main() {
 
 main "$@"
 EOF
-    chmod +x "${TABYAGENT_CLI}"
+    chmod +x "${TABYBOT_CLI}"
 }
 
-install_tabyagent_cli() {
+install_tabybot_cli() {
     mkdir -p "${USER_BIN}"
-    ln -sf "${TABYAGENT_CLI}" "${USER_BIN}/tabyagent"
+    ln -sf "${TABYBOT_CLI}" "${USER_BIN}/tabybot"
     case ":${PATH}:" in
         *":${USER_BIN}:"*) ;;
         *)
@@ -1430,14 +1430,14 @@ print_manage_hints() {
     echo ""
     if is_ko; then
         echo "관리 명령 (터미널을 닫아도 백그라운드에서 실행):"
-        echo "  tabyagent status|stop|restart|logs|help"
-        echo "  tabyagent uninstall"
-        echo "  (디버그: tabyagent foreground)"
+        echo "  tabybot status|stop|restart|logs|help"
+        echo "  tabybot uninstall"
+        echo "  (디버그: tabybot foreground)"
     else
         echo "Manage (runs in background — safe to close the terminal):"
-        echo "  tabyagent status|stop|restart|logs|help"
-        echo "  tabyagent uninstall"
-        echo "  (Debug: tabyagent foreground)"
+        echo "  tabybot status|stop|restart|logs|help"
+        echo "  tabybot uninstall"
+        echo "  (Debug: tabybot foreground)"
     fi
 }
 
@@ -1455,14 +1455,14 @@ install_launchd_service() {
     <string>${LAUNCHD_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${TABYAGENT_CLI}</string>
+        <string>${TABYBOT_CLI}</string>
         <string>daemon</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${HOME}/.local/bin</string>
-        <key>TABYAGENT_NODE</key>
+        <key>TABYBOT_NODE</key>
         <string>${node_bin}</string>
     </dict>
     <key>WorkingDirectory</key>
@@ -1488,15 +1488,15 @@ EOF
 
 install_systemd_user_service() {
     local unit_dir="${HOME}/.config/systemd/user"
-    local unit_file="${unit_dir}/tabyagent.service"
+    local unit_file="${unit_dir}/tabybot.service"
     local env_file_line="EnvironmentFile=${ENV_FILE}"
-    local exec_start_line="ExecStart=${TABYAGENT_CLI} daemon"
+    local exec_start_line="ExecStart=${TABYBOT_CLI} daemon"
     local workdir_line="WorkingDirectory=${APP_DIR}"
     if [[ "${ENV_FILE}" == *" "* ]]; then
         env_file_line="EnvironmentFile=\"${ENV_FILE}\""
     fi
-    if [[ "${TABYAGENT_CLI}" == *" "* ]]; then
-        exec_start_line="ExecStart=\"${TABYAGENT_CLI}\" daemon"
+    if [[ "${TABYBOT_CLI}" == *" "* ]]; then
+        exec_start_line="ExecStart=\"${TABYBOT_CLI}\" daemon"
     fi
     if [[ "${APP_DIR}" == *" "* ]]; then
         workdir_line="WorkingDirectory=\"${APP_DIR}\""
@@ -1504,7 +1504,7 @@ install_systemd_user_service() {
     mkdir -p "${unit_dir}" "${INSTALL_DIR}/logs"
     cat >"${unit_file}" <<EOF
 [Unit]
-Description=tabyAgent Telegram bot
+Description=tabyBot Telegram bot
 After=network-online.target
 
 [Service]
@@ -1519,7 +1519,7 @@ RestartSec=10
 WantedBy=default.target
 EOF
     systemctl --user daemon-reload
-    systemctl --user enable --now tabyagent.service
+    systemctl --user enable --now tabybot.service
 }
 
 install_local_service() {
@@ -1551,8 +1551,8 @@ install_local() {
     update_local_source
     write_local_version
     install_local_deps
-    write_tabyagent_cli
-    install_tabyagent_cli
+    write_tabybot_cli
+    install_tabybot_cli
     write_env "${token}" local
     if is_ko; then echo "==> 실행 중..."; else echo "==> Starting..."; fi
     install_local_service
@@ -1561,7 +1561,7 @@ install_local() {
     print_local_service_hints
 }
 
-deploy_tabyagent_docker() {
+deploy_tabybot_docker() {
     local token="$1" image="$2" updating="$3" compose
 
     stop_local_runtime
@@ -1569,8 +1569,8 @@ deploy_tabyagent_docker() {
     compose="$(compose_cmd)"
     resolve_host_workspace "${updating}" docker
     write_compose "${image}"
-    write_tabyagent_cli
-    install_tabyagent_cli
+    write_tabybot_cli
+    install_tabybot_cli
     write_env "${token}" docker
     cd "${INSTALL_DIR}"
     pull_image "${compose}" "${image}"
@@ -1582,7 +1582,7 @@ deploy_tabyagent_docker() {
 
 main() {
     resolve_lang
-    local token="${TELEGRAM_BOT_TOKEN:-}" image="${TABYAGENT_IMAGE:-${IMAGE_DEFAULT}}"
+    local token="${TELEGRAM_BOT_TOKEN:-}" image="${TABYBOT_IMAGE:-${IMAGE_DEFAULT}}"
 
     if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
         usage
@@ -1596,11 +1596,11 @@ main() {
     local updating=false
     if is_installed; then
         updating=true
-        if is_ko; then echo "==> tabyAgent 업데이트 중..."; else echo "==> Updating tabyAgent..."; fi
+        if is_ko; then echo "==> tabyBot 업데이트 중..."; else echo "==> Updating tabyBot..."; fi
         [ -n "${token}" ] || token="$(read_env_token)"
         [ -n "${token}" ] || die_need_token
     else
-        if is_ko; then echo "==> tabyAgent 설치 중..."; else echo "==> Installing tabyAgent..."; fi
+        if is_ko; then echo "==> tabyBot 설치 중..."; else echo "==> Installing tabyBot..."; fi
         if [ -z "${token}" ]; then
             token="$(prompt_token)"
         fi
@@ -1621,12 +1621,12 @@ main() {
     if [ "${mode}" = local ]; then
         install_local "${token}" "${updating}"
     else
-        deploy_tabyagent_docker "${token}" "${image}" "${updating}"
+        deploy_tabybot_docker "${token}" "${image}" "${updating}"
     fi
 
     echo ""
     if [ "${updating}" = true ]; then
-        if is_ko; then echo "완료. tabyAgent 실행 중 (${mode})."; else echo "Done. tabyAgent is running (${mode})."; fi
+        if is_ko; then echo "완료. tabyBot 실행 중 (${mode})."; else echo "Done. tabyBot is running (${mode})."; fi
     else
         if is_ko; then
             echo "설치 완료 (${mode}). Telegram에서 봇에게 /start 를 보내세요."

@@ -1,6 +1,6 @@
 English | [한국어](README.ko.md)
 
-# tabyAgent
+# tabyBot
 
 A more autonomous, more persistent, and easier alternative to OpenClaw/Hermes.
 
@@ -15,11 +15,11 @@ Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI app usa
 - **Skills, MCP**: Add the capabilities and tools you want directly to the agent.
 - **Scheduled tasks**: Recurring jobs can run automatically, report when needed, or be skipped when not necessary.
 - **Runs anywhere**: Use Docker or local Node.js. Native support is available on macOS and Linux; Windows can work through Docker, but it is not guaranteed.
-- **Self-improvement**: tabyAgent can improve itself. It learns from how problems are solved and from user feedback, becoming smarter over time.
+- **Self-improvement**: tabyBot can improve itself. It learns from how problems are solved and from user feedback, becoming smarter over time.
 
 ## Differences
 
-| Feature                         | tabyAgent                      | OpenClaw                         | Hermes                                              | ChatGPT                                                               |
+| Feature                         | tabyBot                        | OpenClaw                         | Hermes                                              | ChatGPT                                                               |
 | ------------------------------- | ------------------------------ | -------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
 | Daily chat                      | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ✅ Yes                                                                |
 | Search                          | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ✅ Yes                                                                |
@@ -38,7 +38,7 @@ Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI app usa
 | Memory usage                    | ✅ ~800MB                      | ❌ ~2GB                          | ✅ ~800MB                                           | ✅ -                                                                  |
 | License                         | ✅ AGPL-3.0                    | ✅ MIT                           | ✅ MIT                                              | ❌ Proprietary                                                        |
 
-> Items marked with an asterisk (\*) were verified by the tabyAgent developer through direct testing or real-world use, so they may vary depending on the environment.
+> Items marked with an asterisk (\*) were verified by the tabyBot developer through direct testing or real-world use, so they may vary depending on the environment.
 > For the comparison test, OpenClaw and Hermes used the Ollama Cloud provider and the Kimi-K2.6 model.
 
 ## Example prompts
@@ -79,22 +79,22 @@ After the installer starts, it will ask you to paste the **BotFather token** fro
 The automated script does not support Windows. If you are on Windows, consider switching your main OS to a Linux-based distribution. In many cases it is faster, more privacy-friendly, and more freedom-preserving.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
 ```
 
-To update tabyAgent later, run the same command again. Your settings and memory will be preserved during the update.
+To update tabyBot later, run the same command again. Your settings and memory will be preserved during the update.
 
 #### CLI commands
 
 Run these from the host machine for both Docker and local installs.
 
-- `tabyagent status` — view running status
-- `tabyagent stop` — stop tabyAgent
-- `tabyagent restart` — restart tabyAgent
-- `tabyagent logs` — view logs
-- `tabyagent help` — CLI help
-- `tabyagent uninstall` — remove tabyAgent (`--purge` also deletes user data)
-- `tabyagent foreground` — debug only, not needed for normal use
+- `tabybot status` — view running status
+- `tabybot stop` — stop tabyBot
+- `tabybot restart` — restart tabyBot
+- `tabybot logs` — view logs
+- `tabybot help` — CLI help
+- `tabybot uninstall` — remove tabyBot (`--purge` also deletes user data)
+- `tabybot foreground` — debug only, not needed for normal use
 
 #### 3. Configure in Telegram
 
@@ -107,8 +107,8 @@ You can send `/config` at any time to change your settings.
 ### Installation Option B: Docker Compose (not recommended)
 
 ```bash
-git clone https://github.com/gpdir16/tabyAgent.git
-cd tabyAgent
+git clone https://github.com/gpdir16/tabyBot.git
+cd tabyBot
 cp .env.example .env   # set TELEGRAM_BOT_TOKEN
 docker compose up -d
 # To mount a PC host folder into Docker, use the commands below (optional, default is none):

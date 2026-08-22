@@ -56,7 +56,7 @@ function isUsableVersion(v) {
 }
 
 export function getRunningVersion() {
-    const fromEnv = process.env.TABYAGENT_VERSION?.trim();
+    const fromEnv = process.env.TABYBOT_VERSION?.trim();
     if (isUsableVersion(fromEnv)) return fromEnv;
 
     const fromFile = readBakedVersionFile();

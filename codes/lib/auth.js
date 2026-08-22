@@ -17,7 +17,7 @@ function readApprovedFile() {
     try {
         return JSON.parse(fs.readFileSync(APPROVED_PATH, "utf8"));
     } catch (err) {
-        console.error(`tabyAgent: invalid JSON in ${APPROVED_PATH}:`, err.message);
+        console.error(`tabyBot: invalid JSON in ${APPROVED_PATH}:`, err.message);
         return emptyApprovedFile();
     }
 }

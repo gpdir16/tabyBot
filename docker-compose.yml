@@ -1,25 +1,25 @@
 services:
-    tabyagent:
+    tabybot:
         build:
             context: .
             args:
-                TABYAGENT_VERSION: dev
-        container_name: tabyagent
+                TABYBOT_VERSION: dev
+        container_name: tabybot
         env_file:
             - .env
         environment:
             TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-            TABYAGENT_MODE: docker
-            TABYAGENT_HOME: ${TABYAGENT_HOME:-}
-            TABYAGENT_DOCKER_SHELL: ${TABYAGENT_DOCKER_SHELL:-docker}
+            TABYBOT_MODE: docker
+            TABYBOT_HOME: ${TABYBOT_HOME:-}
+            TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
             WORKSPACE_DIR: /workspace
             WORKSPACE_ENABLED: ${WORKSPACE_ENABLED:-0}
         # Persistent state (config, memory, MCP, cron). Defaults: codes/templates/user
         volumes:
-            - tabyagent-user:/app/user
+            - tabybot-user:/app/user
         # Optional host folder: set HOST_WORKSPACE in .env and use docker-compose.workspace.yml
         #   docker compose -f docker-compose.yml -f docker-compose.workspace.yml up -d
         restart: unless-stopped
 
 volumes:
-    tabyagent-user:
+    tabybot-user:

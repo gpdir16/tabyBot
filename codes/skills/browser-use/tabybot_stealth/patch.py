@@ -16,7 +16,7 @@ import json
 import logging
 from pathlib import Path
 
-logger = logging.getLogger("tabyagent_stealth")
+logger = logging.getLogger("tabybot_stealth")
 
 STEALTH_JS_TEMPLATE = (Path(__file__).parent / "stealth.js").read_text(encoding="utf-8")
 FALLBACK_USER_AGENT = (
@@ -39,7 +39,7 @@ async def _user_agent(cdp) -> str:
 
 
 def _stealth_js(user_agent: str) -> str:
-    return STEALTH_JS_TEMPLATE.replace("__TABYAGENT_USER_AGENT_JSON__", json.dumps(user_agent))
+    return STEALTH_JS_TEMPLATE.replace("__TABYBOT_USER_AGENT_JSON__", json.dumps(user_agent))
 
 
 def _patch_daemon() -> None:
@@ -54,7 +54,7 @@ def _patch_daemon() -> None:
         logger.debug("browser_harness.daemon.Daemon has no _enable_default_domains hook")
         return
 
-    if getattr(original, "_tabyagent_stealth", False):
+    if getattr(original, "_tabybot_stealth", False):
         return
 
     async def enable_with_stealth(self, session_id):
@@ -110,7 +110,7 @@ def _patch_daemon() -> None:
         except Exception as exc:
             logger.debug("Network UA override failed on %s: %s", session_id, exc)
 
-    enable_with_stealth._tabyagent_stealth = True  # type: ignore[attr-defined]
+    enable_with_stealth._tabybot_stealth = True  # type: ignore[attr-defined]
     Daemon._enable_default_domains = enable_with_stealth  # type: ignore[method-assign]
     logger.info("Patched browser_harness.daemon.Daemon for stealth (CLI 3.0)")
 

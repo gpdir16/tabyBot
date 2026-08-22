@@ -5,7 +5,7 @@ description: "Use this skill any time a .pptx file is involved in any way — as
 
 # PPTX Skill
 
-## tabyAgent tools
+## tabyBot tools
 
 - **`terminal_run`** — run all scripts (Python, markitdown, npm, LibreOffice).
 - **`file_read`** — read extracted XML, reference files, or text output.

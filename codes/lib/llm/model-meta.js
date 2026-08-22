@@ -14,7 +14,7 @@ export function loadModelMeta() {
     try {
         return JSON.parse(fs.readFileSync(META_PATH, "utf8"));
     } catch (err) {
-        console.error(`tabyAgent: invalid model meta cache:`, err.message);
+        console.error(`tabyBot: invalid model meta cache:`, err.message);
         return { contextWindow: DEFAULT_CONTEXT, model: null, supportsVision: false };
     }
 }

@@ -4,8 +4,8 @@ import path from "node:path";
 import { loadAgentConfig } from "../config-loader.js";
 import { isDockerRuntime } from "../runtime.js";
 
-const SESSIONS_DIR = "/tmp/tabyagent-xvfb";
-const SHOTS_DIR = "/tmp/tabyagent-xvfb/screenshots";
+const SESSIONS_DIR = "/tmp/tabybot-xvfb";
+const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
 const DEFAULT_GEOMETRY = "1280x800x24";
 const DISPLAY = 99;
 
@@ -179,7 +179,7 @@ function geometryDims(geometry) {
 async function startXvfb(display, geometry) {
     cleanupStaleDisplay(display);
     const r = await run(
-        `nohup Xvfb :${display} -screen 0 ${geometry} -ac +extension RANDR +extension GLX +render -noreset >/tmp/tabyagent-xvfb/xvfb.log 2>&1 & echo $!`,
+        `nohup Xvfb :${display} -screen 0 ${geometry} -ac +extension RANDR +extension GLX +render -noreset >/tmp/tabybot-xvfb/xvfb.log 2>&1 & echo $!`,
     );
     if (!r.ok) return null;
     const pid = parseInt((r.stdout || "").trim(), 10);
@@ -208,7 +208,7 @@ function killPid(pid) {
 async function newSession(geometry) {
     const display = DISPLAY;
     const xvfbPid = await startXvfb(display, geometry);
-    if (!xvfbPid) return { error: `Failed to start Xvfb on :${display}. Check /tmp/tabyagent-xvfb/xvfb.log` };
+    if (!xvfbPid) return { error: `Failed to start Xvfb on :${display}. Check /tmp/tabybot-xvfb/xvfb.log` };
     const sess = { display, geometry, xvfb_pid: xvfbPid, apps: [], created_at: new Date().toISOString() };
     saveSession(sess);
     return { sess };
@@ -235,7 +235,7 @@ async function launchApp(sess, appCmd) {
     if (!appCmd) return { error: "app is required for launch" };
     if (/[\r\n]/.test(appCmd)) return { error: "app command must be a single line" };
     if (/[;&|`$<>]/.test(appCmd)) return { error: "app command must not contain shell control characters" };
-    const r = await run(`DISPLAY=:${sess.display} nohup ${appCmd} >/tmp/tabyagent-xvfb/app.log 2>&1 & echo $!`);
+    const r = await run(`DISPLAY=:${sess.display} nohup ${appCmd} >/tmp/tabybot-xvfb/app.log 2>&1 & echo $!`);
     const pid = parseInt((r.stdout || "").trim(), 10);
     if (!r.ok || !pid) return { ok: false, action: "launch", app: appCmd, error: `Failed to launch app: ${r.stderr || r.stdout}` };
     sess.apps = sess.apps || [];

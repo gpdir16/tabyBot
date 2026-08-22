@@ -130,9 +130,9 @@ const MESSAGES = {
         ja: "準備完了。メッセージを送ってください。\n設定: /config · エージェント: /agents · 新しい会話: /new · 停止: /stop",
     },
     main_topic_notice: {
-        en: "To chat with the default agent as before, select the 'tabyAgent' thread. If you use Telegram's default 'All Messages' thread, conversations from multiple agents can get mixed together.",
-        ko: "기존처럼 기본 에이전트에게 대화하려면 'tabyAgent' 쓰레드를 선택하고 대화하세요. 텔레그램에서 기본적으로 선택된 '전체' 쓰레드를 사용하여 대화할 경우 여러 에이전트의 대화가 섞일수 있습니다.",
-        ja: "これまで通りデフォルトエージェントと話すには、「tabyAgent」スレッドを選んでください。Telegram で最初に選ばれている「すべて」スレッドで話すと、複数エージェントの会話が混ざる可能性があります。",
+        en: "To chat with the default agent as before, select the 'tabyBot' thread. If you use Telegram's default 'All Messages' thread, conversations from multiple agents can get mixed together.",
+        ko: "기존처럼 기본 에이전트에게 대화하려면 'tabyBot' 쓰레드를 선택하고 대화하세요. 텔레그램에서 기본적으로 선택된 '전체' 쓰레드를 사용하여 대화할 경우 여러 에이전트의 대화가 섞일수 있습니다.",
+        ja: "これまで通りデフォルトエージェントと話すには、「tabyBot」スレッドを選んでください。Telegram で最初に選ばれている「すべて」スレッドで話すと、複数エージェントの会話が混ざる可能性があります。",
     },
     stop_requested: {
         en: "Stopping the current task…",

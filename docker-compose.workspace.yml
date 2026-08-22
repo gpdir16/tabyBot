@@ -7,7 +7,7 @@
 # The user can edit files on the host; the agent reads/writes the same files at /workspace.
 
 services:
-    tabyagent:
+    tabybot:
         environment:
             WORKSPACE_ENABLED: "1"
             HOST_WORKSPACE: ${HOST_WORKSPACE}
