@@ -1,0 +1,7 @@
+{
+    "language": "en",
+    "provider": { "id": "default", "apiKey": "", "model": "" },
+    "thinkingLevel": "high",
+    "showReplyFooter": true,
+    "updateCheckEnabled": true
+}
