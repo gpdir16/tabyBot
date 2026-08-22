@@ -44,7 +44,7 @@ export async function ensureMainTopic(bot, chatId) {
     const threadId = created.result?.message_thread_id;
     if (!created.ok || !threadId) return null;
     setMainThreadId(threadId);
-    // 전체와 tabyAgent를 헷갈리지 않도록 생성 직후에만 안내
+    // 전체와 tabyBot를 헷갈리지 않도록 생성 직후에만 안내
     const lang = loadUserConfig().language || "en";
     await sendMessageSafe(bot, chatId, t("main_topic_notice", lang), { message_thread_id: threadId });
     return threadId;

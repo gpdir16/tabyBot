@@ -10,7 +10,7 @@ permissions:
     packages: write
 
 env:
-    IMAGE_NAME: ghcr.io/gpdir16/tabyagent
+    IMAGE_NAME: ghcr.io/gpdir16/tabybot
 
 jobs:
     build-and-push:
@@ -60,6 +60,6 @@ jobs:
                   platforms: linux/amd64,linux/arm64
                   tags: ${{ steps.tags.outputs.value }}
                   build-args: |
-                      TABYAGENT_VERSION=${{ github.event_name == 'release' && github.event.release.tag_name || format('sha-{0}', github.sha) }}
+                      TABYBOT_VERSION=${{ github.event_name == 'release' && github.event.release.tag_name || format('sha-{0}', github.sha) }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max

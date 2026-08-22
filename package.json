@@ -1,5 +1,5 @@
 {
-    "name": "tabyagent",
+    "name": "tabybot",
     "description": "AI Agent for Telegram",
     "type": "module",
     "scripts": {

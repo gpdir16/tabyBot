@@ -15,7 +15,7 @@ let initialTimer = null;
 function warnIfUnknownProductionVersion() {
     if (!isRunningVersionKnown()) {
         if (process.env.NODE_ENV === "production") {
-            console.warn("tabyAgent: TABYAGENT_VERSION is unknown — update checks use watch mode until a release-tagged image is deployed");
+            console.warn("tabyBot: TABYBOT_VERSION is unknown — update checks use watch mode until a release-tagged image is deployed");
         }
         return;
     }
@@ -34,7 +34,7 @@ async function runUpdateCheck(bot) {
 
     await sendUpdateNotification(bot, ownerChatId, update);
     setLastNotifiedVersion(update.tagName);
-    console.log(`tabyAgent: update notification sent (${update.tagName})`);
+    console.log(`tabyBot: update notification sent (${update.tagName})`);
 }
 
 function queueUpdateCheck(bot, label) {
@@ -42,10 +42,10 @@ function queueUpdateCheck(bot, label) {
         try {
             await runUpdateCheck(bot);
         } catch (err) {
-            console.error(`tabyAgent: ${label} update check failed:`, err?.stack || err);
+            console.error(`tabyBot: ${label} update check failed:`, err?.stack || err);
         }
     }).catch((err) => {
-        console.error(`tabyAgent: ${label} update check queue failed:`, err?.stack || err);
+        console.error(`tabyBot: ${label} update check queue failed:`, err?.stack || err);
     });
 }
 
@@ -54,7 +54,7 @@ export function startUpdateScheduler(bot) {
     const userOverride = getUserUpdateCheckEnabled(loadUserConfig());
     const enabled = userOverride === null ? agentCfg.enabled !== false : userOverride;
     if (!enabled) {
-        console.log("tabyAgent: update checker disabled");
+        console.log("tabyBot: update checker disabled");
         return;
     }
 
@@ -62,7 +62,7 @@ export function startUpdateScheduler(bot) {
 
     const schedule = agentCfg.intervalCron || "0 * * * *";
     if (!cron.validate(schedule)) {
-        console.warn(`tabyAgent: invalid updateCheck.intervalCron "${schedule}", using "0 * * * *"`);
+        console.warn(`tabyBot: invalid updateCheck.intervalCron "${schedule}", using "0 * * * *"`);
     }
     const expr = cron.validate(schedule) ? schedule : "0 * * * *";
 
@@ -77,7 +77,7 @@ export function startUpdateScheduler(bot) {
         queueUpdateCheck(bot, "initial");
     }, delayMs);
 
-    console.log(`tabyAgent: update checker scheduled (${expr})`);
+    console.log(`tabyBot: update checker scheduled (${expr})`);
 }
 
 export function restartUpdateScheduler(bot) {

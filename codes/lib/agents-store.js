@@ -3,7 +3,7 @@ import path from "node:path";
 import { USER_DIR } from "./paths.js";
 
 export const DEFAULT_AGENT_ID = "main";
-export const DEFAULT_AGENT_NAME = "tabyAgent";
+export const DEFAULT_AGENT_NAME = "tabyBot";
 
 const AGENTS_PATH = path.join(USER_DIR, "agents.json");
 const AGENTS_ROOT = path.join(USER_DIR, "agents");
@@ -21,7 +21,7 @@ function readJson(filePath, fallback) {
     try {
         return JSON.parse(fs.readFileSync(filePath, "utf8"));
     } catch (err) {
-        console.error("tabyAgent: invalid agents.json:", err.message);
+        console.error("tabyBot: invalid agents.json:", err.message);
         return fallback;
     }
 }

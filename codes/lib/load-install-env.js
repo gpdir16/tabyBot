@@ -15,13 +15,13 @@ function applyManagedInstallPaths(home) {
     for (const [key, value] of Object.entries(managedInstallPathEnv(home))) {
         process.env[key] = value;
     }
-    // Host-managed installs always run Node locally; .env TABYAGENT_MODE is for install.sh routing.
-    process.env.TABYAGENT_MODE = "local";
+    // Host-managed installs always run Node locally; .env TABYBOT_MODE is for install.sh routing.
+    process.env.TABYBOT_MODE = "local";
 }
 
 export function loadInstallEnv() {
-    if (process.env.__TABYAGENT_ENV_LOADED) return;
-    process.env.__TABYAGENT_ENV_LOADED = "1";
+    if (process.env.__TABYBOT_ENV_LOADED) return;
+    process.env.__TABYBOT_ENV_LOADED = "1";
 
     if (isDockerContainer()) return;
 

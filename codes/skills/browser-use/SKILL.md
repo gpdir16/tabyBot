@@ -11,7 +11,7 @@ Domain skills are off by default. Set `BH_DOMAIN_SKILLS=1` to enable them; see t
 
 **If `BH_DOMAIN_SKILLS=1` and the task is site-specific, read every file in the matching `$BH_AGENT_WORKSPACE/domain-skills/<site>/` directory before inventing an approach.**
 
-## tabyAgent
+## tabyBot
 
 - Run every `browser-use` command via **`terminal_run`** using a heredoc:
     ```bash
@@ -21,7 +21,7 @@ Domain skills are off by default. Set `BH_DOMAIN_SKILLS=1` to enable them; see t
     PY
     ```
 - Helpers are pre-imported; do not `import` them.
-- tabyAgent applies its Chromium compatibility patch when Browser Harness starts a CDP session.
+- tabyBot applies its Chromium compatibility patch when Browser Harness starts a CDP session.
 - In Docker the daemon auto-connects to the bundled Chromium (`BU_CDP_URL`); no `chrome://inspect` setup needed. On macOS it attaches to the running Chrome CDP endpoint - run `browser-use --doctor` if it can't connect.
 - Use **`xvfb_gui`** only for non-browser Linux GUI apps in Docker (`skills_read xvfb`). Web browsing stays on `browser-use`.
 

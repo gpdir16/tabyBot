@@ -241,7 +241,7 @@ async function applyIntelligentCompression(
 
     const transcript = oldItemsToTranscript(oldItems);
 
-    console.log(`tabyAgent: compressing context (${oldItems.length} older block(s), keeping ~${recentBudget} recent tokens verbatim)`);
+    console.log(`tabyBot: compressing context (${oldItems.length} older block(s), keeping ~${recentBudget} recent tokens verbatim)`);
 
     const summary = await compressTranscript(llm, transcript, { signal });
     const recentHistory = recentItemsToHistory(recentItems);
@@ -308,7 +308,7 @@ export async function ensureWithinContextLimit(
         if (session?.isAborted?.() || err?.name === "AbortError") {
             throw err;
         }
-        console.warn("tabyAgent: intelligent compression failed:", err.message || err);
+        console.warn("tabyBot: intelligent compression failed:", err.message || err);
     }
 
     if (tokens <= hardLimit) {

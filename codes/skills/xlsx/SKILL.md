@@ -62,7 +62,7 @@ Unless otherwise stated by the user or existing template
 - Test with edge cases (zero values, negative numbers)
 - Verify no unintended circular references
 
-## tabyAgent tools
+## tabyBot tools
 
 - **`terminal_run`** — run all scripts (Python, openpyxl, pandas, LibreOffice).
 - **`file_read`** — read CSV/TSV or script output.

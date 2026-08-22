@@ -25,7 +25,7 @@ function readJson(filePath, fallback = null) {
     try {
         return JSON.parse(fs.readFileSync(filePath, "utf8"));
     } catch (err) {
-        console.error(`tabyAgent: invalid JSON in ${filePath}:`, err.message);
+        console.error(`tabyBot: invalid JSON in ${filePath}:`, err.message);
         return fallback;
     }
 }

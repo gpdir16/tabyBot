@@ -47,7 +47,7 @@ function linkAgentsSkillsDir(userSkills) {
             }
             return;
         }
-        console.warn(`tabyAgent: ~/.agents/skills exists and is not a symlink; leaving it unchanged. Use ${userSkills}.`);
+        console.warn(`tabyBot: ~/.agents/skills exists and is not a symlink; leaving it unchanged. Use ${userSkills}.`);
     } catch (err) {
         if (err.code === "ENOENT") {
             fs.symlinkSync(userSkills, AGENTS_SKILLS_LINK);
@@ -74,9 +74,9 @@ export function ensureUserDir() {
 
     if (isWorkspaceEnabled()) {
         if (isDockerRuntime()) {
-            console.log(`tabyAgent: host workspace mounted at ${WORKSPACE_DIR}`);
+            console.log(`tabyBot: host workspace mounted at ${WORKSPACE_DIR}`);
         } else {
-            console.log(`tabyAgent: project workspace enabled at ${WORKSPACE_DIR}`);
+            console.log(`tabyBot: project workspace enabled at ${WORKSPACE_DIR}`);
         }
     }
 }

@@ -1,6 +1,6 @@
 [English](README.md) | 한국어
 
-# tabyAgent
+# tabyBot
 
 OpenClaw/Hermes보다 더 자율적이며, 더 끈기있고, 더 쉬운 대안입니다.
 
@@ -15,11 +15,11 @@ OpenClaw/Hermes보다 더 자율적이며, 더 끈기있고, 더 쉬운 대안�
 - **Skills, MCP**: 에이전트에게 원하는 다양한 기능과 도구를 직접 추가할 수 있습니다.
 - **예약 작업**: 정기적으로 실행이 필요한 작업이 있다면 반복해서 실행되며 완료 후에는 보고하거나, 필요하지 않다면 건너뜁니다.
 - **어디서든 실행**: Docker 컨테이너 또는 로컬 Node.js로 실행할 수 있습니다. 네이티브 지원은 macOS와 Linux이며, Windows는 Docker를 통해 작동 가능하지만 보장되지는 않습니다.
-- **자기개선**: tabyAgent는 스스로를 개선할 수 있습니다. 문제를 해결한 방법, 사용자의 지적 등을 학습하며 사용할수록 더 똑똑해집니다.
+- **자기개선**: tabyBot는 스스로를 개선할 수 있습니다. 문제를 해결한 방법, 사용자의 지적 등을 학습하며 사용할수록 더 똑똑해집니다.
 
 ## 차이점
 
-| 기능                   | tabyAgent                       | OpenClaw                          | Hermes                                       | ChatGPT                                                      |
+| 기능                   | tabyBot                         | OpenClaw                          | Hermes                                       | ChatGPT                                                      |
 | ---------------------- | ------------------------------- | --------------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
 | 일상 채팅              | ✅ 예                           | ✅ 예                             | ✅ 예                                        | ✅ 예                                                        |
 | 검색                   | ✅ 예                           | ✅ 예                             | ✅ 예                                        | ✅ 예                                                        |
@@ -38,7 +38,7 @@ OpenClaw/Hermes보다 더 자율적이며, 더 끈기있고, 더 쉬운 대안�
 | 메모리 사용량          | ✅ ~800MB                       | ❌ ~2GB                           | ✅ ~800MB                                    | ✅ -                                                         |
 | 라이선스               | ✅ AGPL-3.0                     | ✅ MIT                            | ✅ MIT                                       | ❌ 독점                                                      |
 
-> 별표 표시(\*)된 항목은 tabyAgent의 개발자가 직접 테스트 또는 실사용하면서 확인한 내용이며, 환경에 따라 달라질수 있습니다.
+> 별표 표시(\*)된 항목은 tabyBot의 개발자가 직접 테스트 또는 실사용하면서 확인한 내용이며, 환경에 따라 달라질수 있습니다.
 > 테스트시 OpenClaw와 Hermes는 Ollama Cloud 제공자와 Kimi-K2.6 모델을 사용했습니다.
 
 ## 사용 예시 프롬프트
@@ -79,22 +79,22 @@ OpenClaw/Hermes보다 더 자율적이며, 더 끈기있고, 더 쉬운 대안�
 자동 스크립트는 Windows를 지원하지 않습니다. 또한 Windows를 사용중이라면 메인 OS를 Linux 기반 배포판으로 전환하는것을 고려해보세요 - 대부분의 경우, 더 빠르고 프라이버시 친화적이며 자유가 보장됩니다.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
 ```
 
-나중에 tabyAgent를 업데이트하려면 위 명령을 다시 실행하세요. 설정과 메모리는 유지된 상태로 업데이트됩니다.
+나중에 tabyBot를 업데이트하려면 위 명령을 다시 실행하세요. 설정과 메모리는 유지된 상태로 업데이트됩니다.
 
 #### CLI 명령줄 도구
 
 Docker와 로컬 모두 호스트에서 실행하세요.
 
-- `tabyagent status` — 실행 상태 보기
-- `tabyagent stop` — tabyAgent 중지
-- `tabyagent restart` — tabyAgent 재시작
-- `tabyagent logs` — 로그 보기
-- `tabyagent help` — 명령줄 도구 도움말
-- `tabyagent uninstall` - tabyAgent 제거 (`--purge`는 사용자 데이터까지 삭제)
-- `tabyagent foreground` — 디버그용 (일반 사용자는 필요 없음)
+- `tabybot status` — 실행 상태 보기
+- `tabybot stop` — tabyBot 중지
+- `tabybot restart` — tabyBot 재시작
+- `tabybot logs` — 로그 보기
+- `tabybot help` — 명령줄 도구 도움말
+- `tabybot uninstall` - tabyBot 제거 (`--purge`는 사용자 데이터까지 삭제)
+- `tabybot foreground` — 디버그용 (일반 사용자는 필요 없음)
 
 #### 3. Telegram에서 설정
 
@@ -107,8 +107,8 @@ Docker와 로컬 모두 호스트에서 실행하세요.
 ### 설치 옵션 B: Docker Compose (권장하지 않음)
 
 ```bash
-git clone https://github.com/gpdir16/tabyAgent.git
-cd tabyAgent
+git clone https://github.com/gpdir16/tabyBot.git
+cd tabyBot
 cp .env.example .env   # TELEGRAM_BOT_TOKEN 설정
 docker compose up -d
 # PC 호스트 폴더를 Docker 안에 연결하려면 아래 명령어 사용 (선택, 기본 없음):

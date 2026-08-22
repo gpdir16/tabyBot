@@ -7,7 +7,7 @@ description: "Create new skills, modify and improve existing skills. Use when us
 
 A skill for creating new skills and iteratively improving them.
 
-## tabyAgent context
+## tabyBot context
 
 - Skills live at `{{SKILLS_DIR}}/<name>/SKILL.md` (user skills) or `{{SYSTEM_SKILLS_DIR}}/<name>/SKILL.md` (system skills).
 - Use `file_read` to read existing skills, `file_patch` to write or edit SKILL.md files.

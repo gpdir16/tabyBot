@@ -35,7 +35,7 @@ export function reloadCronSchedules() {
                     await runJobHandler(job);
                     markCronJobRun(job.id);
                 }).catch((err) => {
-                    console.error(`tabyAgent: cron job failed (${job.id}):`, err?.stack || err);
+                    console.error(`tabyBot: cron job failed (${job.id}):`, err?.stack || err);
                 });
             },
             { scheduled: true },
@@ -50,7 +50,7 @@ export function reloadCronSchedules() {
 
 export function startCronScheduler() {
     reloadCronSchedules();
-    console.log(`tabyAgent: cron scheduler loaded (${tasks.size} job(s))`);
+    console.log(`tabyBot: cron scheduler loaded (${tasks.size} job(s))`);
 }
 
 export function stopCronScheduler() {

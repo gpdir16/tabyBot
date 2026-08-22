@@ -9,7 +9,7 @@ description: "Use this skill whenever the user wants to do anything with PDF fil
 
 This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see `reference.md`. If you need to fill out a PDF form, read `forms.md` and follow its instructions.
 
-## tabyAgent tools
+## tabyBot tools
 
 - **`terminal_run`** — run all scripts and CLI tools (Python, qpdf, pdftotext, etc.).
 - **`file_read`** — read extracted text or reference files.

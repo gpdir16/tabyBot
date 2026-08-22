@@ -27,10 +27,10 @@ function texts(lang) {
         en: {
             title: "All agents",
             intro: "You can add agents used only for a specific task or role.\nEach gets its own session and memory, and they can also collaborate with other agents or use the shared memory.",
-            defaultName: "Default tabyAgent",
+            defaultName: "Default tabyBot",
             add: "+ Add agent",
             topicsOff:
-                "In @BotFather: your bot → Bot Settings → Threads Settings\n1. Turn on Threaded Mode\n2. Turn on Disallow users to create new threads\n\nIf setting 2 is off, Telegram’s thread layout can conflict with tabyAgent and conversations can get tangled. If you turn on setting 1, you must also turn on setting 2.",
+                "In @BotFather: your bot → Bot Settings → Threads Settings\n1. Turn on Threaded Mode\n2. Turn on Disallow users to create new threads\n\nIf setting 2 is off, Telegram’s thread layout can conflict with tabyBot and conversations can get tangled. If you turn on setting 1, you must also turn on setting 2.",
             namePrompt: "Send a name for the new agent (shown as the topic title).",
             personaPrompt: "Briefly describe what this agent should do.",
             renamePrompt: "Send the new name.",
@@ -50,10 +50,10 @@ function texts(lang) {
         ko: {
             title: "모든 에이전트",
             intro: "특정 작업이나 역할에만 쓰이는 에이전트를 추가할수 있습니다.\n개별적인 세션, 메모리가 생기며 다른 에이전트와 협동하거나 공통 메모리를 사용하는 등의 작업도 추가로 수행할수 있습니다.",
-            defaultName: "기본 tabyAgent",
+            defaultName: "기본 tabyBot",
             add: "+ 에이전트 추가",
             topicsOff:
-                "@BotFather → 봇 → Bot Settings → Threads Settings\n1. Threaded Mode 켜기\n2. Disallow users to create new threads 켜기\n\n2번 설정을 활성화하지 않으면 텔레그램 쓰레드 구조와 tabyAgent가 충돌해 대화가 꼬일수 있습니다. 1번 설정을 활성화한 경우 2번 설정도 반드시 활성화하세요.",
+                "@BotFather → 봇 → Bot Settings → Threads Settings\n1. Threaded Mode 켜기\n2. Disallow users to create new threads 켜기\n\n2번 설정을 활성화하지 않으면 텔레그램 쓰레드 구조와 tabyBot가 충돌해 대화가 꼬일수 있습니다. 1번 설정을 활성화한 경우 2번 설정도 반드시 활성화하세요.",
             namePrompt: "새 에이전트 이름을 보내주세요. 토픽 제목으로 쓰입니다.",
             personaPrompt: "이 에이전트가 수행할 작업이 무엇인지 간단하게 설명해주세요",
             renamePrompt: "새 이름을 보내주세요.",
@@ -73,10 +73,10 @@ function texts(lang) {
         ja: {
             title: "すべてのエージェント",
             intro: "特定の作業や役割だけに使うエージェントを追加できます。\n個別のセッションとメモリができ、他のエージェントと協働したり共有メモリを使ったりもできます。",
-            defaultName: "デフォルト tabyAgent",
+            defaultName: "デフォルト tabyBot",
             add: "+ エージェントを追加",
             topicsOff:
-                "@BotFather → ボット → Bot Settings → Threads Settings\n1. Threaded Mode をオン\n2. Disallow users to create new threads をオン\n\n2 をオンにしないと、Telegram のスレッド構造と tabyAgent が衝突して会話が乱れます。1 をオンにしたら 2 も必ずオンにしてください。",
+                "@BotFather → ボット → Bot Settings → Threads Settings\n1. Threaded Mode をオン\n2. Disallow users to create new threads をオン\n\n2 をオンにしないと、Telegram のスレッド構造と tabyBot が衝突して会話が乱れます。1 をオンにしたら 2 も必ずオンにしてください。",
             namePrompt: "新しいエージェント名を送ってください。トピック名になります。",
             personaPrompt: "このエージェントが行う作業を簡単に説明してください",
             renamePrompt: "新しい名前を送ってください。",
@@ -110,7 +110,7 @@ function loadState() {
     try {
         return JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
     } catch (err) {
-        console.error("tabyAgent: invalid agents wizard state:", err.message);
+        console.error("tabyBot: invalid agents wizard state:", err.message);
         return null;
     }
 }

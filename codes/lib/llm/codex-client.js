@@ -1,7 +1,7 @@
 import { sanitizeMessagesForApi } from "./sanitize-messages.js";
 import { loadCodexTokens, ensureFreshToken } from "./codex-tokens.js";
 
-const ORIGINATOR = "tabyagent";
+const ORIGINATOR = "tabybot";
 
 function isAbortError(err) {
     return err?.name === "AbortError" || err?.code === "ABORT_ERR";

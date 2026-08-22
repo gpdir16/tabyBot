@@ -7,7 +7,7 @@ const PLACEHOLDER_RE = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
 export function renderSystemPrompt(template, vars) {
     return template.replace(PLACEHOLDER_RE, (match, key) => {
         if (!Object.prototype.hasOwnProperty.call(vars, key)) {
-            console.warn(`tabyAgent: unknown system prompt placeholder ${match}`);
+            console.warn(`tabyBot: unknown system prompt placeholder ${match}`);
             return match;
         }
         const value = vars[key];

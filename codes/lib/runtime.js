@@ -39,23 +39,23 @@ export function isDockerRuntime() {
 
 export function getApproveCliHint(code = "{code}") {
     if (IS_DOCKER) {
-        const dockerShell = shellCommandPrefix(process.env.TABYAGENT_DOCKER_SHELL || "docker");
-        const home = process.env.TABYAGENT_HOME?.trim();
-        if (home && fs.existsSync(path.join(home, "tabyagent"))) {
-            return `tabyagent approve ${code}`;
+        const dockerShell = shellCommandPrefix(process.env.TABYBOT_DOCKER_SHELL || "docker");
+        const home = process.env.TABYBOT_HOME?.trim();
+        if (home && fs.existsSync(path.join(home, "tabybot"))) {
+            return `tabybot approve ${code}`;
         }
         if (home) {
-            return `${dockerShell} compose -f ${shellQuote(path.join(home, "docker-compose.yml"))} exec -T tabyagent approve ${code}`;
+            return `${dockerShell} compose -f ${shellQuote(path.join(home, "docker-compose.yml"))} exec -T tabybot approve ${code}`;
         }
-        return `${dockerShell} compose exec -T tabyagent approve ${code}`;
+        return `${dockerShell} compose exec -T tabybot approve ${code}`;
     }
     if (isManagedLocalInstall()) {
         const home = resolveManagedInstallHome(process.argv[1], CODES_DIR);
-        if (fs.existsSync(path.join(home, "tabyagent"))) {
-            return `tabyagent approve ${code}`;
+        if (fs.existsSync(path.join(home, "tabybot"))) {
+            return `tabybot approve ${code}`;
         }
     }
     const cliJs = path.join(CODES_DIR, "cli.js");
-    const nodeBin = process.env.TABYAGENT_NODE?.trim() || "node";
+    const nodeBin = process.env.TABYBOT_NODE?.trim() || "node";
     return `${shellQuote(nodeBin)} ${shellQuote(cliJs)} approve ${code}`;
 }

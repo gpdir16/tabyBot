@@ -67,7 +67,7 @@ async function replyWithStreaming(bot, ctx, route, userText, status, { visionAtt
     const rawMode = agentConfig.telegramStreaming ?? "draft";
     const mode = rawMode === "off" || rawMode === "draft" ? rawMode : "off";
     if (rawMode !== mode) {
-        console.warn(`tabyAgent: unknown telegramStreaming "${rawMode}", using "off"`);
+        console.warn(`tabyBot: unknown telegramStreaming "${rawMode}", using "off"`);
     }
     const extra = telegramThreadOpts(route.threadId);
     const agentOpts = {
@@ -281,7 +281,7 @@ function helpMessage(lang) {
     const memoryPath = memoryFilePath();
     if (lang === "ko") {
         return [
-            "# tabyAgent 도움말",
+            "# tabyBot 도움말",
             "",
             "## 명령어",
             "- `/new` — 새 대화 시작 (백그라운드에서 이전 대화 자기개선)",
@@ -301,7 +301,7 @@ function helpMessage(lang) {
     }
     if (lang === "ja") {
         return [
-            "# tabyAgent ヘルプ",
+            "# tabyBot ヘルプ",
             "",
             "## コマンド",
             "- `/new` — 新しい会話を開始 (バックグラウンドで前の会話を自己改善)",
@@ -320,7 +320,7 @@ function helpMessage(lang) {
         ].join("\n");
     }
     return [
-        "# tabyAgent help",
+        "# tabyBot help",
         "",
         "## Commands",
         "- `/new` — Start a new chat (self-improves on the previous one in the background)",
@@ -350,7 +350,7 @@ export async function startTelegramBot() {
         console.error("Telegram bot error:", err?.stack || err);
     });
     const streamMode = loadAgentConfig().telegramStreaming ?? "draft";
-    console.log(`tabyAgent: Telegram running (streaming: ${streamMode})`);
+    console.log(`tabyBot: Telegram running (streaming: ${streamMode})`);
 
     await registerBotCommands(bot);
     await refreshTopicsEnabled(bot);

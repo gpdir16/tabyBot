@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const MANAGED_HOME_MARKER = `${path.sep}.tabyagent`;
+export const MANAGED_HOME_MARKER = `${path.sep}.tabybot`;
 export const MANAGED_CODES_SUFFIX = `${MANAGED_HOME_MARKER}${path.sep}app${path.sep}codes`;
 
 function homeFromManagedCodesPath(resolvedPath) {
@@ -59,7 +59,7 @@ export function isDockerContainer() {
     } catch {
         // fs access denied
     }
-    const mode = process.env.TABYAGENT_MODE?.trim().toLowerCase();
+    const mode = process.env.TABYBOT_MODE?.trim().toLowerCase();
     const appRoot = process.env.APP_ROOT?.trim();
     dockerContainerCache = mode === "docker" && appRoot === "/app";
     return dockerContainerCache;
@@ -71,13 +71,13 @@ export function hasManagedInstallMarker(home) {
         const envFile = path.join(resolved, ".env");
         if (!fs.existsSync(envFile)) return false;
         const text = fs.readFileSync(envFile, "utf8");
-        const modeMatch = text.match(/^TABYAGENT_MODE=(.+)$/m);
+        const modeMatch = text.match(/^TABYBOT_MODE=(.+)$/m);
         if (!modeMatch) return false;
         const mode = parseEnvValue(modeMatch[1]).trim().toLowerCase();
         if (mode !== "docker" && mode !== "local") return false;
         const tokenMatch = text.match(/^TELEGRAM_BOT_TOKEN=(.*)$/m);
         if (!tokenMatch || !parseEnvValue(tokenMatch[1]).trim()) return false;
-        const homeMatch = text.match(/^TABYAGENT_HOME=(.+)$/m);
+        const homeMatch = text.match(/^TABYBOT_HOME=(.+)$/m);
         if (homeMatch && path.resolve(parseEnvValue(homeMatch[1])) === resolved) return true;
         return fs.existsSync(path.join(resolved, "app", "codes", "index.js"));
     } catch {
@@ -86,14 +86,14 @@ export function hasManagedInstallMarker(home) {
 }
 
 export function defaultInstallHome() {
-    return path.join(process.env.HOME || os.homedir() || "/tmp", ".tabyagent");
+    return path.join(process.env.HOME || os.homedir() || "/tmp", ".tabybot");
 }
 
 export function detectInstallHome(entry = process.argv[1]) {
     const fromLayout = resolveManagedInstallHome(entry);
     if (fromLayout) return fromLayout;
 
-    const fromEnv = process.env.TABYAGENT_HOME?.trim();
+    const fromEnv = process.env.TABYBOT_HOME?.trim();
     if (fromEnv) return path.resolve(fromEnv);
 
     return defaultInstallHome();
@@ -104,7 +104,7 @@ export function isManagedInstallEntry(entry = process.argv[1]) {
 
     const resolvedEntry = path.resolve(entry);
 
-    const fromEnv = process.env.TABYAGENT_HOME?.trim();
+    const fromEnv = process.env.TABYBOT_HOME?.trim();
     if (fromEnv) {
         const installHome = path.resolve(fromEnv);
         const appCodes = path.join(installHome, "app", "codes");
@@ -124,7 +124,7 @@ export function isManagedInstallEntry(entry = process.argv[1]) {
 
 export function managedInstallPathEnv(home) {
     return {
-        TABYAGENT_HOME: home,
+        TABYBOT_HOME: home,
         APP_ROOT: path.join(home, "app"),
         USER_DIR: path.join(home, "user"),
         CODES_DIR: path.join(home, "app", "codes"),
