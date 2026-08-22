@@ -1,0 +1,10 @@
+{
+    "id": "codex",
+    "type": "codex-oauth",
+    "baseURL": "https://chatgpt.com/backend-api/codex",
+    "apiKeyOptional": true,
+    "defaultContextWindow": 200000,
+    "thinkingLevels": ["none", "low", "medium", "high", "max"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning"
+}

@@ -1,0 +1,15 @@
+# Optional overlay: bind a host folder into the container at /workspace.
+# Set HOST_WORKSPACE in .env to an absolute path on your machine.
+#
+#   echo 'HOST_WORKSPACE=/path/to/your/project' >> .env
+#   docker compose -f docker-compose.yml -f docker-compose.workspace.yml up -d
+#
+# The user can edit files on the host; the agent reads/writes the same files at /workspace.
+
+services:
+    tabyagent:
+        environment:
+            WORKSPACE_ENABLED: "1"
+            HOST_WORKSPACE: ${HOST_WORKSPACE}
+        volumes:
+            - ${HOST_WORKSPACE}:/workspace

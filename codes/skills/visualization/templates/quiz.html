@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>Quiz</title>
+        <style>
+            :root {
+                --bg: #121212;
+                --card: #1b1b1b;
+                --text: #e8e8e8;
+                --muted: #8e8e8e;
+                --accent: #0064ff;
+                --accent-d: #0052cc;
+                --ok: #4caf50;
+                --no: #e57373;
+                --border: #2a2a2a;
+            }
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    16px/1.5 -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+                min-height: 100vh;
+            }
+            .wrap {
+                max-width: 560px;
+                margin: 0 auto;
+                padding: 20px 16px 60px;
+            }
+            h1 {
+                font-size: 22px;
+                text-align: center;
+                margin-bottom: 4px;
+            }
+            .sub {
+                text-align: center;
+                color: var(--muted);
+                font-size: 14px;
+                margin-bottom: 24px;
+            }
+            .progress {
+                height: 6px;
+                background: var(--border);
+                border-radius: 3px;
+                margin-bottom: 24px;
+                overflow: hidden;
+            }
+            .progress > div {
+                height: 100%;
+                background: var(--accent);
+                width: 0;
+                transition: width 0.3s;
+            }
+            .q-card {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                padding: 20px;
+            }
+            .q-num {
+                color: var(--accent);
+                font-size: 13px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+            .q-text {
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 18px;
+            }
+            .opts {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .opt {
+                display: block;
+                width: 100%;
+                text-align: left;
+                padding: 14px 16px;
+                background: transparent;
+                border: 1.5px solid var(--border);
+                border-radius: 10px;
+                color: var(--text);
+                font: inherit;
+                cursor: pointer;
+                transition: 0.15s;
+            }
+            .opt:hover:not(:disabled) {
+                border-color: var(--accent);
+            }
+            .opt:active:not(:disabled) {
+                transform: scale(0.99);
+            }
+            .opt:disabled {
+                cursor: default;
+                opacity: 0.9;
+            }
+            .opt.correct {
+                border-color: var(--ok);
+                background: rgba(76, 175, 80, 0.12);
+            }
+            .opt.wrong {
+                border-color: var(--no);
+                background: rgba(229, 115, 115, 0.12);
+            }
+            .opt.picked {
+                border-color: var(--accent);
+                background: rgba(0, 100, 255, 0.12);
+            }
+            .fb {
+                margin-top: 14px;
+                padding: 12px 14px;
+                border-radius: 10px;
+                font-size: 14px;
+                display: none;
+            }
+            .fb.show {
+                display: block;
+            }
+            .fb.ok {
+                background: rgba(76, 175, 80, 0.1);
+                border-left: 3px solid var(--ok);
+            }
+            .fb.no {
+                background: rgba(229, 115, 115, 0.1);
+                border-left: 3px solid var(--no);
+            }
+            .btn {
+                display: block;
+                width: 100%;
+                padding: 14px;
+                margin-top: 16px;
+                background: var(--accent);
+                color: #fff;
+                border: none;
+                border-radius: 10px;
+                font: inherit;
+                font-weight: 600;
+                cursor: pointer;
+                transition: 0.15s;
+            }
+            .btn:hover {
+                background: var(--accent-d);
+            }
+            .btn:disabled {
+                opacity: 0.4;
+                cursor: default;
+            }
+            .result {
+                text-align: center;
+            }
+            .result .score {
+                font-size: 42px;
+                font-weight: 700;
+                margin: 10px 0;
+            }
+            .result .msg {
+                color: var(--muted);
+                margin-bottom: 20px;
+            }
+            .hidden {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div id="quiz">
+                <h1 id="title"></h1>
+                <p class="sub" id="desc"></p>
+                <div class="progress"><div id="bar"></div></div>
+                <div id="qcard" class="q-card"></div>
+            </div>
+            <div id="done" class="result hidden">
+                <h1 id="rTitle"></h1>
+                <div class="score" id="rScore"></div>
+                <p class="msg" id="rMsg"></p>
+                <button class="btn" onclick="location.reload()">다시 풀기</button>
+            </div>
+        </div>
+        <script>
+            // ============================================================
+            //  AGENT: replace the CONFIG object below with quiz content.
+            //  - title:       quiz heading
+            //  - description: sub-heading (optional)
+            //  - questions:   array; each {q, options[], answer (0-indexed), explain}
+            //  - passText / failText / passRatio shown on the result screen
+            // ============================================================
+            const CONFIG = /*__VIZ_CONFIG__*/ null; /*__VIZ_CONFIG__*/
+
+            // ---- engine (do not edit) ----
+            const $ = (id) => document.getElementById(id);
+            let idx = 0,
+                score = 0,
+                picked = false;
+
+            $("title").textContent = CONFIG.title;
+            $("desc").textContent = CONFIG.description || "";
+            render();
+
+            function render() {
+                picked = false;
+                const cur = CONFIG.questions[idx];
+                const bar = (idx / CONFIG.questions.length) * 100;
+                $("bar").style.width = bar + "%";
+
+                let html = `<div class="q-num">질문 ${idx + 1} / ${CONFIG.questions.length}</div>`;
+                html += `<div class="q-text">${esc(cur.q)}</div><div class="opts">`;
+                cur.options.forEach((o, i) => {
+                    html += `<button class="opt" onclick="pick(${i})">${esc(o)}</button>`;
+                });
+                html += `</div><div class="fb" id="fb"></div>`;
+                html += `<button class="btn" id="next" disabled onclick="next()">${idx + 1 < CONFIG.questions.length ? "다음" : "결과 보기"}</button>`;
+                $("qcard").innerHTML = html;
+            }
+
+            function pick(i) {
+                if (picked) return;
+                picked = true;
+                const cur = CONFIG.questions[idx];
+                const btns = document.querySelectorAll(".opt");
+                btns.forEach((b, j) => {
+                    b.disabled = true;
+                    if (j === cur.answer) b.classList.add("correct");
+                    if (j === i && i !== cur.answer) b.classList.add("wrong");
+                });
+                const ok = i === cur.answer;
+                if (ok) score++;
+                const fb = $("fb");
+                fb.className = "fb show " + (ok ? "ok" : "no");
+                fb.textContent = (ok ? "정답! " : "오답. ") + (cur.explain || "");
+                $("next").disabled = false;
+                $("bar").style.width = ((idx + 1) / CONFIG.questions.length) * 100 + "%";
+            }
+
+            function next() {
+                idx++;
+                if (idx >= CONFIG.questions.length) {
+                    finish();
+                } else {
+                    render();
+                }
+            }
+
+            function finish() {
+                $("quiz").classList.add("hidden");
+                $("done").classList.remove("hidden");
+                const ratio = score / CONFIG.questions.length;
+                $("rScore").textContent = `${score} / ${CONFIG.questions.length}`;
+                $("rMsg").textContent = ratio >= CONFIG.passRatio ? CONFIG.passText || "" : CONFIG.failText || "";
+            }
+
+            function esc(s) {
+                return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+            }
+        </script>
+    </body>
+</html>

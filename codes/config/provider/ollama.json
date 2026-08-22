@@ -1,0 +1,10 @@
+{
+    "id": "ollama",
+    "type": "openai-compatible",
+    "baseURL": "http://localhost:11434/v1",
+    "apiKeyOptional": true,
+    "defaultApiKey": "ollama",
+    "thinkingLevels": ["none", "low", "medium", "high", "max"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}

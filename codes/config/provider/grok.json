@@ -1,0 +1,10 @@
+{
+    "id": "grok",
+    "type": "grok-oauth",
+    "baseURL": "https://cli-chat-proxy.grok.com/v1",
+    "apiKeyOptional": true,
+    "defaultContextWindow": 500000,
+    "thinkingLevels": ["low", "medium", "high", "xhigh"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning"
+}

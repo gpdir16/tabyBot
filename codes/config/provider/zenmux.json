@@ -1,0 +1,8 @@
+{
+    "id": "zenmux",
+    "type": "openai-compatible",
+    "baseURL": "https://zenmux.ai/api/v1",
+    "thinkingLevels": ["none", "minimal", "low", "medium", "high", "xhigh"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}
