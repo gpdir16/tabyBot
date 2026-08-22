@@ -2,7 +2,7 @@ node_modules/
 .env
 .DS_Store
 
-user/
+/user/
 
 # Python
 __pycache__/
