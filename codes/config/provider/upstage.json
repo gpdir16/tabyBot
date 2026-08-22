@@ -1,0 +1,8 @@
+{
+    "id": "upstage",
+    "type": "openai-compatible",
+    "baseURL": "https://api.upstage.ai/v1",
+    "thinkingLevels": ["minimal", "low", "medium", "high"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}

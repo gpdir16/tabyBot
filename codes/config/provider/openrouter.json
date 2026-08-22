@@ -1,0 +1,12 @@
+{
+    "id": "openrouter",
+    "type": "openai-compatible",
+    "baseURL": "https://openrouter.ai/api/v1",
+    "extraHeaders": {
+        "HTTP-Referer": "https://github.com/gpdir16/tabyagent",
+        "X-Title": "tabyAgent"
+    },
+    "thinkingLevels": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}

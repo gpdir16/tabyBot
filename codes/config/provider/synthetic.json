@@ -1,0 +1,8 @@
+{
+    "id": "synthetic",
+    "type": "openai-compatible",
+    "baseURL": "https://api.synthetic.new/openai/v1",
+    "thinkingLevels": ["low", "medium", "high"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}

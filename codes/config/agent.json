@@ -1,0 +1,24 @@
+{
+    "maxToolRounds": 300,
+    "maxToolRoundsPerTurn": 300,
+    "maxToolCallsPerTurn": 300,
+    "maxSameToolRepeat": 4,
+    "maxEmptyReplyRetries": 8,
+    "contextCompressTriggerPercent": 75,
+    "contextKeepRecentPercent": 20,
+    "contextThresholdPercent": 90,
+    "authCodeTtlMinutes": 15,
+    "telegramStreaming": "draft",
+    "terminalEnabled": true,
+    "terminalTimeoutMs": 120000,
+    "terminalMaxOutputChars": 32000,
+    "visionMaxImageBytes": 5242880,
+    "updateCheck": {
+        "enabled": true,
+        "intervalCron": "0 * * * *",
+        "initialDelayMs": 60000,
+        "githubRepo": "gpdir16/tabyAgent",
+        "imageName": "ghcr.io/gpdir16/tabyagent",
+        "installScriptUrl": "https://raw.githubusercontent.com/gpdir16/tabyAgent/main/scripts/install.sh"
+    }
+}

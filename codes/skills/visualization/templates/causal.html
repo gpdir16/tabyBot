@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>What-If Explorer</title>
+        <style>
+            :root {
+                --bg: #121212;
+                --card: #1b1b1b;
+                --text: #e8e8e8;
+                --muted: #8e8e8e;
+                --accent: #0064ff;
+                --accent-d: #0052cc;
+                --ok: #4caf50;
+                --warn: #d99a3a;
+                --bad: #e57373;
+                --border: #2a2a2a;
+            }
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    15px/1.5 -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+                min-height: 100vh;
+            }
+            .wrap {
+                max-width: 640px;
+                margin: 0 auto;
+                padding: 20px 16px 60px;
+            }
+            h1 {
+                font-size: 22px;
+                margin-bottom: 4px;
+            }
+            .sub {
+                color: var(--muted);
+                font-size: 14px;
+                margin-bottom: 20px;
+            }
+            .panel {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                padding: 18px;
+                margin-bottom: 16px;
+            }
+            .panel h2 {
+                font-size: 15px;
+                color: var(--accent);
+                margin-bottom: 14px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .ctrl {
+                margin-bottom: 16px;
+            }
+            .ctrl:last-child {
+                margin-bottom: 0;
+            }
+            .ctrl label {
+                display: flex;
+                justify-content: space-between;
+                font-size: 14px;
+                margin-bottom: 6px;
+            }
+            .ctrl label .val {
+                font-weight: 600;
+                color: var(--accent);
+            }
+            .ctrl input[type="range"] {
+                width: 100%;
+                height: 32px;
+                -webkit-appearance: none;
+                background: transparent;
+            }
+            .ctrl input[type="range"]::-webkit-slider-runnable-track {
+                height: 6px;
+                background: var(--border);
+                border-radius: 3px;
+            }
+            .ctrl input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                background: var(--accent);
+                margin-top: -8px;
+                cursor: pointer;
+            }
+            .ctrl select {
+                width: 100%;
+                padding: 10px;
+                background: var(--bg);
+                color: var(--text);
+                border: 1.5px solid var(--border);
+                border-radius: 8px;
+                font: inherit;
+            }
+            .out-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid var(--border);
+            }
+            .out-row:last-child {
+                border-bottom: none;
+            }
+            .out-row .name {
+                font-size: 14px;
+            }
+            .out-row .badge {
+                font-weight: 700;
+                padding: 4px 10px;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+            .b-good {
+                background: rgba(76, 175, 80, 0.15);
+                color: var(--ok);
+            }
+            .b-warn {
+                background: rgba(255, 183, 77, 0.15);
+                color: var(--warn);
+            }
+            .b-bad {
+                background: rgba(229, 115, 115, 0.15);
+                color: var(--bad);
+            }
+            .b-neutral {
+                background: rgba(142, 142, 142, 0.15);
+                color: var(--muted);
+            }
+            .chain {
+                font-size: 13px;
+                color: var(--muted);
+                margin-top: 6px;
+            }
+            .reset {
+                display: block;
+                width: 100%;
+                padding: 12px;
+                background: transparent;
+                border: 1.5px solid var(--border);
+                border-radius: 10px;
+                color: var(--muted);
+                font: inherit;
+                cursor: pointer;
+            }
+            .reset:active {
+                background: var(--border);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <h1 id="title"></h1>
+            <p class="sub" id="desc"></p>
+
+            <div class="panel">
+                <h2>입력 변수</h2>
+                <div id="inputs"></div>
+            </div>
+
+            <div class="panel">
+                <h2>결과</h2>
+                <div id="outputs"></div>
+            </div>
+
+            <button class="reset" onclick="resetAll()">기본값으로 초기화</button>
+        </div>
+        <script>
+            // ============================================================
+            //  AGENT: replace CONFIG with scenario content.
+            //
+            //  inputs[]:  { id, label, type:"range"|"select", min, max, step,
+            //               default, unit, options[] (for select) }
+            //  outputs[]: { id, label, tier(evaluate → "good"|"warn"|"bad"|"neutral"),
+            //               value(evaluate → string), trace(evaluate → string) }
+            //  evaluate(state): receives {varId: value} map, returns object
+            //    keyed by output id → {value, tier, trace}
+            // ============================================================
+            const CONFIG = /*__VIZ_CONFIG__*/ null; /*__VIZ_CONFIG__*/
+
+            // ---- engine (do not edit) ----
+            const $ = (id) => document.getElementById(id);
+            let state = {};
+
+            $("title").textContent = CONFIG.title;
+            $("desc").textContent = CONFIG.description || "";
+            buildInputs();
+            update();
+
+            function buildInputs() {
+                const el = $("inputs");
+                el.innerHTML = "";
+                CONFIG.inputs.forEach((inp) => {
+                    state[inp.id] = inp.default;
+                    const div = document.createElement("div");
+                    div.className = "ctrl";
+                    if (inp.type === "range") {
+                        div.innerHTML = `<label><span>${esc(inp.label)}</span><span class="val" id="v-${inp.id}"></span></label>
+        <input type="range" id="i-${inp.id}" min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">`;
+                        el.appendChild(div);
+                        const slider = $(`i-${inp.id}`);
+                        slider.addEventListener("input", () => {
+                            state[inp.id] = parseFloat(slider.value);
+                            update();
+                        });
+                    } else if (inp.type === "select") {
+                        const rawOpts = inp.options.map((o) => (typeof o === "string" ? { v: o, l: o } : o));
+                        const opts = rawOpts
+                            .map((o) => `<option value="${esc(o.v)}"${o.v === inp.default ? " selected" : ""}>${esc(o.l)}</option>`)
+                            .join("");
+                        div.innerHTML = `<label><span>${esc(inp.label)}</span></label><select id="i-${inp.id}">${opts}</select>`;
+                        el.appendChild(div);
+                        $(`i-${inp.id}`).addEventListener("change", (e) => {
+                            state[inp.id] = e.target.value;
+                            update();
+                        });
+                    }
+                });
+            }
+
+            function update() {
+                CONFIG.inputs.forEach((inp) => {
+                    const v = state[inp.id];
+                    const label =
+                        inp.type === "select"
+                            ? inp.options.map((o) => (typeof o === "string" ? { v: o, l: o } : o)).find((o) => o.v === v)?.l || v
+                            : v + (inp.unit || "");
+                    const cell = $(`v-${inp.id}`);
+                    if (cell) cell.textContent = label;
+                });
+
+                const result = CONFIG.evaluate(state);
+                const el = $("outputs");
+                el.innerHTML = "";
+                CONFIG.outputs.forEach((out) => {
+                    const r = result[out.id];
+                    if (!r) return;
+                    const row = document.createElement("div");
+                    row.className = "out-row";
+                    row.innerHTML = `<div><div class="name">${esc(out.label)}</div>${r.trace ? `<div class="chain">${esc(r.trace)}</div>` : ""}</div>
+      <span class="badge b-${r.tier || "neutral"}">${esc(r.value)}</span>`;
+                    el.appendChild(row);
+                });
+            }
+
+            function resetAll() {
+                CONFIG.inputs.forEach((inp) => {
+                    state[inp.id] = inp.default;
+                });
+                CONFIG.inputs.forEach((inp) => {
+                    const el = $(`i-${inp.id}`);
+                    if (el) el.value = inp.default;
+                });
+                update();
+            }
+
+            function esc(s) {
+                return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+            }
+        </script>
+    </body>
+</html>

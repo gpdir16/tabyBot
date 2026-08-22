@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>Decision Tree</title>
+        <style>
+            :root {
+                --bg: #121212;
+                --card: #1b1b1b;
+                --text: #e8e8e8;
+                --muted: #8e8e8e;
+                --accent: #0064ff;
+                --accent-d: #0052cc;
+                --ok: #4caf50;
+                --no: #e57373;
+                --border: #2a2a2a;
+            }
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    15px/1.5 -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+                min-height: 100vh;
+            }
+            .wrap {
+                max-width: 640px;
+                margin: 0 auto;
+                padding: 20px 16px 60px;
+            }
+            h1 {
+                font-size: 22px;
+                margin-bottom: 4px;
+            }
+            .sub {
+                color: var(--muted);
+                font-size: 14px;
+                margin-bottom: 20px;
+            }
+            .path {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+                margin-bottom: 20px;
+                font-size: 13px;
+            }
+            .crumb {
+                background: var(--border);
+                padding: 4px 10px;
+                border-radius: 6px;
+                color: var(--muted);
+            }
+            .crumb.cur {
+                background: var(--accent);
+                color: #fff;
+            }
+            .sep {
+                color: var(--muted);
+            }
+            .node {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                padding: 20px;
+            }
+            .node .nlabel {
+                color: var(--accent);
+                font-size: 13px;
+                font-weight: 600;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .node .ntext {
+                font-size: 17px;
+                font-weight: 600;
+                margin-bottom: 16px;
+            }
+            .choices {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .choice {
+                display: block;
+                width: 100%;
+                text-align: left;
+                padding: 14px 16px;
+                background: transparent;
+                border: 1.5px solid var(--border);
+                border-radius: 10px;
+                color: var(--text);
+                font: inherit;
+                cursor: pointer;
+                transition: 0.15s;
+            }
+            .choice:hover {
+                border-color: var(--accent);
+            }
+            .choice:active {
+                transform: scale(0.99);
+            }
+            .leaf {
+                text-align: center;
+                padding: 30px 20px;
+            }
+            .leaf .icon {
+                font-size: 36px;
+                margin-bottom: 8px;
+            }
+            .leaf .result {
+                font-size: 20px;
+                font-weight: 700;
+                margin-bottom: 8px;
+            }
+            .leaf .detail {
+                color: var(--muted);
+                font-size: 14px;
+                margin-bottom: 20px;
+            }
+            .btn {
+                display: block;
+                width: 100%;
+                padding: 14px;
+                margin-top: 8px;
+                background: var(--accent);
+                color: #fff;
+                border: none;
+                border-radius: 10px;
+                font: inherit;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .btn.sec {
+                background: transparent;
+                border: 1.5px solid var(--border);
+                color: var(--muted);
+                margin-top: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <h1 id="title"></h1>
+            <p class="sub" id="desc"></p>
+            <div class="path" id="crumbs"></div>
+            <div id="content"></div>
+        </div>
+        <script>
+            // ============================================================
+            //  AGENT: replace CONFIG with your decision tree.
+            //
+            //  nodes: object keyed by node id. Each node is either:
+            //    { type:"question", text, choices:[{label, next}] }
+            //    { type:"leaf", text, detail }
+            //  start: id of the root node.
+            // ============================================================
+            const CONFIG = /*__VIZ_CONFIG__*/ null; /*__VIZ_CONFIG__*/
+
+            // ---- engine (do not edit) ----
+            const $ = (id) => document.getElementById(id);
+            let path = [];
+
+            $("title").textContent = CONFIG.title;
+            $("desc").textContent = CONFIG.description || "";
+            render();
+
+            function render() {
+                const cur = CONFIG.nodes[path.length ? path[path.length - 1].next : CONFIG.start];
+                renderCrumbs();
+
+                if (cur.type === "leaf") {
+                    $("content").innerHTML = `
+      <div class="node leaf">
+        <div class="icon">${path.length ? "✅" : "📌"}</div>
+        <div class="result">${esc(cur.text)}</div>
+        <div class="detail">${esc(cur.detail || "")}</div>
+        <button class="btn" onclick="restart()">처음부터</button>
+        <button class="btn sec" onclick="back()">한 단계 back</button>
+      </div>`;
+                    return;
+                }
+
+                let html = `<div class="node"><div class="nlabel">질문</div><div class="ntext">${esc(cur.text)}</div><div class="choices">`;
+                cur.choices.forEach((c, i) => {
+                    html += `<button class="choice" onclick="go(${i})">${esc(c.label)}</button>`;
+                });
+                html += `</div></div>`;
+                $("content").innerHTML = html;
+            }
+
+            function go(i) {
+                const nodeId = path.length ? path[path.length - 1].next : CONFIG.start;
+                const node = CONFIG.nodes[nodeId];
+                const choice = node.choices[i];
+                path.push({ from: nodeId, label: choice.label, next: choice.next });
+                render();
+            }
+
+            function back() {
+                path.pop();
+                render();
+            }
+
+            function restart() {
+                path = [];
+                render();
+            }
+
+            function renderCrumbs() {
+                const el = $("crumbs");
+                if (!path.length) {
+                    el.innerHTML = "";
+                    return;
+                }
+                el.innerHTML = path
+                    .map(
+                        (p, i) =>
+                            `<span class="crumb ${i === path.length - 1 ? "cur" : ""}">${esc(p.label)}</span>` +
+                            (i < path.length - 1 ? `<span class="sep">→</span>` : ""),
+                    )
+                    .join("");
+            }
+
+            function esc(s) {
+                return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+            }
+        </script>
+    </body>
+</html>

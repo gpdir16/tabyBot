@@ -1,0 +1,11 @@
+node_modules/
+.env
+.DS_Store
+
+user/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc

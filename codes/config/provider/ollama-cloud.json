@@ -1,0 +1,8 @@
+{
+    "id": "ollama-cloud",
+    "type": "openai-compatible",
+    "baseURL": "https://ollama.com/v1",
+    "thinkingLevels": ["none", "low", "medium", "high", "max"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}
