@@ -1,12 +1,10 @@
 import fs from "node:fs";
 import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
-import { formatAllowedPaths, isAllowedFilePath, resolveAgentPath } from "../paths.js";
+import { resolveAgentPath } from "../paths.js";
 import { filePathParamDescription, filePatchDescription, fileReadDescription } from "../path-labels.js";
 
-function resolveFilePath(rawPath, { write = false } = {}) {
-    const resolved = resolveAgentPath(rawPath);
-    if (!resolved) return null;
-    return isAllowedFilePath(resolved, { write }) ? resolved : null;
+function resolveFilePath(rawPath) {
+    return resolveAgentPath(rawPath);
 }
 
 function getMaxFileReadTokens(messages, modelMeta, model) {
@@ -124,8 +122,8 @@ function recordFileSnapshot(ctx, resolvedPath, content) {
 }
 
 export async function executeFileRead(args, ctx) {
-    const resolved = resolveFilePath(args?.path, { write: false });
-    if (!resolved) return { error: `path not allowed or missing (readable: ${formatAllowedPaths()})` };
+    const resolved = resolveFilePath(args?.path);
+    if (!resolved) return { error: "path is required" };
     if (!fs.existsSync(resolved)) return { error: "file not found", path: resolved };
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return { error: "not a file", path: resolved };
@@ -254,8 +252,8 @@ function applyHunk(fileLines, hunk, offset = 0) {
 }
 
 export async function executeFilePatch(args, ctx = {}) {
-    const resolved = resolveFilePath(args?.path, { write: true });
-    if (!resolved) return { error: `path not allowed or missing (writable: ${formatAllowedPaths({ write: true })})` };
+    const resolved = resolveFilePath(args?.path);
+    if (!resolved) return { error: "path is required" };
     if (!fs.existsSync(resolved)) return { error: "file not found", path: resolved };
 
     const stat = fs.statSync(resolved);

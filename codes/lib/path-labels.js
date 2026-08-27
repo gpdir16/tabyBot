@@ -1,5 +1,5 @@
 import path from "node:path";
-import { CODES_DIR, SKILLS_SYSTEM_DIR, USER_DIR, WORKSPACE_DIR, isWorkspaceEnabled } from "./paths.js";
+import { CODES_DIR, SKILLS_SYSTEM_DIR, USER_DIR } from "./paths.js";
 import { isDockerRuntime } from "./runtime.js";
 
 export function memoryFilePath() {
@@ -22,43 +22,29 @@ export function cronConfigPath() {
     return path.join(USER_DIR, "cron.json");
 }
 
-function workspaceSuffix() {
-    if (!isWorkspaceEnabled()) return "";
-    if (isDockerRuntime()) {
-        return ` Use \`${WORKSPACE_DIR}\` or \`workspace/...\` only for the host-mounted PC folder.`;
-    }
-    return ` Use \`${WORKSPACE_DIR}\` or \`workspace/...\` only for the optional project folder.`;
-}
-
 export function terminalRunDescription() {
     const runtime = isDockerRuntime() ? "Run a shell command inside the Docker container." : "Run a shell command on the host machine.";
-    return `${runtime} Default cwd is \`${USER_DIR}\`.${workspaceSuffix()}`;
+    return `${runtime} Default cwd is \`${USER_DIR}\`.`;
 }
 
 export function terminalCwdParamDescription() {
-    const ws = isWorkspaceEnabled()
-        ? isDockerRuntime()
-            ? `; use \`${WORKSPACE_DIR}\` only for host-mounted project work`
-            : `; use \`${WORKSPACE_DIR}\` only for optional project folder work`
-        : "";
-    return `Working directory (default \`${USER_DIR}\`${ws})`;
+    return `Working directory (default \`${USER_DIR}\`)`;
 }
 
 export function fileReadDescription() {
-    return `Read a text file. path is required. Relative paths resolve to \`${USER_DIR}\`.${workspaceSuffix()} Optional line range; output capped below 50% of remaining context.`;
+    return `Read a text file. Absolute paths are allowed; relative paths resolve to \`${USER_DIR}\`. Optional line range; output capped below 50% of remaining context.`;
 }
 
 export function filePatchDescription() {
-    return `Patch a text file (unified diff). Default \`${USER_DIR}\`.${workspaceSuffix()} Call file_read on the same path in this turn first; disk must still match that read.`;
+    return `Patch a text file (unified diff). Absolute paths are allowed; relative paths resolve to \`${USER_DIR}\`. Call file_read on the same path in this turn first; disk must still match that read.`;
 }
 
 export function filePathParamDescription() {
-    const ws = isWorkspaceEnabled() ? ", or workspace/... when a project folder is configured" : "";
-    return `Required. Absolute filesystem path, or a path relative to \`${USER_DIR}\`${ws}`;
+    return `Required. Absolute filesystem path, or a path relative to \`${USER_DIR}\``;
 }
 
 export function sendFileDescription() {
-    return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`.${workspaceSuffix()} Optional caption is shown with the attachment.`;
+    return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`. Optional caption is shown with the attachment.`;
 }
 
 export function cronListDescription() {
