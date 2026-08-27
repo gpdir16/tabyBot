@@ -2,118 +2,97 @@ English | [한국어](README.ko.md)
 
 # tabyBot
 
-A more autonomous, more persistent, and easier alternative to OpenClaw/Hermes.
+An open-source alternative to Grok Bot. Built on tabyAgent, an agent that runs on Telegram.
 
-Give it a task and it will carry it out, even if it takes hours or runs into problems.
+Give it a task and it will do it — even if it takes hours, even if things go wrong.
 
-Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI app usage work out of the box with no extra setup.
+Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI apps work out of the box. No extra setup.
 
 ## What it can do
 
-- **Daily chat**: Send messages and get replies directly in Telegram. Text, images, and files are supported.
-- **Connect inference providers**: Works with OpenAI, OpenRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, or your own API endpoint.
-- **Skills, MCP**: Add the capabilities and tools you want directly to the agent.
-- **Scheduled tasks**: Recurring jobs can run automatically, report when needed, or be skipped when not necessary.
-- **Runs anywhere**: Use Docker or local Node.js. Native support is available on macOS and Linux; Windows can work through Docker, but it is not guaranteed.
-- **Self-improvement**: tabyBot can improve itself. It learns from how problems are solved and from user feedback, becoming smarter over time.
+- **Everyday chat**: Get answers in the browser. Text and images are both supported.
+- **Inference providers**: Connect OpenAI, OpenRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, or your own API endpoint.
+- **Skills, MCP**: Add the capabilities and tools you want to the agent yourself.
+- **Scheduled tasks**: Recurring jobs run on a schedule, report when they finish, and skip when they are not needed.
+- **Multiple agents**: Create specialist agents for different roles and have them work together.
+- **Run it anywhere**: Docker container or local Node.js. Native support is macOS and Linux. Windows can work through Docker, but that is not guaranteed.
+- **Self-improvement**: tabyBot can improve itself. It learns from how problems were solved and from your corrections, and it gets sharper the more you use it.
 
 ## Differences
 
-| Feature                         | tabyBot                        | OpenClaw                         | Hermes                                              | ChatGPT                                                               |
-| ------------------------------- | ------------------------------ | -------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
-| Daily chat                      | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ✅ Yes                                                                |
-| Search                          | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ✅ Yes                                                                |
-| Multiple providers              | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ❌ No                                                                 |
-| Skills support                  | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ❌ No                                                                 |
-| MCP support                     | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ❌ Paid plan, server-side MCP only                                    |
-| Scheduled tasks                 | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ✅ Yes                                                                |
-| Self-improvement                | ✅ Yes                         | ❌ No                            | ✅ Yes                                              | ❌ No                                                                 |
-| Terminal use                    | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ❌ Sandbox only                                                       |
-| Browser use                     | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ❌ No                                                                 |
-| GUI app use                     | ✅ Yes                         | ❌ No                            | ❌ No                                               | ❌ No                                                                 |
-| Local execution                 | ✅ Yes                         | ✅ Yes                           | ✅ Yes                                              | ❌ No                                                                 |
-| Persistence\*                   | ✅ Has worked for 2 hours      | ✅ Has worked for 15 minutes     | ✅ Has worked for 20 minutes                        | ❌ No                                                                 |
-| Refusal for "ethical reasons"\* | ✅ Rarely refuses most tasks   | ✅ Refuses for red-team security | ❌ Refuses for red-team security and CAPTCHA bypass | ❌ Refuses for red/blue team security, blaming others, CAPTCHA bypass |
-| NSFW level settings             | ✅ Allow, indirect only, block | ❌ Not available                 | ❌ Not available                                    | ❌ Block                                                              |
-| Memory usage                    | ✅ ~800MB                      | ❌ ~2GB                          | ✅ ~800MB                                           | ✅ -                                                                  |
-| License                         | ✅ AGPL-3.0                    | ✅ MIT                           | ✅ MIT                                              | ❌ Proprietary                                                        |
+- tabyBot and tabyAgent share almost every feature. This repo (tabyBot) runs in its own web UI; tabyAgent runs on Telegram.
 
-> Items marked with an asterisk (\*) were verified by the tabyBot developer through direct testing or real-world use, so they may vary depending on the environment.
-> For the comparison test, OpenClaw and Hermes used the Ollama Cloud provider and the Kimi-K2.6 model.
+| Feature            | tabyBot                        | Grok Bot         | OpenClaw         | Hermes           | ChatGPT                            |
+| ------------------ | ------------------------------ | ---------------- | ---------------- | ---------------- | ---------------------------------- |
+| Everyday chat      | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ✅ Yes                             |
+| Multiple agents    | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ No                              |
+| Search             | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ✅ Yes                             |
+| Multiple providers | ✅ Yes                         | ❌ No            | ✅ Yes           | ✅ Yes           | ❌ No                              |
+| Skills             | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ No                              |
+| MCP                | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ Paid plan, server-side MCP only |
+| Scheduled tasks    | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ✅ Yes                             |
+| Self-improvement   | ✅ Yes                         | ✅ Yes           | ❌ No            | ✅ Yes           | ❌ No                              |
+| Terminal           | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ Sandbox only                    |
+| Browser            | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ No                              |
+| GUI apps           | ✅ Yes                         | ✅ Yes           | ❌ No            | ❌ No            | ❌ No                              |
+| Local execution    | ✅ Yes                         | ❌ No            | ✅ Yes           | ✅ Yes           | ❌ No                              |
+| NSFW level         | ✅ Allow, indirect only, block | ❌ Not available | ❌ Not available | ❌ Not available | ❌ Block                           |
+| License            | ✅ AGPL-3.0                    | ❌ Proprietary   | ✅ MIT           | ✅ MIT           | ❌ Proprietary                     |
+
+> Tests used the Grok OAuth provider and the Grok 4.6 model.
 
 ## Example prompts
 
-- "How much was last month's DigitalOcean bill?"
-- "Find all files in the Documents folder that contain the word report and summarize them."
-- "Run direct performance tests on gemma4 e4b and e2b on this machine, then compare them."
+- "What's last month's DigitalOcean bill?"
+- "Find every file in Documents that contains the word report and summarize them all."
+- "Run gemma4 e4b and e2b on this machine yourself, then compare them."
 - "Organize next week's schedule."
-- "Delete the sales row from this Excel file and highlight the columns with values."
+- "Delete the sales row in this Excel file and highlight the columns that have values."
 - "Cancel my ChatGPT Plus subscription for me."
-- "Is this actually real? (link to X/Reddit, etc.)"
-- "Summarize this long pasted text."
-- "I'll give you my email account so you can use it later. The address is () and the SMTP/POP3 password is ()."
-- "Set up Spotify using the email account I gave you earlier."
-- "Please visualize this paper in an easy-to-understand way."
+- "Is this actually real? (X/Reddit link)"
+- "Summarize this (long pasted text)."
+- "I'll give you my email account so you can use it later. Address is (), SMTP/POP3 password is ()."
+- "Sign up for Spotify with the email account I told you about earlier."
+- "Visualize this paper so it's easy to understand. (paper link)"
 - "Compare privatestater analytics and privatestater captcha with Google Analytics and reCAPTCHA."
-- "What's a privacy-respecting alternative to Gmail?"
-- "What should I eat for lunch in a bit? I only have 3.22 dollars in my bank account."
+- "What's a privacy-respecting Gmail alternative?"
+- "What should I eat for lunch in a bit? I have 4,328 won in my account."
 
-## Quick Start
+## Quick start
 
-### Installation Option A: Automated Script
+### Option A: Installer script
 
-#### 1. Create a Telegram bot
+#### 1. Install (Linux / macOS)
 
-1. Search for [@BotFather](https://t.me/botfather) in Telegram.
-2. Send `/newbot` and follow the instructions.
-3. Copy the bot token you receive.
+Paste the line below into a terminal and press Enter. Installation can take a while, so wait for it to finish.
 
-#### 2. Install (Linux / macOS)
+You can choose Docker or a local run. Docker is recommended for security and isolation.
 
-Paste the one-line command below into your terminal and press Enter. Installation may take a while, so please wait.
+**Requirements:** If you pick Docker, everything you need is installed for you. If you pick local, Node.js 22 or later must already be installed.
 
-After the installer starts, it will ask you to paste the **BotFather token** from step 1. Then you can choose Docker or local execution, with Docker recommended. It will also ask whether you want to connect a PC folder; the recommended and default answer is N (No).
-
-**Requirements:** If you choose Docker, everything needed will be installed automatically. If you choose local execution, Node.js 22 or later must already be installed.
-
-The automated script does not support Windows. If you are on Windows, consider switching your main OS to a Linux-based distribution. In many cases it is faster, more privacy-friendly, and more freedom-preserving.
+The installer does not support Windows. If you are on Windows, consider switching your main OS to a Linux-based distribution — in most cases it is faster, more privacy-friendly, and leaves you with more freedom.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
 ```
 
-To update tabyBot later, run the same command again. Your settings and memory will be preserved during the update.
+To update tabyBot later, run the same command again. Settings and memory are kept.
 
-#### CLI commands
+#### 2. Set up in the web UI
 
-Run these from the host machine for both Docker and local installs.
+1. Open `http://localhost:8999` in a browser.
+2. The setup wizard walks you through language, LLM provider, API key, and model.
+3. When setup is done, you can start chatting.
 
-- `tabybot status` — view running status
-- `tabybot stop` — stop tabyBot
-- `tabybot restart` — restart tabyBot
-- `tabybot logs` — view logs
-- `tabybot help` — CLI help
-- `tabybot uninstall` — remove tabyBot (`--purge` also deletes user data)
-- `tabybot foreground` — debug only, not needed for normal use
+You can change language, model, thinking level, and more in settings at any time.
 
-#### 3. Configure in Telegram
-
-1. Open the bot you created in Telegram and send `/start`. The first person to send a message is approved automatically.
-2. The setup wizard will guide you through the language, LLM provider, API key, and model.
-3. Once setup is complete, you can start chatting right away.
-
-You can send `/config` at any time to change your settings.
-
-### Installation Option B: Docker Compose (not recommended)
+### Option B: Docker Compose (not recommended)
 
 ```bash
 git clone https://github.com/gpdir16/tabyBot.git
 cd tabyBot
-cp .env.example .env   # set TELEGRAM_BOT_TOKEN
+cp .env.example .env
 docker compose up -d
-# To mount a PC host folder into Docker, use the commands below (optional, default is none):
-echo 'HOST_WORKSPACE=/absolute/path/to/your/project' >> .env
-docker compose -f docker-compose.yml -f docker-compose.workspace.yml up -d
 ```
 
 ## License

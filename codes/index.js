@@ -1,13 +1,8 @@
 import { ensureUserDir } from "./lib/bootstrap.js";
 import { initTools, shutdownTools } from "./lib/agent/tool-registry.js";
-import { startTelegramBot } from "./lib/telegram.js";
-import { bootstrapBotTokenFromEnv, hasBotToken } from "./lib/readiness.js";
-
-const RETRY_MS = 10000;
-
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { startWebServer } from "./lib/web/server.js";
+import { setCronJobHandler, startCronScheduler } from "./lib/cron/scheduler.js";
+import { startUpdateScheduler } from "./lib/update/scheduler.js";
 
 async function shutdown() {
     await shutdownTools();
@@ -16,30 +11,15 @@ async function shutdown() {
 
 async function main() {
     ensureUserDir();
-    bootstrapBotTokenFromEnv();
     await initTools();
 
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
 
-    while (!hasBotToken()) {
-        console.error("");
-        console.error("tabyBot: set TELEGRAM_BOT_TOKEN in .env (or config), then restart.");
-        console.error("  All other setup is done in Telegram after the bot is running.");
-        console.error("");
-        await sleep(10000);
-    }
-
-    while (true) {
-        try {
-            await startTelegramBot();
-            return;
-        } catch (err) {
-            console.error("tabyBot: bot error:", err.message || err);
-            console.error(`Retrying in ${RETRY_MS / 1000}s…`);
-            await sleep(RETRY_MS);
-        }
-    }
+    startWebServer();
+    setCronJobHandler();
+    startCronScheduler();
+    startUpdateScheduler();
 }
 
 main().catch((err) => {

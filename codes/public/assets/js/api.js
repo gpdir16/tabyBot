@@ -1,0 +1,155 @@
+/* tabyBot 웹 클라이언트 — REST 클라이언트.
+   TABYBOT_WEB_TOKEN 설정 시 모든 요청에 Authorization: Bearer 헤더.
+   토큰은 localStorage('tabybot.web.token')에 보관. */
+(function (T) {
+    "use strict";
+
+    const TOKEN_KEY = "tabybot.web.token";
+
+    function getToken() {
+        try {
+            return localStorage.getItem(TOKEN_KEY) || "";
+        } catch (_) {
+            return "";
+        }
+    }
+    function setToken(v) {
+        try {
+            if (v) localStorage.setItem(TOKEN_KEY, v);
+            else localStorage.removeItem(TOKEN_KEY);
+        } catch (_) {}
+    }
+
+    class ApiError extends Error {
+        constructor(status, payload, network) {
+            super(network ? "network error" : "API error " + status);
+            this.status = status || 0;
+            this.payload = payload;
+            this.network = !!network;
+        }
+    }
+
+    function enc(s) {
+        return encodeURIComponent(String(s));
+    }
+
+    async function request(path, opt) {
+        const o = opt || {};
+        const headers = { Accept: "application/json" };
+        let body;
+        if (o.json !== undefined) {
+            body = JSON.stringify(o.json);
+            headers["Content-Type"] = "application/json";
+        } else if (o.raw != null) {
+            body = o.raw; // 업로드: 파일 원본 바디
+            headers["Content-Type"] = o.rawType || "application/octet-stream";
+            if (o.rawName) headers["X-File-Name"] = encodeURIComponent(o.rawName);
+        }
+        const tk = getToken();
+        if (tk) headers.Authorization = "Bearer " + tk;
+
+        let res;
+        try {
+            res = await fetch(path, { method: o.method || "GET", headers, body });
+        } catch (_) {
+            throw new ApiError(0, null, true);
+        }
+        let data = null;
+        const txt = await res.text();
+        if (txt) {
+            try {
+                data = JSON.parse(txt);
+            } catch (_) {
+                data = null;
+            }
+        }
+        if (!res.ok) throw new ApiError(res.status, data);
+        return data;
+    }
+
+    const api = {
+        ApiError,
+        getToken,
+        setToken,
+
+        bootstrap: () => request("/api/bootstrap"),
+
+        conversations: () => request("/api/conversations"),
+        createConversation: () => request("/api/conversations", { method: "POST", json: {} }),
+        conversation: (id) => request("/api/conversations/" + enc(id)),
+        renameConversation: (id, title) => request("/api/conversations/" + enc(id), { method: "PATCH", json: { title } }),
+        deleteConversation: (id) => request("/api/conversations/" + enc(id), { method: "DELETE" }),
+
+        sendMessage: (id, text, attachmentIds) => {
+            const body = { text };
+            if (Array.isArray(attachmentIds) && attachmentIds.length) body.attachmentIds = attachmentIds;
+            return request("/api/conversations/" + enc(id) + "/messages", { method: "POST", json: body });
+        },
+        stopConversation: (id) => request("/api/conversations/" + enc(id) + "/stop", { method: "POST", json: {} }),
+
+        upload: (file) =>
+            request("/api/uploads", {
+                method: "POST",
+                raw: file,
+                rawType: file.type || "application/octet-stream",
+                rawName: file.name,
+            }),
+
+        models: (payload) => request("/api/models/fetch", { method: "POST", json: payload || {} }),
+
+        getSettings: () => request("/api/settings"),
+        putSettings: (patch) => request("/api/settings", { method: "PUT", json: patch }),
+
+        agents: () => request("/api/agents"),
+        createAgent: (b) => request("/api/agents", { method: "POST", json: b }),
+        updateAgent: (id, b) => request("/api/agents/" + enc(id), { method: "PATCH", json: b }),
+        deleteAgent: (id) => request("/api/agents/" + enc(id), { method: "DELETE" }),
+
+        answerAsk: (askId, body) => request("/api/asks/" + enc(askId) + "/answer", { method: "POST", json: body }),
+
+        authStatus: () => request("/api/auth/status"),
+        startOauth: (kind) => request("/api/auth/" + enc(kind) + "/start", { method: "POST", json: {} }),
+        cancelOauth: (kind) => request("/api/auth/" + enc(kind) + "/cancel", { method: "POST", json: {} }),
+
+        pushConfig: () => request("/api/push/config"),
+        pushSubscribe: (sub) => request("/api/push/subscribe", { method: "POST", json: sub }),
+        pushUnsubscribe: (sub) => request("/api/push/unsubscribe", { method: "POST", json: sub }),
+
+        // img src / 일반 링크는 Authorization 헤더를 못 붙이므로 쿼리 토큰을 쓴다.
+        fileHref: (id) => {
+            const path = "/api/files/" + enc(id);
+            const tk = getToken();
+            return tk ? path + "?token=" + encodeURIComponent(tk) : path;
+        },
+
+        // 파일 URL에는 Authorization 헤더를 붙일 수 없으므로 blob URL로 연다.
+        fileObjectURL: async (id) => {
+            const headers = {};
+            const tk = getToken();
+            if (tk) headers.Authorization = "Bearer " + tk;
+            const res = await fetch("/api/files/" + enc(id), { headers });
+            if (!res.ok) throw new ApiError(res.status, null);
+            return URL.createObjectURL(await res.blob());
+        },
+
+        downloadFile: async (id, name) => {
+            const headers = {};
+            const tk = getToken();
+            if (tk) headers.Authorization = "Bearer " + tk;
+            const res = await fetch("/api/files/" + enc(id), { headers });
+            if (!res.ok) throw new ApiError(res.status, null);
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = name || "download";
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1500);
+        },
+    };
+
+    T.api = api;
+})((window.Taby = window.Taby || {}));

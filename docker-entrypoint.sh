@@ -4,7 +4,7 @@ cd /app
 
 # Launch a persistent headless Chromium with CDP on :9222 so the
 # browser-use 3.0 daemon (BU_CDP_URL=http://127.0.0.1:9222) can attach.
-# Only start for the default app command — skip for `approve` / one-off cmds.
+# Only start for the default app command — skip for one-off cmds.
 should_launch_chrome() {
   [ -z "$1" ] && return 0
   [ "$1" = "start" ] && return 0
@@ -66,10 +66,6 @@ PYEOF
 fi
 
 case "$1" in
-  approve)
-    shift
-    exec node codes/cli.js approve "$@"
-    ;;
   start|"")
     exec node codes/index.js
     ;;

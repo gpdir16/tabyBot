@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { USER_DIR } from "./paths.js";
 
 export const DEFAULT_AGENT_ID = "main";
@@ -31,49 +32,55 @@ function writeJson(filePath, data) {
     fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
-function normalizeThreadId(value) {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 1 ? n : null;
+function newUuid() {
+    return crypto.randomUUID();
+}
+
+function withSeed(agents) {
+    // 봇이 하나도 없을 때만 첫 봇을 만든다. 특정 id를 특권 봇으로 취급하지 않는다.
+    if (!agents.length) {
+        agents = [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME, persona: "", createdAt: new Date().toISOString() }];
+    }
+    let mutated = false;
+    for (const a of agents) {
+        if (!a.uuid) {
+            a.uuid = newUuid();
+            mutated = true;
+        }
+    }
+    return { agents, mutated };
 }
 
 export function loadAgentsStore() {
     const raw = readJson(AGENTS_PATH, { agents: [] });
-    const agents = Array.isArray(raw?.agents) ? raw.agents.filter((a) => a && typeof a.id === "string" && a.id !== DEFAULT_AGENT_ID) : [];
-    return { agents, mainThreadId: normalizeThreadId(raw?.mainThreadId) };
+    const { agents, mutated } = withSeed(Array.isArray(raw?.agents) ? raw.agents.filter((a) => a && typeof a.id === "string") : []);
+    if (mutated) writeJson(AGENTS_PATH, { agents });
+    return { agents };
 }
 
 export function saveAgentsStore(store) {
-    const payload = { agents: store.agents || [] };
-    const mainThreadId = normalizeThreadId(store.mainThreadId);
-    if (mainThreadId) payload.mainThreadId = mainThreadId;
-    writeJson(AGENTS_PATH, payload);
-}
-
-export function getMainThreadId() {
-    return loadAgentsStore().mainThreadId;
-}
-
-export function setMainThreadId(threadId) {
-    const store = loadAgentsStore();
-    store.mainThreadId = normalizeThreadId(threadId);
-    saveAgentsStore(store);
-    return store.mainThreadId;
+    writeJson(AGENTS_PATH, { agents: store.agents || [] });
 }
 
 export function listAgents() {
     return loadAgentsStore().agents;
 }
 
+export function firstAgent() {
+    return listAgents()[0] || null;
+}
+
+export function firstAgentId() {
+    return firstAgent()?.id || DEFAULT_AGENT_ID;
+}
+
 export function getAgent(id) {
-    if (!id || id === DEFAULT_AGENT_ID) return null;
+    if (!id) return null;
     return listAgents().find((a) => a.id === id) || null;
 }
 
-export function findAgentByThread(threadId) {
-    const n = Number(threadId);
-    if (!Number.isFinite(n) || n <= 1) return null;
-    if (getMainThreadId() === n) return null;
-    return listAgents().find((a) => Number(a.threadId) === n) || null;
+export function agentThreadId(id) {
+    return `web-agent-${id}`;
 }
 
 export function findAgentByNameOrId(query) {
@@ -81,7 +88,6 @@ export function findAgentByNameOrId(query) {
         .trim()
         .toLowerCase();
     if (!q) return null;
-    if (q === DEFAULT_AGENT_ID || q === DEFAULT_AGENT_NAME.toLowerCase()) return null;
     return listAgents().find((a) => a.id.toLowerCase() === q || String(a.name || "").toLowerCase() === q) || null;
 }
 
@@ -95,7 +101,6 @@ export function slugifyAgentId(name, existingIds = []) {
         .slice(0, MAX_ID);
 
     let base = ascii || "agent";
-    if (base === DEFAULT_AGENT_ID) base = "agent";
 
     const used = new Set(existingIds);
     if (!used.has(base)) return base;
@@ -122,10 +127,11 @@ export function normalizeAgentPersona(persona) {
     return { persona: trimmed };
 }
 
-export function topicIconColor(id) {
+const AVATAR_COLORS = ["#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ff9f0a", "#32d74b", "#64d2ff"];
+export function agentColor(id) {
     let hash = 0;
     for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-    return TOPIC_COLORS[hash % TOPIC_COLORS.length];
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
 export function agentHomeDir(id) {
@@ -153,7 +159,7 @@ export function canAddAgent() {
     return listAgents().length < MAX_AGENTS;
 }
 
-export function addAgent({ name, persona, threadId }) {
+export function addAgent({ name, persona }) {
     const named = normalizeAgentName(name);
     if (named.error) return named;
     const person = normalizeAgentPersona(persona);
@@ -167,9 +173,9 @@ export function addAgent({ name, persona, threadId }) {
     );
     const agent = {
         id,
+        uuid: newUuid(),
         name: named.name,
         persona: person.persona,
-        threadId: Number(threadId),
         createdAt: new Date().toISOString(),
     };
     store.agents.push(agent);
@@ -193,7 +199,7 @@ export function updateAgent(id, patch) {
         if (person.error) return person;
         current.persona = person.persona;
     }
-    if (patch.threadId !== undefined) current.threadId = Number(patch.threadId);
+    if (patch.threadId !== undefined) delete patch.threadId;
     store.agents[idx] = current;
     saveAgentsStore(store);
     return { agent: current };
@@ -211,17 +217,15 @@ export function removeAgent(id) {
     const store = loadAgentsStore();
     const idx = store.agents.findIndex((a) => a.id === id);
     if (idx < 0) return { error: "not_found" };
+    if (store.agents.length <= 1) return { error: "last_agent" };
     const [removed] = store.agents.splice(idx, 1);
     saveAgentsStore(store);
     moveDirAside(agentHomeDir(id));
     return { agent: removed };
 }
 
-export function formatPeerAgentsForPrompt(currentId = DEFAULT_AGENT_ID) {
+export function formatPeerAgentsForPrompt(currentId) {
     const lines = [];
-    if (currentId !== DEFAULT_AGENT_ID) {
-        lines.push(`- **${DEFAULT_AGENT_NAME}** (\`${DEFAULT_AGENT_ID}\`) — default assistant`);
-    }
     for (const a of listAgents().filter((agent) => agent.id !== currentId)) {
         const role = a.persona ? ` — ${a.persona}` : "";
         lines.push(`- **${a.name}** (\`${a.id}\`)${role}`);

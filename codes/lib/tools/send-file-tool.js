@@ -1,13 +1,13 @@
-import { sendTelegramFile } from "../telegram-send.js";
+import fs from "node:fs";
+import { registerProducedFile } from "../web/files.js";
 import { resolveAgentPath } from "../paths.js";
 import { sendFileDescription } from "../path-labels.js";
-import { telegramThreadOpts } from "../agent-route.js";
 
 export const sendFileToolDefinitions = [
     {
         type: "function",
         function: {
-            name: "telegram_send_file",
+            name: "send_file",
             description: sendFileDescription(),
             parameters: {
                 type: "object",
@@ -21,16 +21,24 @@ export const sendFileToolDefinitions = [
     },
 ];
 
-export async function executeSendFileTool(_name, args, ctx) {
+export async function executeSendFileTool(_name, args, _ctx) {
     const raw = args?.path?.trim();
     if (!raw) return { error: "path is required" };
-    if (!ctx?.bot || !ctx?.chatId) {
-        return { error: "No active Telegram chat — file send only works during a user message turn" };
-    }
     const filePath = resolveAgentPath(raw);
     if (!filePath) return { error: "path is required" };
-    return sendTelegramFile(ctx.bot, ctx.chatId, filePath, {
-        caption: args?.caption,
-        ...telegramThreadOpts(ctx.threadId),
-    });
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        return { error: `file not found: ${filePath}` };
+    }
+    try {
+        const entry = registerProducedFile(filePath, args?.caption);
+        return {
+            ok: true,
+            name: entry.name,
+            size: entry.size,
+            url: `/api/files/${entry.id}`,
+            note: "File is delivered to the web client as a downloadable attachment. Do not paste the URL as text — the client renders it automatically.",
+        };
+    } catch (err) {
+        return { error: err?.message || String(err) };
+    }
 }

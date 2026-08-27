@@ -7,6 +7,7 @@ import { extractTurnMessages } from "./chat-history.js";
 import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
 import { countMessagesTokens } from "./context.js";
+import { firstAgentId } from "../agents-store.js";
 function parseToolArgs(raw) {
     try {
         return JSON.parse(raw || "{}");
@@ -36,11 +37,6 @@ function buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallC
     };
 }
 
-function toolSignature(name, args) {
-    return `${name}:${JSON.stringify(args)}`;
-}
-
-const FORCE_REPLY_HINT = "You have enough tool output. Stop calling tools. Reply to the user in plain text now using results you already have.";
 const EMPTY_REPLY_HINT =
     "Your previous assistant reply was empty. Reply to the user in plain text now. Summarize what you accomplished and answer their request.";
 
@@ -82,9 +78,9 @@ function buildToolImageObservation(result, { visionEnabled = false } = {}) {
     };
 }
 
-function pushSkippedToolResults(messages, toolCalls, startIndex = 0) {
+function pushSkippedToolResults(messages, toolCalls, startIndex = 0, result = { ok: false, aborted: true, error: "Stopped by user." }) {
     for (let i = startIndex; i < toolCalls.length; i += 1) {
-        pushToolResult(messages, toolCalls[i].id, { ok: false, aborted: true, error: "Stopped by user." });
+        pushToolResult(messages, toolCalls[i].id, result);
     }
 }
 
@@ -184,12 +180,10 @@ async function runAgentTurn(
     {
         chatId,
         sessionKey = null,
-        threadId = null,
         agentId = null,
-        bot,
         onTextDelta,
         onStatusPhase,
-        visionAttachment = null,
+        attachments = [],
         session = null,
         history = null,
         persistHistory = true,
@@ -202,16 +196,15 @@ async function runAgentTurn(
     const setStatus = (phase, detail = null) => onStatusPhase?.(phase, detail);
     const maxRounds = agentConfig.maxToolRoundsPerTurn ?? agentConfig.maxToolRounds ?? 16;
     const maxToolCalls = agentConfig.maxToolCallsPerTurn ?? 20;
-    const maxSameToolRepeat = agentConfig.maxSameToolRepeat ?? 2;
     const maxEmptyReplyRetries = agentConfig.maxEmptyReplyRetries ?? 8;
     const modelCallCountRef = { value: 0 };
     const resolvedSessionKey = sessionKey || chatId;
-    const resolvedAgentId = agentId || "main";
+    const resolvedAgentId = agentId || firstAgentId();
 
     const runtimeInfo = {
         model: llm.provider.model,
         sessionKey: resolvedSessionKey,
-        channel: "telegram",
+        channel: "web",
         agentId: resolvedAgentId,
     };
 
@@ -219,7 +212,7 @@ async function runAgentTurn(
     const contextResult = await ensureWithinContextLimit(llm, userMessage, llm.modelMeta, {
         chatId: persistHistory === false ? null : resolvedSessionKey,
         onStatusPhase: setStatus,
-        visionAttachment,
+        attachments,
         session,
         runtimeInfo,
         history: persistHistory === false ? (history ?? []) : history,
@@ -233,9 +226,7 @@ async function runAgentTurn(
     const contextBaseLength = messages.length - 1; // user message is last in messages; -1 keeps it in extractTurnMessages
 
     let toolCallCount = 0;
-    const toolSigCounts = new Map();
     const fileSnapshots = new Map();
-    let forceReplyNext = false;
     const visionSupport = Boolean(llm.modelMeta?.supportsVision);
 
     const partialTextRef = { value: null };
@@ -248,8 +239,8 @@ async function runAgentTurn(
             });
         }
 
-        const toolsEnabled = !forceReplyNext;
-        const useStream = Boolean(onTextDelta) && !toolsEnabled;
+        const toolsEnabled = toolCallCount < maxToolCalls;
+        const useStream = Boolean(onTextDelta);
 
         setStatus("thinking");
 
@@ -289,8 +280,6 @@ async function runAgentTurn(
             });
         }
 
-        forceReplyNext = false;
-
         const raw = response.choices?.[0]?.message;
         if (!raw) throw new Error("Empty LLM response");
 
@@ -300,7 +289,6 @@ async function runAgentTurn(
             if (choice.content?.trim()) {
                 messages.push(choice);
                 if (injectPendingUserMessages(messages, session)) {
-                    forceReplyNext = false;
                     continue;
                 }
                 if (isSilentReply(choice.content)) {
@@ -337,7 +325,6 @@ async function runAgentTurn(
             }
             if (recovered) {
                 if (injectPendingUserMessages(messages, session)) {
-                    forceReplyNext = false;
                     continue;
                 }
                 return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
@@ -356,9 +343,9 @@ async function runAgentTurn(
         messages.push(choice);
 
         if (toolCallCount >= maxToolCalls) {
-            pushSkippedToolResults(messages, toolCalls, 0);
-            messages.push({ role: "user", content: FORCE_REPLY_HINT });
-            forceReplyNext = true;
+            pushSkippedToolResults(messages, toolCalls, 0, {
+                error: "Tool call budget exceeded for this turn.",
+            });
             continue;
         }
 
@@ -367,7 +354,9 @@ async function runAgentTurn(
         for (let toolIndex = 0; toolIndex < toolCalls.length; toolIndex += 1) {
             const tc = toolCalls[toolIndex];
             if (toolCallCount >= maxToolCalls) {
-                pushSkippedToolResults(messages, toolCalls, toolIndex);
+                pushSkippedToolResults(messages, toolCalls, toolIndex, {
+                    error: "Tool call budget exceeded for this turn.",
+                });
                 break;
             }
 
@@ -382,30 +371,13 @@ async function runAgentTurn(
             setStatus("tools", tc.function.name);
 
             const args = parseToolArgs(tc.function.arguments);
-            const sig = toolSignature(tc.function.name, args);
-            const seen = (toolSigCounts.get(sig) || 0) + 1;
-            toolSigCounts.set(sig, seen);
             toolCallCount += 1;
-
-            if (seen > maxSameToolRepeat) {
-                messages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: toolResultContent({
-                        error: "Duplicate tool call skipped. Use the previous result and answer the user without calling this again.",
-                    }),
-                });
-                forceReplyNext = true;
-                continue;
-            }
 
             const result = await executeTool(tc.function.name, args, {
                 chatId,
                 sessionKey: resolvedSessionKey,
-                threadId,
                 agentId: resolvedAgentId,
                 consultDepth,
-                bot,
                 messages,
                 model: llm.provider.model,
                 modelMeta: llm.modelMeta,
@@ -429,14 +401,7 @@ async function runAgentTurn(
         if (toolImageObservations.length) {
             messages.push(...toolImageObservations);
         }
-
-        if (forceReplyNext || toolCallCount >= maxToolCalls) {
-            messages.push({ role: "user", content: FORCE_REPLY_HINT });
-            forceReplyNext = true;
-        }
     }
-
-    messages.push({ role: "user", content: FORCE_REPLY_HINT });
 
     if (shouldStop(session)) {
         return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {

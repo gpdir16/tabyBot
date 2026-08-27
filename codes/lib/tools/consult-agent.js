@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT_ID, findAgentByNameOrId, getAgent } from "../agents-store.js";
+import { findAgentByNameOrId, firstAgentId, getAgent } from "../agents-store.js";
 
 export const consultAgentToolDefinitions = [
     {
@@ -35,13 +35,9 @@ export async function executeConsultAgent(_name, args, ctx = {}) {
     if (!query) return { error: "agent is required" };
     if (!task) return { error: "task is required" };
 
-    const lowered = query.toLowerCase();
-    const target =
-        lowered === DEFAULT_AGENT_ID || lowered === "tabybot"
-            ? { id: DEFAULT_AGENT_ID, name: "tabyBot", persona: "" }
-            : getAgent(query) || findAgentByNameOrId(query);
+    const target = getAgent(query) || findAgentByNameOrId(query);
     if (!target) return { error: `unknown agent: ${query}` };
-    if (target.id === (ctx.agentId || DEFAULT_AGENT_ID)) {
+    if (target.id === (ctx.agentId || firstAgentId())) {
         return { error: "cannot consult yourself" };
     }
 
@@ -58,9 +54,7 @@ export async function executeConsultAgent(_name, args, ctx = {}) {
     const result = await runAgent(prompt, {
         chatId: ctx.chatId,
         sessionKey: `${ctx.sessionKey || ctx.chatId}:consult:${target.id}`,
-        threadId: ctx.threadId,
         agentId: target.id,
-        bot: ctx.bot,
         persistHistory: false,
         history: [],
         consultDepth: 1,

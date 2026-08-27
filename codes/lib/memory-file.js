@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { TEMPLATES_USER_DIR, USER_DIR } from "./paths.js";
-import { DEFAULT_AGENT_ID, agentMemoryDir, agentMemoryPath, ensureAgentMemory } from "./agents-store.js";
+import { agentMemoryDir, agentMemoryPath, ensureAgentMemory } from "./agents-store.js";
 
 const MEMORY_PATH = path.join(USER_DIR, "memory.md");
 const MEMORY_DIR = path.join(USER_DIR, "memory");
@@ -52,13 +52,13 @@ export function formatMemoryFilesListForPrompt() {
 }
 
 export function readAgentMemoryFile(agentId) {
-    if (!agentId || agentId === DEFAULT_AGENT_ID) return "";
+    if (!agentId) return "";
     const file = ensureAgentMemory(agentId);
     return fs.readFileSync(file, "utf8");
 }
 
 export function formatAgentMemoryFilesListForPrompt(agentId) {
-    if (!agentId || agentId === DEFAULT_AGENT_ID) return "";
+    if (!agentId) return "";
     const dir = agentMemoryDir(agentId);
     if (!fs.existsSync(dir)) return "- (none yet — create files under this agent's memory/ folder)";
     const items = fs
@@ -75,6 +75,6 @@ export function formatAgentMemoryFilesListForPrompt(agentId) {
 }
 
 export function agentMemoryFilePath(agentId) {
-    if (!agentId || agentId === DEFAULT_AGENT_ID) return "";
+    if (!agentId) return "";
     return agentMemoryPath(agentId);
 }

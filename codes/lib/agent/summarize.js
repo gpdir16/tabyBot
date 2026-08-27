@@ -229,7 +229,7 @@ async function applyIntelligentCompression(
     fullHistory,
     model,
     modelMeta,
-    visionAttachment = null,
+    attachments = [],
     { signal, runtimeInfo = {}, chatId = null } = {},
 ) {
     const recentBudget = getKeepRecentTokenBudget(modelMeta);
@@ -253,7 +253,7 @@ async function applyIntelligentCompression(
 
     const rebuilt = buildWithHistory(latestUser, recentHistory, {
         modelMeta,
-        visionAttachment,
+        attachments,
         runtimeInfo,
     });
     return repairToolPairIntegrity(rebuilt);
@@ -263,14 +263,14 @@ export async function ensureWithinContextLimit(
     llm,
     userMessage,
     modelMeta,
-    { chatId, onStatusPhase, visionAttachment = null, session = null, runtimeInfo = {}, history = null } = {},
+    { chatId, onStatusPhase, attachments = [], session = null, runtimeInfo = {}, history = null } = {},
 ) {
     const fullHistory = history ?? (chatId ? loadChatHistory(chatId) : []);
     const model = llm.provider.model;
     const trigger = getCompressTriggerTokens(modelMeta);
     const hardLimit = getContextLimit(modelMeta);
 
-    const buildOpts = { visionAttachment, modelMeta, runtimeInfo };
+    const buildOpts = { attachments, modelMeta, runtimeInfo };
     let messages = buildWithHistory(userMessage, fullHistory, buildOpts);
     let tokens = tokenCount(messages, model);
 
@@ -295,7 +295,7 @@ export async function ensureWithinContextLimit(
             return { messages, didCompress: false };
         }
         onStatusPhase?.("compressing");
-        compressed = await applyIntelligentCompression(llm, userMessage, fullHistory, model, modelMeta, visionAttachment, {
+        compressed = await applyIntelligentCompression(llm, userMessage, fullHistory, model, modelMeta, attachments, {
             signal: session?.signal,
             runtimeInfo,
             chatId,

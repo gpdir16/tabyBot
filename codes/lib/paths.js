@@ -23,7 +23,6 @@ function resolvePathEnv(envKey, derived) {
 export const CODES_DIR = resolvePathEnv("CODES_DIR", DERIVED_CODES_DIR);
 export const APP_ROOT = resolvePathEnv("APP_ROOT", DERIVED_APP_ROOT);
 export const USER_DIR = resolvePathEnv("USER_DIR", path.join(DERIVED_APP_ROOT, "user"));
-export const DOWNLOAD_DIR = path.join(USER_DIR, "download");
 export const CONFIG_DIR = resolvePathEnv("CONFIG_DIR", path.join(DERIVED_CODES_DIR, "config"));
 export const SKILLS_SYSTEM_DIR = path.join(CODES_DIR, "skills");
 export const TEMPLATES_USER_DIR = path.join(CODES_DIR, "templates", "user");

@@ -12,13 +12,8 @@ bootstrap_tty_installer() {
     if [ -t 0 ]; then
         return 0
     fi
-    # Piped install with token already set — no interactive stdin needed
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${1:-}" ]; then
-        return 0
-    fi
     if [ ! -r /dev/tty ] 2>/dev/null; then
         echo "Error: This installer needs an interactive terminal." >&2
-        echo "  TELEGRAM_BOT_TOKEN='your-token' curl -fsSL ${INSTALLER_URL_DEFAULT} | bash" >&2
         exit 1
     fi
     local url="${TABYBOT_INSTALLER_URL:-${INSTALLER_URL_DEFAULT}}"
@@ -80,8 +75,6 @@ Install or update tabyBot.
   curl -fsSL ${INSTALLER_URL_DEFAULT} | bash
 
 Optional:
-  TELEGRAM_BOT_TOKEN='...' curl -fsSL ... | bash
-  curl -fsSL ... | bash -s -- '1234567890:ABC...'
   TABYBOT_MODE=docker|local  (default: docker, or prompt on first install; set explicitly to switch on update)
 Language: TABYBOT_LANG=ko|en  (default: en, or ko if LANG is Korean)
 EOF
@@ -123,18 +116,6 @@ read_user_line() {
         return 1
     fi
     printf -v "${__var_name}" '%s' "${line}"
-}
-
-die_need_token() {
-    if is_ko; then
-        die "봇 토큰이 필요합니다. 예:
-  curl -fsSL ... | bash -s -- 'BotFather토큰'
-  TELEGRAM_BOT_TOKEN='BotFather토큰' curl -fsSL ... | bash"
-    else
-        die "Bot token required. Examples:
-  curl -fsSL ... | bash -s -- 'your-bot-token'
-  TELEGRAM_BOT_TOKEN='your-bot-token' curl -fsSL ... | bash"
-    fi
 }
 
 prompt_yes_no() {
@@ -469,10 +450,6 @@ verify_install() {
     return 1
 }
 
-trim_token() {
-    printf '%s' "$1" | tr -d '[:space:]'
-}
-
 trim_path() {
     local p="$1"
     p="${p#"${p%%[![:space:]]*}"}"
@@ -623,7 +600,7 @@ resolve_host_workspace() {
         return 0
     fi
 
-    # Non-interactive first install (piped curl | bash with token only).
+    # Non-interactive first install.
     if [ -n "${HOST_WORKSPACE:-}" ]; then
         validate_host_workspace_path "$(expand_user_path "${HOST_WORKSPACE}")"
         HOST_WORKSPACE="$(expand_user_path "${HOST_WORKSPACE}")"
@@ -631,36 +608,6 @@ resolve_host_workspace() {
     fi
 }
 
-validate_token() {
-    local token="$1"
-    [ -n "${token}" ] || die_need_token
-    case "${token}" in
-        *:*) ;;
-        *)
-            if is_ko; then die "BotFather 토큰 전체(숫자:영문)를 붙여넣으세요."
-            else die "Paste the full BotFather token (digits:letters)."; fi
-            ;;
-    esac
-}
-
-prompt_token() {
-    local token prompt_line
-    say_user ""
-    if is_ko; then
-        say_user "① Telegram @BotFather → /newbot"
-        say_user "② HTTP API 토큰 전체 복사 (예: 1234567890:ABCdef...)"
-        prompt_line="토큰 붙여넣기: "
-    else
-        say_user "1) Telegram @BotFather → /newbot"
-        say_user "2) Copy the full HTTP API token (e.g. 1234567890:ABCdef...)"
-        prompt_line="Paste token: "
-    fi
-    read_user_line token "${prompt_line}" || die_need_token
-    token="$(trim_token "${token}")"
-    [ -n "${token}" ] || die_need_token
-    validate_token "${token}"
-    printf '%s' "${token}"
-}
 
 write_compose() {
     local image="$1"
@@ -680,13 +627,15 @@ services:
         env_file:
             - .env
         environment:
-            TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN:-}
+            TABYBOT_WEB_TOKEN: \${TABYBOT_WEB_TOKEN:-}
             TABYBOT_MODE: docker
             TABYBOT_HOME: "${install_dir_escaped}"
             TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
 ${workspace_env}        volumes:
             - tabybot-user:/app/user
 ${workspace_volumes}        restart: unless-stopped
+        ports:
+            - "\${TABYBOT_PORT:-8999}:8999"
 
 volumes:
     tabybot-user:
@@ -717,10 +666,23 @@ write_local_version() {
 }
 
 write_env() {
-    local token="$1" mode="${2:-docker}"
+    local mode="${1:-docker}"
     local workspace="${HOST_WORKSPACE:-}"
     local version=""
+    local existing_web_token="" existing_port=""
     umask 077
+    if [ -f "${ENV_FILE}" ]; then
+        existing_web_token="$(grep '^TABYBOT_WEB_TOKEN=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        existing_web_token="$(strip_env_scalar "${existing_web_token}")"
+        existing_port="$(grep '^TABYBOT_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        existing_port="$(strip_env_scalar "${existing_port}")"
+    fi
+    if [ -n "${TABYBOT_WEB_TOKEN:-}" ]; then
+        existing_web_token="${TABYBOT_WEB_TOKEN}"
+    fi
+    if [ -n "${TABYBOT_PORT:-}" ]; then
+        existing_port="${TABYBOT_PORT}"
+    fi
     if [ "${mode}" = local ] && [ -f "${APP_DIR}/VERSION" ]; then
         version="$(tr -d '\n' <"${APP_DIR}/VERSION")"
     elif [ "${mode}" = local ] && [ -f "${ENV_FILE}" ]; then
@@ -729,7 +691,6 @@ write_env() {
     fi
     {
         printf 'TABYBOT_MODE=%s\n' "${mode}"
-        printf 'TELEGRAM_BOT_TOKEN=%s\n' "${token}"
         if [ "${mode}" = docker ]; then
             write_env_quoted TABYBOT_DOCKER_SHELL "${DOCKER_SHELL}"
             write_env_quoted TABYBOT_HOME "${INSTALL_DIR}"
@@ -752,15 +713,14 @@ write_env() {
                 write_env_quoted WORKSPACE_DIR "${workspace}"
             fi
         fi
+        if [ -n "${existing_web_token}" ]; then
+            write_env_quoted TABYBOT_WEB_TOKEN "${existing_web_token}"
+        fi
+        if [ -n "${existing_port}" ]; then
+            printf 'TABYBOT_PORT=%s\n' "${existing_port}"
+        fi
     } >"${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
-}
-
-read_env_token() {
-    [ -f "${ENV_FILE}" ] || return 0
-    # shellcheck disable=SC1090
-    . "${ENV_FILE}"
-    printf '%s' "${TELEGRAM_BOT_TOKEN:-}"
 }
 
 read_env_host_workspace() {
@@ -1051,7 +1011,6 @@ tabyBot 명령줄 도구
   restart            재시작
   status             실행 상태 확인
   logs               로그 보기 (실시간)
-  approve <코드>     접근 코드 승인
   foreground         포그라운드 실행 (디버그)
   uninstall          tabyBot 제거
   help               이 도움말
@@ -1073,7 +1032,6 @@ Commands:
   restart            Restart the agent
   status             Show running status
   logs               Tail logs (follow)
-  approve <code>     Approve an access code
   foreground         Run in foreground (debug)
   uninstall          Remove tabyBot from this machine
   help               Show this help
@@ -1180,10 +1138,6 @@ run_local_command() {
         daemon|foreground|run)
             require_node
             exec "${NODE_BIN}" "${INDEX_JS}"
-            ;;
-        approve)
-            require_node
-            exec "${NODE_BIN}" "${APP_ROOT}/codes/cli.js" approve "$@"
             ;;
         start)
             local_service_start
@@ -1360,10 +1314,6 @@ run_docker_command() {
             docker_daemon_ok || exit 1
             ${compose} -f "${COMPOSE_FILE}" logs -f --tail=80 tabybot
             ;;
-        approve)
-            docker_daemon_ok || exit 1
-            exec ${compose} -f "${COMPOSE_FILE}" exec -T tabybot approve "$@"
-            ;;
         foreground|run)
             docker_daemon_ok || exit 1
             exec ${compose} -f "${COMPOSE_FILE}" up
@@ -1504,7 +1454,7 @@ install_systemd_user_service() {
     mkdir -p "${unit_dir}" "${INSTALL_DIR}/logs"
     cat >"${unit_file}" <<EOF
 [Unit]
-Description=tabyBot Telegram bot
+Description=tabyBot agent
 After=network-online.target
 
 [Service]
@@ -1541,7 +1491,7 @@ print_local_service_hints() {
 }
 
 install_local() {
-    local token="$1" updating="$2"
+    local updating="$1"
 
     ensure_node
     mkdir -p "${INSTALL_DIR}" "${USER_DATA_DIR}"
@@ -1553,7 +1503,7 @@ install_local() {
     install_local_deps
     write_tabybot_cli
     install_tabybot_cli
-    write_env "${token}" local
+    write_env local
     if is_ko; then echo "==> 실행 중..."; else echo "==> Starting..."; fi
     install_local_service
     ensure_systemd_linger
@@ -1562,7 +1512,7 @@ install_local() {
 }
 
 deploy_tabybot_docker() {
-    local token="$1" image="$2" updating="$3" compose
+    local image="$1" updating="$2" compose
 
     stop_local_runtime
     ensure_docker
@@ -1571,7 +1521,7 @@ deploy_tabybot_docker() {
     write_compose "${image}"
     write_tabybot_cli
     install_tabybot_cli
-    write_env "${token}" docker
+    write_env docker
     cd "${INSTALL_DIR}"
     pull_image "${compose}" "${image}"
     if is_ko; then echo "==> 실행 중..."; else echo "==> Starting..."; fi
@@ -1582,31 +1532,20 @@ deploy_tabybot_docker() {
 
 main() {
     resolve_lang
-    local token="${TELEGRAM_BOT_TOKEN:-}" image="${TABYBOT_IMAGE:-${IMAGE_DEFAULT}}"
+    local image="${TABYBOT_IMAGE:-${IMAGE_DEFAULT}}"
 
     if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
         usage
         exit 0
     fi
 
-    if [ -n "${1:-}" ]; then
-        token="$(trim_token "$1")"
-    fi
-
     local updating=false
     if is_installed; then
         updating=true
         if is_ko; then echo "==> tabyBot 업데이트 중..."; else echo "==> Updating tabyBot..."; fi
-        [ -n "${token}" ] || token="$(read_env_token)"
-        [ -n "${token}" ] || die_need_token
     else
         if is_ko; then echo "==> tabyBot 설치 중..."; else echo "==> Installing tabyBot..."; fi
-        if [ -z "${token}" ]; then
-            token="$(prompt_token)"
-        fi
     fi
-
-    validate_token "${token}"
 
     local mode old_mode=""
     mode="$(resolve_install_mode "${updating}")"
@@ -1619,9 +1558,9 @@ main() {
     fi
 
     if [ "${mode}" = local ]; then
-        install_local "${token}" "${updating}"
+        install_local "${updating}"
     else
-        deploy_tabybot_docker "${token}" "${image}" "${updating}"
+        deploy_tabybot_docker "${image}" "${updating}"
     fi
 
     echo ""
@@ -1629,9 +1568,9 @@ main() {
         if is_ko; then echo "완료. tabyBot 실행 중 (${mode})."; else echo "Done. tabyBot is running (${mode})."; fi
     else
         if is_ko; then
-            echo "설치 완료 (${mode}). Telegram에서 봇에게 /start 를 보내세요."
+            echo "설치 완료 (${mode}). 브라우저에서 http://localhost:8999 를 여세요."
         else
-            echo "Install complete (${mode}). Open your bot in Telegram and send /start."
+            echo "Install complete (${mode}). Open http://localhost:8999 in your browser."
         fi
     fi
 }

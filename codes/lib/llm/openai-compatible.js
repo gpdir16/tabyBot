@@ -77,7 +77,7 @@ export async function chatCompletions({
         params.tool_choice = tool_choice ?? "auto";
     }
 
-    const useStream = Boolean(stream && onTextDelta && !includeTools);
+    const useStream = Boolean(stream && onTextDelta);
 
     if (signal?.aborted) {
         const err = new Error("Stopped by user.");
@@ -97,12 +97,12 @@ export async function chatCompletions({
         );
         return completionPayload(completion);
     };
-
     if (useStream) {
         let lastErr = null;
         for (let attempt = 0; attempt < 2; attempt += 1) {
             let content = "";
             let usage = null;
+            const toolAcc = new Map();
             try {
                 const streamResp = await client.chat.completions.create(
                     {
@@ -113,21 +113,43 @@ export async function chatCompletions({
                     requestOptions,
                 );
 
+                let finishReason = null;
                 for await (const chunk of streamResp) {
                     if (signal?.aborted) {
                         const err = new Error("Stopped by user.");
                         err.name = "AbortError";
+                        err.partialText = content;
                         throw err;
                     }
                     if (chunk.usage) usage = chunk.usage;
-                    const delta = chunk.choices?.[0]?.delta?.content;
+                    const choice = chunk.choices?.[0];
+                    if (!choice) continue;
+                    if (choice.finish_reason) finishReason = choice.finish_reason;
+                    const delta = choice.delta;
                     if (!delta) continue;
-                    content += delta;
-                    onTextDelta(delta, content);
+                    if (delta.content) {
+                        content += delta.content;
+                        onTextDelta(delta.content, content);
+                    }
+                    if (Array.isArray(delta.tool_calls)) {
+                        for (const tc of delta.tool_calls) {
+                            const idx = Number.isInteger(tc.index) ? tc.index : 0;
+                            const acc = toolAcc.get(idx) || { id: "", type: "function", function: { name: "", arguments: "" } };
+                            if (tc.id) acc.id = tc.id;
+                            if (tc.type) acc.type = tc.type;
+                            if (tc.function?.name) acc.function.name += tc.function.name;
+                            if (tc.function?.arguments) acc.function.arguments += tc.function.arguments;
+                            toolAcc.set(idx, acc);
+                        }
+                    }
                 }
 
+                const message = { role: "assistant", content: content || "" };
+                if (toolAcc.size) {
+                    message.tool_calls = [...toolAcc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+                }
                 return {
-                    choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }],
+                    choices: [{ message, finish_reason: finishReason || "stop" }],
                     usage,
                 };
             } catch (err) {

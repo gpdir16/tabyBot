@@ -95,7 +95,7 @@ export function buildApprovalPolicyText(level) {
     if (lvl === "user") {
         return [
             '- Before ANY permanent or hard-to-undo action — sending email/messages to third parties, payments or purchases, deleting an account or remote data — you MUST call `user_ask` with a clear question and short options (e.g. ["승인", "취소"]) and wait for the answer. Never skip the question, whatever the task.',
-            "- Local reversible work (files, browser, terminal, `telegram_send_file`) stays autonomous — do not ask for it.",
+            "- Local reversible work (files, browser, terminal, `send_file`) stays autonomous — do not ask for it.",
         ].join("\n");
     }
     if (lvl === "always") {
@@ -108,7 +108,7 @@ export function buildApprovalPolicyText(level) {
     return [
         "- If the user explicitly asked you to carry out the action, do it — do NOT call `user_ask` to re-confirm what they already requested.",
         "- If an action is your OWN initiative (the user did not ask for it; you only think it would be good) and it is permanent or has external side effects — email/messages to third parties, payments or purchases, deleting an account or remote data — call `user_ask`, wait for the answer, then proceed.",
-        "- Local reversible work (files, browser, terminal, `telegram_send_file`) stays autonomous — do not ask for it.",
+        "- Local reversible work (files, browser, terminal, `send_file`) stays autonomous — do not ask for it.",
     ].join("\n");
 }
 

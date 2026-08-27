@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
 import { formatAllowedPaths, isAllowedFilePath, resolveAgentPath } from "../paths.js";
 import { filePathParamDescription, filePatchDescription, fileReadDescription } from "../path-labels.js";
@@ -67,24 +66,31 @@ function truncateToTokenBudget(text, maxTokens, model) {
     };
 }
 
+const nullableInteger = (description) => ({
+    description,
+    anyOf: [{ type: "integer" }, { type: "null" }],
+});
+
 export const fileToolDefinitions = [
     {
         type: "function",
         function: {
             name: "file_read",
             description: fileReadDescription(),
+            strict: true,
             parameters: {
                 type: "object",
+                additionalProperties: false,
                 properties: {
                     path: {
                         type: "string",
                         description: filePathParamDescription(),
                     },
-                    startLine: { type: "integer", description: "First line to read (1-based, default 1)" },
-                    endLine: { type: "integer", description: "Last line to read (1-based, inclusive)" },
-                    limit: { type: "integer", description: "Number of lines from startLine (alternative to endLine)" },
+                    startLine: nullableInteger("First line to read (1-based). Null if unused."),
+                    endLine: nullableInteger("Last line to read (1-based, inclusive). Null if unused."),
+                    limit: nullableInteger("Number of lines from startLine. Null if unused."),
                 },
-                required: ["path"],
+                required: ["path", "startLine", "endLine", "limit"],
             },
         },
     },
@@ -93,8 +99,10 @@ export const fileToolDefinitions = [
         function: {
             name: "file_patch",
             description: filePatchDescription(),
+            strict: true,
             parameters: {
                 type: "object",
+                additionalProperties: false,
                 properties: {
                     path: {
                         type: "string",
@@ -152,6 +160,17 @@ export async function executeFileRead(args, ctx) {
             content: `[Already read in this turn — content suppressed to save context. Re-read with a different startLine/endLine if you need it again, or use the previous result.]`,
             deduped: true,
         };
+    }
+
+    const head = Buffer.alloc(Math.min(8000, stat.size));
+    const fd = fs.openSync(resolved, "r");
+    try {
+        fs.readSync(fd, head, 0, head.length, 0);
+    } finally {
+        fs.closeSync(fd);
+    }
+    if (head.includes(0)) {
+        return { error: "not a text file", path: resolved };
     }
 
     const content = fs.readFileSync(resolved, "utf8");

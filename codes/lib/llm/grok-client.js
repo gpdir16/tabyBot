@@ -1,5 +1,6 @@
 import { sanitizeMessagesForApi } from "./sanitize-messages.js";
 import { loadGrokTokens, ensureFreshToken } from "./grok-tokens.js";
+import { consumeResponsesStream } from "./responses-stream.js";
 
 // OAuth 세션은 개발자 API(api.x.ai)가 아니라 CLI 프록시를 사용
 const BASE_URL = "https://cli-chat-proxy.grok.com/v1";
@@ -204,7 +205,7 @@ export async function grokComplete({
             let content = "";
             try {
                 const res = await fetchGrokResponses(headers, { ...payload, stream: true }, requestOptions);
-                const result = await consumeStream(res, signal, onTextDelta);
+                const result = await consumeResponsesStream(res, signal, onTextDelta);
                 content = result.content;
                 return buildStreamResult(content, result.toolCalls, result.usage);
             } catch (err) {
@@ -254,84 +255,9 @@ async function fetchGrokResponses(headers, body, requestOptions, { allowRefresh 
     throw new Error(`Grok API error: ${res.status} ${errBody}`);
 }
 
-async function consumeStream(res, signal, onTextDelta) {
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let content = "";
-    let usage = null;
-    const toolCalls = [];
-    const argBuffers = {};
-
-    for (;;) {
-        if (signal?.aborted) {
-            const err = new Error("Stopped by user.");
-            err.name = "AbortError";
-            throw err;
-        }
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const data = trimmed.slice(6);
-            if (data === "[DONE]") continue;
-            try {
-                const evt = JSON.parse(data);
-                if (evt.type === "response.output_text.delta" && evt.delta) {
-                    content += evt.delta;
-                    if (onTextDelta) onTextDelta(evt.delta, content);
-                } else if (evt.type === "response.output_item.added" && evt.item?.type === "function_call") {
-                    const tc = {
-                        id: evt.item.call_id,
-                        type: "function",
-                        function: { name: evt.item.name, arguments: evt.item.arguments || "{}" },
-                    };
-                    toolCalls.push(tc);
-                    argBuffers[evt.item.id] = "";
-                } else if (evt.type === "response.function_call_arguments.delta") {
-                    if (evt.item_id && argBuffers[evt.item_id] !== undefined) {
-                        argBuffers[evt.item_id] += evt.delta;
-                    }
-                } else if (evt.type === "response.function_call_arguments.done") {
-                    const finalArgs = evt.item?.arguments || argBuffers[evt.item_id] || "{}";
-                    const tc = toolCalls.find((t) => t.id === evt.item?.call_id);
-                    if (tc) tc.function.arguments = finalArgs;
-                } else if (evt.type === "response.completed" || evt.type === "response.done") {
-                    if (evt.response?.usage || evt.usage) usage = evt.response?.usage || evt.usage;
-                    const outputItems = evt.response?.output || evt.output || [];
-                    for (const item of outputItems) {
-                        if (item.type === "function_call") {
-                            const tc = toolCalls.find((t) => t.id === item.call_id);
-                            if (tc) {
-                                tc.function.arguments = item.arguments || tc.function.arguments;
-                            } else {
-                                toolCalls.push({
-                                    id: item.call_id,
-                                    type: "function",
-                                    function: { name: item.name, arguments: item.arguments || "{}" },
-                                });
-                            }
-                        }
-                    }
-                }
-            } catch {
-                // skip unparseable
-            }
-        }
-    }
-
-    return { content, usage, toolCalls };
-}
-
 async function grokCompleteCollected({ headers, payload, signal }) {
     const res = await fetchGrokResponses(headers, { ...payload, stream: true }, { method: "POST", headers, signal });
-    const { content, usage, toolCalls } = await consumeStream(res, signal, null);
+    const { content, usage, toolCalls } = await consumeResponsesStream(res, signal, null);
     return buildStreamResult(content, toolCalls, usage);
 }
 

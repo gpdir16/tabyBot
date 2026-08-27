@@ -165,6 +165,44 @@ export function isInternalStoredMessage(message) {
     return message?.role === "user" && INTERNAL_USER_HINTS.has(message.content);
 }
 
+export function stripMarkdownForPreview(text) {
+    let s = String(text || "");
+    if (!s) return "";
+    s = s.replace(/```[\s\S]*?```/g, " ");
+    s = s.replace(/`([^`]+)`/g, "$1");
+    s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
+    s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+    s = s.replace(/(\*\*|__)([^*_\n]+)\1/g, "$2");
+    s = s.replace(/([*_])([^*_\n]+)\1/g, "$2");
+    s = s.replace(/~~(.*?)~~/g, "$1");
+    s = s.replace(/(^|\s)#{1,6}\s+/g, "$1");
+    s = s.replace(/(^|\s)>\s+/g, "$1");
+    s = s.replace(/(^|\s)[-*+]\s+/g, "$1");
+    s = s.replace(/(^|\s)\d+\.\s+/g, "$1");
+    return s.replace(/\s+/g, " ").trim();
+}
+
+function previewTextFromMessage(message) {
+    if (!message || (message.role !== "user" && message.role !== "assistant")) return "";
+    if (isInternalStoredMessage(message)) return "";
+    if (typeof message.content !== "string") return "";
+    const cut = message.content.indexOf("[User attached files]");
+    const text = cut === -1 ? message.content : message.content.slice(0, cut).trim();
+    if (text) return stripMarkdownForPreview(text);
+    return message.attachments?.[0]?.name || "";
+}
+
+export function previewSnippetFromTurns(turns) {
+    for (let i = (turns || []).length - 1; i >= 0; i--) {
+        const messages = turns[i]?.messages || [];
+        for (let j = messages.length - 1; j >= 0; j--) {
+            const text = previewTextFromMessage(messages[j]);
+            if (text) return text.slice(0, 120);
+        }
+    }
+    return "";
+}
+
 export function turnToMessages(turn) {
     if (Array.isArray(turn?.messages) && turn.messages.length) {
         return turn.messages;
@@ -284,16 +322,98 @@ export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary)
     return { archivedSessionId: oldId, activeSessionId: newId, sessionFile: relFile };
 }
 
-export function appendChatTurn(chatId, turnMessages) {
+function sanitizeTurnStats(stats) {
+    if (!stats || typeof stats !== "object") return null;
+    const toolCallCount = Number(stats.toolCallCount);
+    const modelCallCount = Number(stats.modelCallCount);
+    const tokensUsed = Number(stats.tokensUsed);
+    const contextWindow = Number(stats.contextWindow);
+    if (![toolCallCount, modelCallCount, tokensUsed, contextWindow].some((n) => Number.isFinite(n) && n > 0)) return null;
+    return {
+        toolCallCount: Number.isFinite(toolCallCount) ? toolCallCount : 0,
+        modelCallCount: Number.isFinite(modelCallCount) ? modelCallCount : 0,
+        tokensUsed: Number.isFinite(tokensUsed) ? tokensUsed : 0,
+        contextWindow: Number.isFinite(contextWindow) ? contextWindow : 0,
+    };
+}
+
+function writePreview(chatId, turns) {
+    try {
+        const manifest = loadManifest(chatId);
+        if (!manifest) return;
+        const text = previewSnippetFromTurns(turns);
+        if (text) manifest.preview = text;
+        saveManifest(chatId, manifest);
+    } catch (_) {}
+}
+
+const PENDING_USER_PREFIX = "The user sent additional message(s) while you were working:";
+
+function userContentsFromTurnMessages(turnMessages) {
+    const out = [];
+    for (const m of turnMessages || []) {
+        if (m?.role !== "user" || typeof m.content !== "string") continue;
+        if (isInternalStoredMessage(m)) continue;
+        const content = m.content;
+        if (content.startsWith(PENDING_USER_PREFIX)) {
+            for (const part of content.slice(PENDING_USER_PREFIX.length).split("\n\n")) {
+                const clean = part.trim();
+                if (clean) out.push(clean);
+            }
+            continue;
+        }
+        out.push(content);
+    }
+    return out;
+}
+
+export function appendPendingUserTurn(chatId, userText, attachments = []) {
+    const text = String(userText || "").trim();
+    if (!chatId || (!text && !attachments.length)) return;
+
+    const turns = loadChatHistory(chatId);
+    const last = turns[turns.length - 1];
+    const lastMsgs = last?.messages || [];
+    const lastMsg = lastMsgs[lastMsgs.length - 1];
+    if (lastMsgs.length === 1 && lastMsg?.role === "user" && lastMsg.content === text) return;
+
+    turns.push({
+        at: new Date().toISOString(),
+        messages: [{ role: "user", content: text, ...(attachments.length ? { attachments } : {}) }],
+    });
+    replaceChatHistory(chatId, turns);
+    writePreview(chatId, turns);
+}
+
+export function appendChatTurn(chatId, turnMessages, extra = {}) {
     if (!chatId || !turnMessages?.length) return;
 
     const turns = loadChatHistory(chatId);
+    const incomingUsers = userContentsFromTurnMessages(turnMessages);
+    while (turns.length && incomingUsers.length) {
+        const last = turns[turns.length - 1];
+        const msgs = last?.messages || [];
+        if (msgs.length !== 1 || msgs[0]?.role !== "user") break;
+        const idx = incomingUsers.lastIndexOf(msgs[0].content);
+        if (idx < 0) break;
+        incomingUsers.splice(idx, 1);
+        turns.pop();
+    }
+
+    const stats = sanitizeTurnStats(extra.stats);
+    const storedMessages = turnMessages.map(cloneStoredMessage);
+    if (extra.attachments?.length) {
+        const userMessage = storedMessages.find((message) => message?.role === "user");
+        if (userMessage) userMessage.attachments = extra.attachments;
+    }
     turns.push({
         at: new Date().toISOString(),
-        messages: turnMessages.map(cloneStoredMessage),
+        messages: storedMessages,
+        ...(stats ? { stats } : {}),
     });
 
     replaceChatHistory(chatId, turns);
+    writePreview(chatId, turns);
 }
 
 export function listArchivedSessionFiles(chatId) {

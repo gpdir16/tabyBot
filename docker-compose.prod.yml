@@ -6,7 +6,6 @@ services:
         env_file:
             - .env
         environment:
-            TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
             TABYBOT_MODE: docker
             TABYBOT_HOME: ${TABYBOT_HOME:-}
             TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
@@ -15,6 +14,8 @@ services:
         volumes:
             - tabybot-user:/app/user
         # Optional host folder: docker compose -f docker-compose.prod.yml -f docker-compose.workspace.yml up -d
+        ports:
+            - "${TABYBOT_PORT:-8999}:8999"
         restart: unless-stopped
 
 volumes:

@@ -1,37 +1,13 @@
-import { loadUserConfig } from "../config-loader.js";
-import { t } from "../i18n.js";
-import { getRunningVersion } from "./store.js";
-import { sendMessageSafe } from "../telegram-api.js";
+import { emit } from "../web/bus.js";
 
-export function formatUpdateMessage(update, lang) {
-    const running = getRunningVersion() || update.currentVersion || "—";
-    const lines = [
-        t("update_notify_title", lang, { version: update.tagName }),
-        "",
-        t("update_notify_script_label", lang),
-        "",
-        update.installScript,
-        "",
-        t("update_notify_current", lang, { version: running }),
-    ];
-    return lines.join("\n");
+export function formatUpdateNotice(update, lang) {
+    if (lang === "ko") return `🆕 새 버전이 출시되었습니다: ${update.tagName} — ${update.releaseUrl}`;
+    if (lang === "ja") return `🆕 新しいバージョンがリリースされました: ${update.tagName} — ${update.releaseUrl}`;
+    return `🆕 A new version is available: ${update.tagName} — ${update.releaseUrl}`;
 }
 
-export async function sendUpdateNotification(bot, chatId, update) {
-    const lang = loadUserConfig().language || "en";
-    const body = formatUpdateMessage(update, lang);
-    const buttonLabel = t("update_notify_button", lang);
-
-    const sent = await sendMessageSafe(bot, chatId, body, {
-        reply_markup: {
-            inline_keyboard: [[{ text: buttonLabel, url: update.releaseUrl }]],
-        },
-    });
-
-    if (!sent.ok) {
-        const plain = [t("update_notify_title", lang, { version: update.tagName }), update.installScript, update.releaseUrl].join("\n\n");
-        await sendMessageSafe(bot, chatId, plain);
-    }
-
+export function sendUpdateNotification(update) {
+    const lang = process.env.TABYBOT_LANG || "en";
+    emit({ type: "notice", level: "info", text: formatUpdateNotice(update, lang) });
     return true;
 }

@@ -23,9 +23,12 @@ export const cronToolDefinitions = [
                     name: { type: "string" },
                     schedule: { type: "string", description: "e.g. 0 9 * * * for 09:00 daily" },
                     prompt: { type: "string", description: "Instruction for the agent when the job fires" },
-                    chatId: { type: "string", description: "Telegram chat id to notify" },
+                    conversationId: {
+                        type: "string",
+                        description: "Optional conversation id to post results into. Defaults to a dedicated per-job conversation.",
+                    },
                 },
-                required: ["name", "schedule", "prompt", "chatId"],
+                required: ["name", "schedule", "prompt"],
             },
         },
     },
@@ -65,7 +68,12 @@ export async function executeCronTool(name, args) {
         case "cron_list":
             return { jobs: listCronJobs() };
         case "cron_add": {
-            const job = addCronJob(args || {});
+            const job = addCronJob({
+                name: args?.name,
+                schedule: args?.schedule,
+                prompt: args?.prompt,
+                chatId: args?.conversationId || "",
+            });
             const reload = reloadCronSchedules();
             return { ok: true, job, reload };
         }
