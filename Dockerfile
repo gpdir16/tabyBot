@@ -11,6 +11,7 @@ LABEL org.opencontainers.image.version="${TABYBOT_VERSION}"
 ENV USER_DIR=/app/user
 ENV WORKSPACE_DIR=/workspace
 ENV APP_ROOT=/app
+EXPOSE 8999
 ENV CODES_DIR=/app/codes
 ENV CONFIG_DIR=/app/codes/config
 ENV NODE_ENV=production

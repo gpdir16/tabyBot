@@ -10,7 +10,7 @@ import {
     formatAgentMemoryFilesListForPrompt,
     agentMemoryFilePath,
 } from "../memory-file.js";
-import { DEFAULT_AGENT_ID, formatPeerAgentsForPrompt, getAgent } from "../agents-store.js";
+import { firstAgent, formatPeerAgentsForPrompt, getAgent } from "../agents-store.js";
 import { loadAgentConfig, loadUserConfig } from "../config-loader.js";
 import {
     getNsfwLevel,
@@ -20,7 +20,8 @@ import {
     buildApprovalPolicyText,
     approvalPolicyLabel,
 } from "../user-settings.js";
-import { buildUserMessageContent, estimateContentTokens } from "../llm/vision.js";
+import { estimateContentTokens } from "../llm/vision.js";
+import { collectFilesFromHistory, formatAttachedFilesPrompt, hydrateUserContent } from "../web/attachments.js";
 import { formatSkillsListForPrompt } from "../skills-catalog.js";
 import {
     buildDateTimePromptVars,
@@ -88,26 +89,22 @@ function loadScopedMemory(raw, { truncateMemory = false, maxMemoryChars = 120000
     return memory;
 }
 
-function defaultIdentityText() {
-    return "You are the default **tabyBot** (id: `main`). Handle general work. Consult a listed specialist when one fits better.";
-}
-
 function agentIdentityText(agentId) {
-    if (!agentId || agentId === DEFAULT_AGENT_ID) return defaultIdentityText();
-    const agent = getAgent(agentId);
-    if (!agent) return defaultIdentityText();
+    const agent = getAgent(agentId) || firstAgent();
+    if (!agent) return "You are tabyBot. Handle general work.";
     const job = agent.persona?.trim() || "Do the work the user assigned to this agent.";
     return `You are **${agent.name}** (id: \`${agent.id}\`).\nYour job this turn: ${job}\nStay in this role. Shared tabyBot rules still apply. Private memory: \`${agentMemoryFilePath(agent.id)}\``;
 }
 
 function agentMemoryText(agentId, opts) {
-    if (!agentId || agentId === DEFAULT_AGENT_ID) return "- (none — use shared memory.md)";
-    const body = loadScopedMemory(readAgentMemoryFile(agentId), opts).trim() || "(empty)";
-    return `${body}\n\n### Agent memory files\n${formatAgentMemoryFilesListForPrompt(agentId)}`;
+    const id = agentId || firstAgent()?.id;
+    if (!id) return "- (none — use shared memory.md)";
+    const body = loadScopedMemory(readAgentMemoryFile(id), opts).trim() || "(empty)";
+    return `${body}\n\n### Agent memory files\n${formatAgentMemoryFilesListForPrompt(id)}`;
 }
 
 function peerAgentsText(agentId) {
-    return formatPeerAgentsForPrompt(agentId || DEFAULT_AGENT_ID) || "- (none)";
+    return formatPeerAgentsForPrompt(agentId || firstAgent()?.id) || "- (none)";
 }
 
 export function buildSystemMessageContent(lang, { truncateMemory = false, maxMemoryChars = 120000, runtimeInfo = {} } = {}) {
@@ -126,6 +123,7 @@ export function buildSystemMessageContent(lang, { truncateMemory = false, maxMem
         AGENT_MEMORY: agentMemoryText(rt.agentId, { truncateMemory, maxMemoryChars }),
         PEER_AGENTS: peerAgentsText(rt.agentId),
         PAST_SESSIONS_LIST: pastSessions,
+        ATTACHED_FILES: formatAttachedFilesPrompt(rt.attachedFiles),
         NSFW_LEVEL_LABEL: nsfwPolicyLabel(getNsfwLevel(loadUserConfig())),
         NSFW_POLICY: buildNsfwPolicyText(getNsfwLevel(loadUserConfig())),
         APPROVAL_LEVEL_LABEL: approvalPolicyLabel(getApprovalLevel(loadUserConfig())),
@@ -134,25 +132,54 @@ export function buildSystemMessageContent(lang, { truncateMemory = false, maxMem
     return renderSystemPrompt(template, vars).trim();
 }
 
+function dropPendingCurrent(history, userMessage) {
+    if (!history?.length) return history || [];
+    const last = history[history.length - 1];
+    const msgs = last?.messages || [];
+    if (msgs.length !== 1 || msgs[0]?.role !== "user") return history;
+    const lastText = typeof msgs[0].content === "string" ? msgs[0].content.trim() : "";
+    const incoming = String(userMessage || "").trim();
+    if (lastText === incoming) return history.slice(0, -1);
+    return history;
+}
+
+function toLlmMessage(message, { visionEnabled = false } = {}) {
+    const cloned = cloneStoredMessage(message);
+    delete cloned.imageUrl;
+    if (cloned.role === "user") {
+        const text = typeof cloned.content === "string" ? cloned.content : "";
+        cloned.content = hydrateUserContent(text, cloned.attachments, { visionEnabled });
+    }
+    delete cloned.attachments;
+    return cloned;
+}
+
 export function buildInitialMessages(
     userMessage,
-    { truncateMemory = false, maxMemoryChars = 120000, history = [], visionAttachment = null, modelMeta = null, runtimeInfo = {} } = {},
+    { truncateMemory = false, maxMemoryChars = 120000, history = [], attachments = [], modelMeta = null, runtimeInfo = {} } = {},
 ) {
+    const visionEnabled = modelMeta?.supportsVision === true;
+    const currentFiles = Array.isArray(attachments) ? attachments : [];
+    const historyForPrompt = dropPendingCurrent(history, userMessage);
+    const attachedFiles = collectFilesFromHistory(historyForPrompt, currentFiles);
     const lang = loadUserConfig().language || "en";
-    const systemContent = buildSystemMessageContent(lang, { truncateMemory, maxMemoryChars, runtimeInfo });
+    const systemContent = buildSystemMessageContent(lang, {
+        truncateMemory,
+        maxMemoryChars,
+        runtimeInfo: { ...runtimeInfo, attachedFiles },
+    });
 
     const messages = [{ role: "system", content: systemContent }];
 
-    for (const turn of history) {
+    for (const turn of historyForPrompt) {
         for (const message of turnToMessages(turn)) {
-            messages.push(cloneStoredMessage(message));
+            messages.push(toLlmMessage(message, { visionEnabled }));
         }
     }
-    const userContent = buildUserMessageContent(userMessage, {
-        visionEnabled: modelMeta?.supportsVision === true,
-        attachment: visionAttachment,
+    messages.push({
+        role: "user",
+        content: hydrateUserContent(userMessage, currentFiles, { visionEnabled }),
     });
-    messages.push({ role: "user", content: userContent });
     return messages;
 }
 

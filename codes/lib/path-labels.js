@@ -1,5 +1,5 @@
 import path from "node:path";
-import { CODES_DIR, DOWNLOAD_DIR, SKILLS_SYSTEM_DIR, USER_DIR, WORKSPACE_DIR, isWorkspaceEnabled } from "./paths.js";
+import { CODES_DIR, SKILLS_SYSTEM_DIR, USER_DIR, WORKSPACE_DIR, isWorkspaceEnabled } from "./paths.js";
 import { isDockerRuntime } from "./runtime.js";
 
 export function memoryFilePath() {
@@ -16,10 +16,6 @@ export function mcpConfigPath() {
 
 export function skillsDirPath() {
     return path.join(USER_DIR, "skills");
-}
-
-export function downloadDirPath() {
-    return DOWNLOAD_DIR;
 }
 
 export function cronConfigPath() {
@@ -49,7 +45,7 @@ export function terminalCwdParamDescription() {
 }
 
 export function fileReadDescription() {
-    return `Read a text file. Default: paths relative to \`${USER_DIR}\`.${workspaceSuffix()} Optional line range; output capped below 50% of remaining context.`;
+    return `Read a text file. path is required. Relative paths resolve to \`${USER_DIR}\`.${workspaceSuffix()} Optional line range; output capped below 50% of remaining context.`;
 }
 
 export function filePatchDescription() {
@@ -58,11 +54,11 @@ export function filePatchDescription() {
 
 export function filePathParamDescription() {
     const ws = isWorkspaceEnabled() ? ", or workspace/... when a project folder is configured" : "";
-    return `Absolute path, path relative to \`${USER_DIR}\`${ws}`;
+    return `Required. Absolute filesystem path, or a path relative to \`${USER_DIR}\`${ws}`;
 }
 
 export function sendFileDescription() {
-    return `Send a file to Telegram. Default \`${USER_DIR}\`.${workspaceSuffix()}`;
+    return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`.${workspaceSuffix()} Optional caption is shown with the attachment.`;
 }
 
 export function cronListDescription() {
@@ -83,7 +79,6 @@ export function buildSkillContentVars() {
         MEMORY_DIR: memoryDirPath(),
         MCP_CONFIG_PATH: mcpConfigPath(),
         CRON_PATH: cronConfigPath(),
-        DOWNLOAD_DIR: downloadDirPath(),
         BROWSER_USE_DIR: path.join(CODES_DIR, "skills", "browser-use"),
     };
 }
@@ -100,7 +95,6 @@ const LEGACY_SKILL_PATHS = [
     ["/app/user/mcp.json", (v) => v.MCP_CONFIG_PATH],
     ["/app/user/cron.json", (v) => v.CRON_PATH],
     ["/app/user/skills", (v) => v.SKILLS_DIR],
-    ["/app/user/download", (v) => v.DOWNLOAD_DIR],
     ["/app/codes/skills", (v) => path.join(v.CODES_DIR, "skills")],
     ["/app/user", (v) => v.USER_DIR],
     ["/app/codes", (v) => v.CODES_DIR],

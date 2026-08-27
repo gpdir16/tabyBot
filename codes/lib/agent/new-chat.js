@@ -75,7 +75,7 @@ Do **not** create a skill when none of these apply. One-off questions, greetings
     return prompts[lang] || prompts.en;
 }
 
-export async function handleNewChat(bot, chatId) {
+export async function handleNewChat(chatId) {
     const lang = loadUserConfig().language || "en";
 
     // Snapshot the conversation BEFORE clearing, then rotate to a fresh session immediately.
@@ -91,20 +91,19 @@ export async function handleNewChat(bot, chatId) {
     // Uses the snapshot so it works on the archived conversation regardless of
     // what the user does in the new session. No chatId passed to runAgent —
     // tools stay read-only on disk history; no session/abort, silent and unstoppable.
-    void runSelfImprovement(bot, lang, priorHistory).catch((err) => {
+    void runSelfImprovement(lang, priorHistory).catch((err) => {
         console.error("Background self-improvement failed:", err?.stack || err);
     });
 
     return t("new_chat_ok", lang);
 }
 
-async function runSelfImprovement(bot, lang, history) {
+async function runSelfImprovement(lang, history) {
     // Skip when there was nothing to review.
     if (!history?.length) return;
 
     try {
         const result = await runAgent(memoryFlushPrompt(lang), {
-            bot,
             history,
         });
         if (result?.error && result.error !== "stopped_by_user") {

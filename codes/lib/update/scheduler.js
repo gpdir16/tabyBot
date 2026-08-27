@@ -1,6 +1,5 @@
 import cron from "node-cron";
 import { loadAgentConfig } from "../config-loader.js";
-import { getOwnerChatId } from "../auth.js";
 import { scheduleWork } from "../agent-queue.js";
 import { checkForUpdate } from "./checker.js";
 import { sendUpdateNotification } from "./notify.js";
@@ -23,24 +22,21 @@ function warnIfUnknownProductionVersion() {
     saveUpdateState({ watchStartedAt: null });
 }
 
-async function runUpdateCheck(bot) {
-    const ownerChatId = getOwnerChatId();
-    if (!ownerChatId) return;
-
+async function runUpdateCheck() {
     const update = await checkForUpdate();
     saveUpdateState({ lastCheckedAt: new Date().toISOString() });
 
     if (!update) return;
 
-    await sendUpdateNotification(bot, ownerChatId, update);
+    sendUpdateNotification(update);
     setLastNotifiedVersion(update.tagName);
     console.log(`tabyBot: update notification sent (${update.tagName})`);
 }
 
-function queueUpdateCheck(bot, label) {
+function queueUpdateCheck(label) {
     scheduleWork("cron", async () => {
         try {
-            await runUpdateCheck(bot);
+            await runUpdateCheck();
         } catch (err) {
             console.error(`tabyBot: ${label} update check failed:`, err?.stack || err);
         }
@@ -49,7 +45,7 @@ function queueUpdateCheck(bot, label) {
     });
 }
 
-export function startUpdateScheduler(bot) {
+export function startUpdateScheduler() {
     const agentCfg = loadAgentConfig().updateCheck ?? {};
     const userOverride = getUserUpdateCheckEnabled(loadUserConfig());
     const enabled = userOverride === null ? agentCfg.enabled !== false : userOverride;
@@ -68,21 +64,21 @@ export function startUpdateScheduler(bot) {
 
     if (task) task.stop();
 
-    task = cron.schedule(expr, () => queueUpdateCheck(bot, "scheduled"), { scheduled: true });
+    task = cron.schedule(expr, () => queueUpdateCheck("scheduled"), { scheduled: true });
 
     const delayMs = agentCfg.initialDelayMs ?? 60_000;
-    if (initialTimer) clearTimeout(initialTimer);
+    clearTimeout(initialTimer);
     initialTimer = setTimeout(() => {
         initialTimer = null;
-        queueUpdateCheck(bot, "initial");
+        queueUpdateCheck("initial");
     }, delayMs);
 
     console.log(`tabyBot: update checker scheduled (${expr})`);
 }
 
-export function restartUpdateScheduler(bot) {
+export function restartUpdateScheduler() {
     stopUpdateScheduler();
-    startUpdateScheduler(bot);
+    startUpdateScheduler();
 }
 
 export function stopUpdateScheduler() {

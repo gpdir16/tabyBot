@@ -75,8 +75,6 @@ export function hasManagedInstallMarker(home) {
         if (!modeMatch) return false;
         const mode = parseEnvValue(modeMatch[1]).trim().toLowerCase();
         if (mode !== "docker" && mode !== "local") return false;
-        const tokenMatch = text.match(/^TELEGRAM_BOT_TOKEN=(.*)$/m);
-        if (!tokenMatch || !parseEnvValue(tokenMatch[1]).trim()) return false;
         const homeMatch = text.match(/^TABYBOT_HOME=(.+)$/m);
         if (homeMatch && path.resolve(parseEnvValue(homeMatch[1])) === resolved) return true;
         return fs.existsSync(path.join(resolved, "app", "codes", "index.js"));

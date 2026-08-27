@@ -1,36 +1,29 @@
 #!/usr/bin/env node
-import { Bot } from "grammy";
 import { ensureUserDir } from "./lib/bootstrap.js";
-import { getApproveCliHint } from "./lib/runtime.js";
-import { approveCode } from "./lib/auth.js";
-import { notifyOwnerTransfer } from "./lib/auth-access.js";
-import { loadUserConfig } from "./lib/config-loader.js";
-import { bootstrapBotTokenFromEnv } from "./lib/readiness.js";
+import { loadUserConfig, getMergedProvider } from "./lib/config-loader.js";
+import { isConfigReady } from "./lib/onboarding.js";
+import { getRunningVersion } from "./lib/update/store.js";
 
 ensureUserDir();
-bootstrapBotTokenFromEnv();
 
-const [, , command, ...rest] = process.argv;
-const arg = rest.join(" ").trim();
+const [, , command] = process.argv;
 
-if (command === "approve" && arg) {
-    const result = approveCode(arg);
-    if (!result.ok) {
-        console.error("Approval failed");
-        process.exit(1);
-    }
-    console.log(`Approved: ${result.chatId}`);
-    const token = loadUserConfig().telegram?.botToken?.trim();
-    if (token) {
-        const bot = new Bot(token);
-        await notifyOwnerTransfer(bot, {
-            previousOwner: result.previousOwner,
-            newChatId: result.chatId,
-            approvedByChatId: null,
-        });
-    }
+if (command === "status") {
+    const config = loadUserConfig();
+    const provider = (() => {
+        try {
+            return getMergedProvider(config);
+        } catch {
+            return null;
+        }
+    })();
+    console.log(`tabyBot ${getRunningVersion() || process.env.TABYBOT_VERSION || "dev"}`);
+    console.log(`configured: ${isConfigReady() ? "yes" : "no"}`);
+    if (provider) console.log(`provider: ${provider.id} · model: ${provider.model || "(unset)"}`);
+    console.log("web UI: http://127.0.0.1:8999");
     process.exit(0);
 }
 
-console.error(`Setup and config are done in Telegram. Optional: ${getApproveCliHint("<code>")}`);
-process.exit(command ? 1 : 0);
+console.error("Usage: node cli.js status");
+console.error("Setup and conversations are managed in the web UI.");
+process.exit(command && command !== "status" ? 1 : 0);

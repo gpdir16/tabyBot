@@ -52,7 +52,7 @@ export async function executeTool(name, args, ctx = {}) {
         if (name === "terminal_run" || name === "bg_status" || name === "bg_list" || name === "bg_kill") {
             return await executeTerminalTool(name, args, ctx);
         }
-        if (name === "telegram_send_file") return await executeSendFileTool(name, args, ctx);
+        if (name === "send_file") return await executeSendFileTool(name, args, ctx);
         if (name === "user_ask") return await executeUserAskTool(name, args, ctx);
         if (name === "consult_agent") return await executeConsultAgent(name, args, ctx);
         if (name === "viz_create") return await executeVizTool(name, args);

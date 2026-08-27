@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { USER_DIR, DOWNLOAD_DIR, TEMPLATES_USER_DIR, AGENTS_SKILLS_LINK, WORKSPACE_DIR, isWorkspaceEnabled } from "./paths.js";
+import { USER_DIR, TEMPLATES_USER_DIR, AGENTS_SKILLS_LINK, WORKSPACE_DIR, isWorkspaceEnabled } from "./paths.js";
 import { isDockerRuntime, shouldLinkAgentsSkillsDir } from "./runtime.js";
 function copyDirRecursive(src, dest) {
     fs.mkdirSync(dest, { recursive: true });
@@ -61,7 +61,6 @@ export function ensureUserDir() {
     fs.mkdirSync(USER_DIR, { recursive: true });
     fs.mkdirSync(path.join(USER_DIR, "skills"), { recursive: true });
     fs.mkdirSync(path.join(USER_DIR, "temp"), { recursive: true });
-    fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
     seedUserFromTemplates();
 

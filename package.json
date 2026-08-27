@@ -1,17 +1,18 @@
 {
     "name": "tabybot",
-    "description": "AI Agent for Telegram",
+    "description": "Self-improving AI agent platform with a desktop web client",
     "type": "module",
     "scripts": {
+        "start": "node codes/index.js",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.1",
-        "grammy": "^1.44.0",
         "js-tiktoken": "^1.0.19",
         "node-cron": "^3.0.3",
-        "openai": "^4.104.0"
+        "openai": "^4.104.0",
+        "web-push": "^3.6.7"
     },
     "devDependencies": {
         "prettier": "^3.8.3"

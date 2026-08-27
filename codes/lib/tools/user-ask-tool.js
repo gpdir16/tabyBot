@@ -33,8 +33,8 @@ export const userAskToolDefinitions = [
 ];
 
 export async function executeUserAskTool(_name, args, ctx) {
-    if (!ctx?.bot || !ctx?.chatId) {
-        return { error: "No active Telegram chat — user_ask only works during a user message turn" };
+    if (!ctx?.sessionKey) {
+        return { error: "No active session — user_ask only works during a user message turn" };
     }
 
     const question = String(args?.question ?? "").trim();
@@ -45,10 +45,7 @@ export async function executeUserAskTool(_name, args, ctx) {
 
     const timeoutSec = Math.min(Math.max(Number(args?.timeout) || 120, 10), 600);
     const askPromise = askUser({
-        bot: ctx.bot,
-        chatId: ctx.chatId,
-        sessionKey: ctx.sessionKey || ctx.chatId,
-        threadId: ctx.threadId,
+        sessionKey: ctx.sessionKey,
         question,
         options,
         timeoutMs: timeoutSec * 1000,
@@ -59,7 +56,7 @@ export async function executeUserAskTool(_name, args, ctx) {
 
     return new Promise((resolve) => {
         const onAbort = () => {
-            cancelPendingAsk(ctx.sessionKey || ctx.chatId, "aborted");
+            cancelPendingAsk(ctx.sessionKey, "aborted");
             resolve({ error: "aborted" });
         };
         if (signal.aborted) {

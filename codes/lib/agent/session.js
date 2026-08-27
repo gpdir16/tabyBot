@@ -1,4 +1,4 @@
-export const STOP_BY_USER_HINT = "The user sent /stop. Stop immediately. Do not call more tools. Reply briefly with progress and what remains.";
+export const STOP_BY_USER_HINT = "The user pressed Stop. Stop immediately. Do not call more tools. Reply briefly with progress and what remains.";
 
 const sessions = new Map();
 

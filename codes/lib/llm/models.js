@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadProviderConfig } from "../config-loader.js";
 import { USER_DIR } from "../paths.js";
+import { fetchCodexModels } from "./codex-client.js";
+import { fetchGrokModels } from "./grok-client.js";
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const MODELS_PER_PAGE = 8;
@@ -61,6 +63,12 @@ function cachePath(provider) {
 }
 
 export async function fetchProviderModels(provider, { useCache = true } = {}) {
+    if (provider?.type === "codex-oauth") {
+        return fetchCodexModels();
+    }
+    if (provider?.type === "grok-oauth") {
+        return fetchGrokModels();
+    }
     if (!provider?.apiKey?.trim()) {
         throw new Error("API key required to list models");
     }

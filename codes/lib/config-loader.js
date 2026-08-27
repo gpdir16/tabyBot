@@ -35,12 +35,10 @@ export function loadAgentConfig() {
         maxToolRounds: 300,
         maxToolRoundsPerTurn: 300,
         maxToolCallsPerTurn: 300,
-        maxSameToolRepeat: 8,
         maxEmptyReplyRetries: 8,
         contextCompressTriggerPercent: 75,
         contextKeepRecentPercent: 20,
         contextThresholdPercent: 90,
-        authCodeTtlMinutes: 15,
     });
 }
 
@@ -53,7 +51,6 @@ export function loadUserConfig() {
     const filePath = path.join(USER_DIR, "config.json");
     return readJson(filePath, {
         language: "en",
-        telegram: { botToken: "" },
         provider: { id: "default", apiKey: "", model: "" },
         thinkingLevel: "high",
         showReplyFooter: true,

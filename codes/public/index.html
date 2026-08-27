@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="dark light" />
+        <meta name="theme-color" content="#0d0d0f" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="tabyBot" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
+        <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
+        <title>tabyBot</title>
+        <link rel="stylesheet" href="assets/vendor/highlight-github-dark.min.css" />
+        <link rel="stylesheet" href="assets/css/app.css" />
+        <!-- 벤더 라이브러리: UMD/IIFE 전역(marked / DOMPurify / hljs). 모듈 스크립트보다 먼저 로드 -->
+        <script src="assets/vendor/marked.umd.min.js"></script>
+        <script src="assets/vendor/purify.min.js"></script>
+        <script src="assets/vendor/highlight.min.js"></script>
+    </head>
+    <body>
+        <!-- 인라인 SVG 아이콘 스프라이트 (외부 아이콘 폰트 금지) -->
+        <svg xmlns="http://www.w3.org/2000/svg" style="display: none" aria-hidden="true">
+            <symbol id="i-logo" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="currentColor" stroke-width="1.7" />
+                <path d="M12 6.8l1.6 3.6 3.6 1.6-3.6 1.6L12 17.2l-1.6-3.6L6.8 12l3.6-1.6L12 6.8z" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-plus" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-search" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path d="M16.2 16.2L21 21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-kebab" viewBox="0 0 24 24">
+                <circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-more" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+                <circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-menu" viewBox="0 0 24 24">
+                <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-pencil" viewBox="0 0 24 24">
+                <path
+                    d="M17 3.5l3.5 3.5L8 19.5 3.5 20.5 4.5 16 17 3.5z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            </symbol>
+            <symbol id="i-trash" viewBox="0 0 24 24">
+                <path
+                    d="M4 7h16M10 11v6M14 11v6M6.5 7l1 13h9l1-13M9.5 7V4.5h5V7"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            </symbol>
+            <symbol id="i-settings" viewBox="0 0 24 24">
+                <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <path d="M4 8h8.8M17.8 8H20" />
+                    <circle cx="15.6" cy="8" r="2.2" />
+                    <path d="M4 16h2.8M11.8 16H20" />
+                    <circle cx="9.6" cy="16" r="2.2" />
+                </g>
+            </symbol>
+            <symbol id="i-stop" viewBox="0 0 24 24">
+                <rect x="7.5" y="7.5" width="9" height="9" rx="1.8" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-send" viewBox="0 0 24 24">
+                <path
+                    d="M12 19V5M5.5 11.5L12 5l6.5 6.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            </symbol>
+            <symbol id="i-paperclip" viewBox="0 0 24 24">
+                <path
+                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            </symbol>
+            <symbol id="i-copy" viewBox="0 0 24 24">
+                <rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path
+                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                />
+            </symbol>
+            <symbol id="i-check" viewBox="0 0 24 24">
+                <path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-sun" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path
+                    d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                />
+            </symbol>
+            <symbol id="i-moon" viewBox="0 0 24 24">
+                <path
+                    d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linejoin="round"
+                />
+            </symbol>
+            <symbol id="i-x" viewBox="0 0 24 24">
+                <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-chevron" viewBox="0 0 24 24">
+                <path d="M6 9.5l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-eye" viewBox="0 0 24 24">
+                <path
+                    d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linejoin="round"
+                />
+                <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+            </symbol>
+            <symbol id="i-eye-off" viewBox="0 0 24 24">
+                <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                <path
+                    d="M9.9 5.9A9.9 9.9 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17.6 17.6 0 0 1-3.2 3.9M6.1 8.3A16.9 16.9 0 0 0 2.5 12S6 18.5 12 18.5a9.4 9.4 0 0 0 3.4-.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                />
+                <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-arrow-down" viewBox="0 0 24 24">
+                <path d="M12 5v14M6 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-info" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path d="M12 11v5M12 7.8h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-warn" viewBox="0 0 24 24">
+                <path d="M12 3.5L2.5 19.5h19L12 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+                <path d="M12 10v4M12 16.8h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-error" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </symbol>
+        </svg>
+
+        <div id="app">
+            <!-- ── 사이드바 ─────────────────────────── -->
+            <aside id="sidebar" aria-label="tabyBot sidebar">
+                <div class="sb-top">
+                    <button id="btnCollapse" class="btn-icon" data-i18n-tip="collapse" data-i18n-aria="collapse" aria-expanded="true">
+                        <svg class="icon icon-sm"><use href="#i-chevron" /></svg>
+                    </button>
+                    <span class="logo-word">tabyBot</span>
+                    <button id="btnAddBot" class="btn-icon" data-i18n-tip="addAgent" data-i18n-aria="addAgent">
+                        <svg class="icon"><use href="#i-plus" /></svg>
+                    </button>
+                </div>
+
+                <div class="sb-search">
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="#i-search" /></svg>
+                    <input id="searchInput" type="text" data-i18n-ph="searchPlaceholder" autocomplete="off" spellcheck="false" />
+                    <kbd>⌘K</kbd>
+                </div>
+
+                <nav id="botList" class="sb-scroll" aria-label="bots"></nav>
+
+                <div class="sb-bottom">
+                    <button id="btnSettings" class="sb-row">
+                        <svg class="icon icon-sm"><use href="#i-settings" /></svg>
+                        <span data-i18n="settings"></span>
+                        <span id="connDot" class="conn-dot" hidden></span>
+                    </button>
+                </div>
+                <div id="sbResize" class="sb-resize" aria-hidden="true"></div>
+            </aside>
+
+            <!-- ── 메인 ─────────────────────────────── -->
+            <div id="sbScrim" class="sb-scrim"></div>
+            <main id="main">
+                <header id="header">
+                    <button id="btnMenu" class="btn-icon btn-menu" data-i18n-tip="menu" data-i18n-aria="menu" aria-expanded="false">
+                        <svg class="icon"><use href="#i-menu" /></svg>
+                    </button>
+                    <span id="hdrAvatar" class="hdr-avatar"></span>
+                    <div class="hd-name-wrap">
+                        <span id="hdrName"></span>
+                    </div>
+                </header>
+
+                <div id="scroller">
+                    <div id="thread" class="thread"></div>
+                    <button id="jumpLatest" class="jump-latest">
+                        <svg class="icon icon-sm"><use href="#i-arrow-down" /></svg>
+                        <span data-i18n="newMessages"></span>
+                    </button>
+                </div>
+
+                <div id="composerWrap">
+                    <div id="composer" class="composer">
+                        <div id="chips" class="chips hidden"></div>
+                        <div class="composer-row">
+                            <button id="btnAttach" class="btn-icon" data-i18n-tip="attachImage" data-i18n-aria="attachImage">
+                                <svg class="icon"><use href="#i-paperclip" /></svg>
+                            </button>
+                            <input id="fileInput" type="file" multiple hidden />
+                            <textarea id="composerInput" rows="1" data-i18n-ph="sendPlaceholder"></textarea>
+                            <button id="btnSend" class="btn-send" disabled data-i18n-tip="send" data-i18n-aria="send">
+                                <svg class="icon"><use href="#i-send" /></svg>
+                            </button>
+                            <button id="btnStop" class="btn-send stop hidden" data-i18n-tip="stop" data-i18n-aria="stop">
+                                <svg class="icon"><use href="#i-stop" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- 설정 시트 / 오버레이 / 토스트 -->
+        <div id="sheetScrim" class="sheet-scrim"></div>
+        <aside id="sheet" class="sheet" tabindex="-1" aria-hidden="true"></aside>
+        <div id="overlayRoot"></div>
+        <div id="toasts" role="status" aria-live="polite"></div>
+
+        <!--
+  스크립트 로딩: 전역 네임스페이스(Taby)를 공유하는 클래식 스크립트 체인.
+  Chrome은 file://에서 ES module 로드를 CORS로 차단하므로, file:// 직접 실행을
+  보장하기 위해 IIFE + 네임스페이스 패턴을 사용한다(빌드 도구 없음 유지).
+  의존성 순서: 유틸/i18n → 상태 → API → 마크다운 → SSE → UI → 부트.
+-->
+        <script src="assets/js/i18n.js"></script>
+        <script src="assets/js/state.js"></script>
+        <script src="assets/js/api.js"></script>
+        <script src="assets/js/markdown.js"></script>
+        <script src="assets/js/notifications.js"></script>
+        <script src="assets/js/events.js"></script>
+        <script src="assets/js/ui/toast.js"></script>
+        <script src="assets/js/ui/tooltip.js"></script>
+        <script src="assets/js/ui/sidebar.js"></script>
+        <script src="assets/js/ui/chat.js"></script>
+        <script src="assets/js/ui/composer.js"></script>
+        <script src="assets/js/ui/settings.js"></script>
+        <script src="assets/js/ui/onboarding.js"></script>
+        <script src="assets/js/app.js"></script>
+    </body>
+</html>
