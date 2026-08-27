@@ -1,4 +1,4 @@
-import { CODES_DIR, USER_DIR, WORKSPACE_DIR, isWorkspaceEnabled } from "../paths.js";
+import { CODES_DIR, USER_DIR } from "../paths.js";
 import { memoryFilePath, memoryDirPath, mcpConfigPath, skillsDirPath } from "../path-labels.js";
 import { isDockerRuntime } from "../runtime.js";
 
@@ -23,7 +23,7 @@ function localeForLanguage(lang) {
 
 export function buildEnvironmentPromptVars() {
     const docker = isDockerRuntime();
-    const pathHint = isWorkspaceEnabled() ? `\`${USER_DIR}\`, \`/tmp\`, or \`${WORKSPACE_DIR}\`` : `\`${USER_DIR}\` or \`/tmp\``;
+    const pathHint = `any absolute path, \`${USER_DIR}\`, or \`/tmp\``;
 
     return {
         MCP_CONFIG_PATH: mcpConfigPath(),
@@ -39,72 +39,21 @@ export function buildEnvironmentPromptVars() {
 
 export function buildFilesystemPromptBlock() {
     const docker = isDockerRuntime();
-    const hostPath = typeof process.env.HOST_WORKSPACE === "string" ? process.env.HOST_WORKSPACE.trim() : "";
-
-    if (docker) {
-        const lines = [
-            "### Filesystem map (container vs host — read before file/shell work)",
-            "",
-            "You run **inside a Docker container**. Container paths are **not** the same as the user's Windows/macOS/Linux paths unless listed below.",
-            "",
-            `| Path | Role |`,
-            `|------|------|`,
-            `| \`${USER_DIR}\` | **Main home (default).** Docker volume: \`config.json\`, \`memory.md\`, \`memory/\`, \`agents/\`, \`skills/\`, \`mcp.json\`, \`cron.json\`, chat temp, and **most work**. Default \`terminal_run\` cwd. Relative \`file_*\` paths resolve here. Exists **inside the container** — not a path on the user's PC. |`,
-            `| \`${CODES_DIR}\` | Shipped agent source and built-in skills (image; avoid editing). |`,
-            `| \`/tmp\` | Ephemeral scratch inside the container. |`,
-        ];
-
-        if (isWorkspaceEnabled()) {
-            const hostNote = hostPath ? ` Host path: \`${hostPath}\`.` : "";
-            lines.push(
-                `| \`${WORKSPACE_DIR}\` | **Optional host bind mount** — a folder on the user's PC, visible outside Docker.${hostNote} Use **only** when the task must read/write files the user edits on their machine (their repo, local project, synced documents). **Do not** use for bot config, memory, skills, or general work — keep that in \`${USER_DIR}\`. Paths: \`workspace/...\` or \`${WORKSPACE_DIR}/...\`. |`,
-            );
-            lines.push(
-                "",
-                "**Routing:**",
-                `- **Default:** everything → \`${USER_DIR}\` (same as when no mount exists).`,
-                `- **\`${WORKSPACE_DIR}\` only when:** user explicitly asks to work on their **local/PC/mounted** project or files that must appear on their computer.`,
-                `- Bot settings, memory, skills, MCP, cron, uploads → always \`${USER_DIR}\`.`,
-                `- Do **not** tell the user to open \`${USER_DIR}\` on their PC — container-only. For PC-visible files, use \`${WORKSPACE_DIR}\`.`,
-            );
-        } else {
-            lines.push(
-                "",
-                `**No host folder is mounted** (no \`/workspace\`). All durable user files live under \`${USER_DIR}\` inside the container only — the user cannot see that path on their PC.`,
-            );
-        }
-
-        return lines.join("\n");
-    }
-
     const lines = [
-        "### Filesystem map (local install — read before file/shell work)",
+        docker ? "### Filesystem map (container — read before file/shell work)" : "### Filesystem map (local install — read before file/shell work)",
         "",
-        "You run **directly on the user's machine** (not in Docker). Paths below are real host paths.",
+        docker
+            ? "You run **inside a Docker container**. Container paths are separate from the user's host machine."
+            : "You run **directly on the user's machine** (not in Docker). Paths below are real host paths.",
         "",
         `| Path | Role |`,
         `|------|------|`,
-        `| \`${USER_DIR}\` | **Main home (default).** \`config.json\`, \`memory.md\`, \`memory/\`, \`agents/\`, \`skills/\`, \`mcp.json\`, \`cron.json\`, chat temp, and **most work**. Default \`terminal_run\` cwd. Relative \`file_*\` paths resolve here. |`,
-        `| \`${CODES_DIR}\` | Shipped agent source and built-in skills (avoid editing). |`,
+        `| \`${USER_DIR}\` | **Main home (default).** Configuration, memory, skills, MCP, cron, chat temp, and **most work**. Default \`terminal_run\` cwd. Relative \`file_*\` paths resolve here. |`,
+        `| \`${CODES_DIR}\` | Shipped agent source and built-in skills (image; avoid editing). |`,
         `| \`/tmp\` | Ephemeral scratch. |`,
+        "",
+        "**Path handling:** `file_read` and `file_patch` accept any absolute path accessible to the process. Relative paths resolve to the main home above.",
     ];
-
-    if (isWorkspaceEnabled()) {
-        const hostNote = hostPath ? ` Host path: \`${hostPath}\`.` : "";
-        lines.push(
-            `| \`${WORKSPACE_DIR}\` | **Optional project folder** on the user's PC.${hostNote} Use **only** when the task must read/write files in their repo, local project, or synced documents. **Do not** use for bot config, memory, skills, or general work — keep that in \`${USER_DIR}\`. Paths: \`workspace/...\` or \`${WORKSPACE_DIR}/...\`. |`,
-        );
-        lines.push(
-            "",
-            "**Routing:**",
-            `- **Default:** everything → \`${USER_DIR}\`.`,
-            `- **\`${WORKSPACE_DIR}\` only when:** user explicitly asks to work on a **project folder** outside the agent home.`,
-            `- Bot settings, memory, skills, MCP, cron, uploads → always \`${USER_DIR}\`.`,
-        );
-    } else {
-        lines.push("", `**No extra project folder** is configured. All durable user files live under \`${USER_DIR}\`.`);
-    }
-
     return lines.join("\n");
 }
 

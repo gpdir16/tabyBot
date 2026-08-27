@@ -11,13 +11,9 @@ services:
             TABYBOT_MODE: docker
             TABYBOT_HOME: ${TABYBOT_HOME:-}
             TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
-            WORKSPACE_DIR: /workspace
-            WORKSPACE_ENABLED: ${WORKSPACE_ENABLED:-0}
         # Persistent state (config, memory, MCP, cron). Defaults: codes/templates/user
         volumes:
             - tabybot-user:/app/user
-        # Optional host folder: set HOST_WORKSPACE in .env and use docker-compose.workspace.yml
-        #   docker compose -f docker-compose.yml -f docker-compose.workspace.yml up -d
         ports:
             - "${TABYBOT_PORT:-8999}:8999"
         restart: unless-stopped

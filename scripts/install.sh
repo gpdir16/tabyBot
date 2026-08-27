@@ -36,8 +36,6 @@ REPO_BRANCH="${TABYBOT_REPO_BRANCH:-main}"
 INSTALL_DIR="${TABYBOT_HOME:-${HOME}/.tabybot}"
 APP_DIR="${INSTALL_DIR}/app"
 USER_DATA_DIR="${INSTALL_DIR}/user"
-TABYBOT_CLI="${INSTALL_DIR}/tabybot"
-USER_BIN="${HOME}/.local/bin"
 COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
 ENV_FILE="${INSTALL_DIR}/.env"
 LAUNCHD_LABEL="io.tabybot"
@@ -481,143 +479,11 @@ expand_user_path() {
     esac
 }
 
-validate_host_workspace_path() {
-    local path="$1"
-    [ -n "${path}" ] || return 1
-    case "${path}" in
-        /*) ;;
-        *)
-            if is_ko; then die "절대 경로를 입력하세요 (예: ${HOME}/my-project)."
-            else die "Enter an absolute path (e.g. ${HOME}/my-project)."; fi
-            ;;
-    esac
-    if [ ! -d "${path}" ]; then
-        if is_ko; then die "폴더가 없습니다: ${path}"
-        else die "Folder does not exist: ${path}"; fi
-    fi
-}
-
-# Interactive host workspace (first install). Default: no connection.
-prompt_host_workspace() {
-    local mode="${1:-docker}" path reply
-
-    if ! can_prompt_user; then
-        return 0
-    fi
-
-    say_user ""
-    if [ "${mode}" = local ]; then
-        if is_ko; then
-            say_user "추가 작업 폴더 (선택)"
-            say_user "  기본 작업은 ${USER_DATA_DIR} 에서 합니다."
-            say_user "  연결하면 PC 프로젝트 폴더를 에이전트가 사용할 수 있습니다."
-            prompt_yes_no "추가 작업 폴더를 연결할까요?" n || return 0
-            say_user ""
-            say_user "⚠ 경고: 에이전트가 연결된 폴더의 파일을 수정할 수 있는 권한을 갖습니다."
-            prompt_yes_no "그래도 연결하시겠습니까?" n || return 0
-        else
-            say_user "Extra project folder (optional)"
-            say_user "  Default work stays in ${USER_DATA_DIR}."
-            say_user "  If enabled, the agent can read/write a project folder on your PC."
-            prompt_yes_no "Connect a project folder?" n || return 0
-            say_user ""
-            say_user "⚠ Warning: The agent will be able to modify files in that folder."
-            prompt_yes_no "Continue anyway?" n || return 0
-        fi
-    elif is_ko; then
-        say_user "호스트 폴더 연결 (선택)"
-        say_user "  기본 작업은 컨테이너 안 /app/user 에서 합니다."
-        say_user "  연결하면 PC 폴더가 /workspace 로 마운트됩니다 (필요할 때만 사용)."
-        prompt_yes_no "호스트 폴더를 연결할까요?" n || return 0
-        say_user ""
-        say_user "⚠ 경고: 에이전트가 연결된 폴더의 파일을 수정할 수 있는 권한을 갖습니다."
-        say_user "  이 설정이 활성화되면 더 이상 tabyBot가 격리 상태가 아니게 됩니다."
-        say_user "  연결된 폴더의 파일을 파괴, 유출할 가능성이 존재합니다."
-        prompt_yes_no "그래도 연결하시겠습니까?" n || return 0
-    else
-        say_user "Host folder mount (optional)"
-        say_user "  Default work stays in /app/user inside the container."
-        say_user "  If enabled, a PC folder is mounted at /workspace (use only when needed)."
-        prompt_yes_no "Connect a host folder?" n || return 0
-        say_user ""
-        say_user "⚠ Warning: The agent will be able to modify files in the mounted folder."
-        say_user "  Enabling this ends tabyBot's isolation from your host."
-        say_user "  Connected files may be destroyed or leaked."
-        prompt_yes_no "Continue anyway?" n || return 0
-    fi
-
-    while true; do
-        if is_ko; then
-            read_user_line reply "절대 경로 (예: ${HOME}/my-project): " || return 0
-        else
-            read_user_line reply "Absolute path (e.g. ${HOME}/my-project): " || return 0
-        fi
-        path="$(expand_user_path "${reply}")"
-        [ -n "${path}" ] || continue
-        case "${path}" in
-            /*) ;;
-            *)
-                if is_ko; then say_user "절대 경로를 입력하세요."; else say_user "Enter an absolute path."; fi
-                continue
-                ;;
-        esac
-        if [ ! -d "${path}" ]; then
-            if is_ko; then say_user "폴더가 없습니다: ${path}"; else say_user "Folder does not exist: ${path}"; fi
-            continue
-        fi
-        break
-    done
-
-    HOST_WORKSPACE="${path}"
-    export HOST_WORKSPACE
-}
-
-resolve_host_workspace() {
-    local updating="$1" mode="${2:-docker}"
-
-    if [ "${updating}" = true ]; then
-        HOST_WORKSPACE="$(read_env_host_workspace)"
-        if [ -n "${HOST_WORKSPACE:-}" ]; then
-            local expanded
-            expanded="$(expand_user_path "${HOST_WORKSPACE}")"
-            if [ -d "${expanded}" ]; then
-                HOST_WORKSPACE="${expanded}"
-            else
-                if is_ko; then echo "⚠ 작업 폴더가 없어 연결을 해제합니다: ${expanded}"
-                else echo "⚠ Workspace folder missing, clearing: ${expanded}"; fi
-                HOST_WORKSPACE=""
-            fi
-        fi
-        export HOST_WORKSPACE
-        return 0
-    fi
-
-    # First install: interactive prompt (default no). Ignore stray HOST_WORKSPACE in the shell.
-    if can_prompt_user; then
-        HOST_WORKSPACE=""
-        export HOST_WORKSPACE
-        prompt_host_workspace "${mode}"
-        return 0
-    fi
-
-    # Non-interactive first install.
-    if [ -n "${HOST_WORKSPACE:-}" ]; then
-        validate_host_workspace_path "$(expand_user_path "${HOST_WORKSPACE}")"
-        HOST_WORKSPACE="$(expand_user_path "${HOST_WORKSPACE}")"
-        export HOST_WORKSPACE
-    fi
-}
-
 
 write_compose() {
     local image="$1"
-    local workspace_volumes="" workspace_env="" install_dir_escaped ws_escaped
+    local install_dir_escaped
     install_dir_escaped="$(yaml_escape_double "${INSTALL_DIR}")"
-    if [ -n "${HOST_WORKSPACE:-}" ]; then
-        ws_escaped="$(yaml_escape_double "${HOST_WORKSPACE}")"
-        workspace_env=$'            WORKSPACE_ENABLED: "1"\n            WORKSPACE_DIR: /workspace\n            HOST_WORKSPACE: "'"${ws_escaped}"$'"\n'
-        workspace_volumes=$'            - "'"${ws_escaped}"$':/workspace"\n'
-    fi
     mkdir -p "${INSTALL_DIR}"
     cat >"${COMPOSE_FILE}" <<EOF
 services:
@@ -631,9 +497,9 @@ services:
             TABYBOT_MODE: docker
             TABYBOT_HOME: "${install_dir_escaped}"
             TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
-${workspace_env}        volumes:
+        volumes:
             - tabybot-user:/app/user
-${workspace_volumes}        restart: unless-stopped
+        restart: unless-stopped
         ports:
             - "\${TABYBOT_PORT:-8999}:8999"
 
@@ -667,7 +533,6 @@ write_local_version() {
 
 write_env() {
     local mode="${1:-docker}"
-    local workspace="${HOST_WORKSPACE:-}"
     local version=""
     local existing_web_token="" existing_port=""
     umask 077
@@ -706,13 +571,6 @@ write_env() {
                 printf 'TABYBOT_VERSION=%s\n' "${version}"
             fi
         fi
-        if [ -n "${workspace}" ]; then
-            write_env_quoted HOST_WORKSPACE "${workspace}"
-            printf 'WORKSPACE_ENABLED=1\n'
-            if [ "${mode}" = local ]; then
-                write_env_quoted WORKSPACE_DIR "${workspace}"
-            fi
-        fi
         if [ -n "${existing_web_token}" ]; then
             write_env_quoted TABYBOT_WEB_TOKEN "${existing_web_token}"
         fi
@@ -721,13 +579,6 @@ write_env() {
         fi
     } >"${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
-}
-
-read_env_host_workspace() {
-    [ -f "${ENV_FILE}" ] || return 0
-    # shellcheck disable=SC1090
-    . "${ENV_FILE}"
-    printf '%s' "${HOST_WORKSPACE:-}"
 }
 
 pull_image() {
@@ -861,536 +712,6 @@ install_local_deps() {
     fi
 }
 
-write_tabybot_cli() {
-    cat >"${TABYBOT_CLI}" <<'EOF'
-#!/usr/bin/env bash
-# tabyBot CLI — manage an installed instance (~/.tabybot)
-set -euo pipefail
-
-resolve_install_dir() {
-    local source="${BASH_SOURCE[0]:-$0}"
-    while [ -L "${source}" ]; do
-        local dir target
-        dir="$(cd "$(dirname "${source}")" && pwd)"
-        target="$(readlink "${source}")"
-        case "${target}" in
-            /*) source="${target}" ;;
-            *) source="${dir}/${target}" ;;
-        esac
-    done
-    cd "$(dirname "${source}")" && pwd
-}
-
-INSTALL_DIR="$(resolve_install_dir)"
-ENV_FILE="${INSTALL_DIR}/.env"
-COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
-USER_BIN="${HOME}/.local/bin/tabybot"
-LAUNCHD_LABEL="io.tabybot"
-APP_DIR="${INSTALL_DIR}/app"
-LOG_DIR="${INSTALL_DIR}/logs"
-
-load_env() {
-    # shellcheck disable=SC1091
-    [ -f "${ENV_FILE}" ] && set -a && . "${ENV_FILE}" && set +a
-    export TABYBOT_HOME="${TABYBOT_HOME:-${INSTALL_DIR}}"
-    export APP_ROOT="${APP_ROOT:-${INSTALL_DIR}/app}"
-    export USER_DIR="${USER_DIR:-${INSTALL_DIR}/user}"
-    export CODES_DIR="${CODES_DIR:-${APP_ROOT}/codes}"
-    export CONFIG_DIR="${CONFIG_DIR:-${APP_ROOT}/codes/config}"
-}
-
-resolve_node() {
-    local candidate
-    if [ -n "${TABYBOT_NODE:-}" ] && [ -x "${TABYBOT_NODE}" ]; then
-        printf '%s' "${TABYBOT_NODE}"
-        return 0
-    fi
-    for candidate in /opt/homebrew/bin/node /usr/local/bin/node "$(command -v node 2>/dev/null || true)"; do
-        [ -n "${candidate}" ] && [ -x "${candidate}" ] && printf '%s' "${candidate}" && return 0
-    done
-    return 1
-}
-
-require_node() {
-    load_env
-    NODE_BIN="$(resolve_node)" || {
-        if is_ko; then echo "node를 찾을 수 없습니다. ${ENV_FILE} 에 TABYBOT_NODE 를 설정하거나 설치를 다시 실행하세요." >&2
-        else echo "node not found — set TABYBOT_NODE in ${ENV_FILE} or re-run the installer." >&2; fi
-        exit 1
-    }
-    INDEX_JS="${APP_ROOT}/codes/index.js"
-    INDEX_PATTERN="$(regex_escape "${INDEX_JS}")"
-}
-
-resolve_lang() {
-    local lang="${TABYBOT_LANG:-}"
-    if [ -z "${lang}" ]; then
-        case "${LANG:-${LC_ALL:-}}" in
-            ko*|KO*) lang=ko ;;
-            *) lang=en ;;
-        esac
-    fi
-    case "${lang}" in
-        ko|ko_KR|korean) printf ko ;;
-        *) printf en ;;
-    esac
-}
-
-is_ko() {
-    [ "$(resolve_lang)" = ko ]
-}
-
-strip_env_scalar() {
-    local value="$1"
-    value="${value#"${value%%[![:space:]]*}"}"
-    value="${value%"${value##*[![:space:]]}"}"
-    if [ "${value#\"}" != "${value}" ] && [ "${value%\"}" != "${value}" ]; then
-        value="${value#\"}"
-        value="${value%\"}"
-    elif [ "${value#\'}" != "${value}" ] && [ "${value%\'}" != "${value}" ]; then
-        value="${value#\'}"
-        value="${value%\'}"
-    fi
-    printf '%s' "${value}"
-}
-
-read_install_mode() {
-    load_env
-    if [ -f "${ENV_FILE}" ]; then
-        local mode
-        mode="$(grep '^TABYBOT_MODE=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
-        mode="$(strip_env_scalar "${mode}" | tr '[:upper:]' '[:lower:]')"
-        case "${mode}" in
-            docker|local) printf '%s' "${mode}"; return 0 ;;
-        esac
-    fi
-    if [ -f "${COMPOSE_FILE}" ]; then
-        printf docker
-        return 0
-    fi
-    if [ -d "${APP_DIR}/codes" ]; then
-        printf local
-        return 0
-    fi
-    return 1
-}
-
-docker_daemon_ok() {
-    local shell="${TABYBOT_DOCKER_SHELL:-docker}"
-    if ${shell} info >/dev/null 2>&1; then
-        return 0
-    fi
-    return 1
-}
-
-compose_cmd() {
-    local shell="${TABYBOT_DOCKER_SHELL:-docker}"
-    if ${shell} compose version >/dev/null 2>&1; then
-        printf '%s compose' "${shell}"
-    elif command -v docker-compose >/dev/null 2>&1; then
-        [ "${shell}" = "sudo docker" ] && printf 'sudo docker-compose' || printf 'docker-compose'
-    else
-        return 1
-    fi
-}
-
-regex_escape() {
-    printf '%s' "$1" | sed 's/[][\\.*^$()+?{|}]/\\&/g'
-}
-
-print_help() {
-    if is_ko; then
-        cat <<'TAA_HELP_KO'
-tabyBot 명령줄 도구
-
-사용법: tabybot <명령> [인자]
-
-명령:
-  start              백그라운드에서 시작
-  stop               중지
-  restart            재시작
-  status             실행 상태 확인
-  logs               로그 보기 (실시간)
-  foreground         포그라운드 실행 (디버그)
-  uninstall          tabyBot 제거
-  help               이 도움말
-
-설치/업데이트:
-  curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
-
-제거 시 사용자 데이터도 삭제: tabybot uninstall --purge
-TAA_HELP_KO
-    else
-        cat <<'TAA_HELP_EN'
-tabyBot command-line tool
-
-Usage: tabybot <command> [args]
-
-Commands:
-  start              Start in the background
-  stop               Stop the agent
-  restart            Restart the agent
-  status             Show running status
-  logs               Tail logs (follow)
-  foreground         Run in foreground (debug)
-  uninstall          Remove tabyBot from this machine
-  help               Show this help
-
-Install/update:
-  curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
-
-Remove user data too: tabybot uninstall --purge
-TAA_HELP_EN
-    fi
-}
-
-not_installed_message() {
-    local url="https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh"
-    if is_ko; then
-        echo "tabyBot가 설치되어 있지 않습니다 (${INSTALL_DIR})." >&2
-        echo "설치: curl -fsSL ${url} | bash" >&2
-    else
-        echo "tabyBot is not installed (${INSTALL_DIR})." >&2
-        echo "Install: curl -fsSL ${url} | bash" >&2
-    fi
-}
-
-docker_service_start() {
-    local compose
-    compose="$(compose_cmd)" || {
-        if is_ko; then echo "Docker Compose를 찾을 수 없습니다." >&2; else echo "Docker Compose not found." >&2; fi
-        return 1
-    }
-    docker_daemon_ok || {
-        if is_ko; then echo "Docker가 실행 중이 아닙니다." >&2; else echo "Docker is not running." >&2; fi
-        return 1
-    }
-    (cd "${INSTALL_DIR}" && ${compose} -f "${COMPOSE_FILE}" up -d)
-}
-
-docker_service_stop() {
-    local compose
-    [ -f "${COMPOSE_FILE}" ] || return 0
-    docker_daemon_ok || return 0
-    compose="$(compose_cmd)" || return 0
-    (cd "${INSTALL_DIR}" && ${compose} -f "${COMPOSE_FILE}" down 2>/dev/null) || true
-}
-
-docker_service_status() {
-    local shell="${TABYBOT_DOCKER_SHELL:-docker}"
-    if docker_daemon_ok && ${shell} ps --filter name=tabybot --format '{{.Names}}' 2>/dev/null | grep -qx tabybot; then
-        if is_ko; then echo "실행 중 (Docker 컨테이너 tabybot)"; else echo "running (Docker container tabybot)"; fi
-        return 0
-    fi
-    if is_ko; then echo "실행 중 아님"; else echo "not running"; fi
-    return 1
-}
-
-stop_local_runtime() {
-    local index_pattern
-    index_pattern="$(regex_escape "${APP_DIR}/codes/index.js")"
-    case "$(uname -s)" in
-        Darwin)
-            launchctl bootout "gui/$(id -u)/${LAUNCHD_LABEL}" 2>/dev/null || true
-            ;;
-        Linux)
-            systemctl --user stop tabybot.service 2>/dev/null || true
-            ;;
-    esac
-    pkill -f "${index_pattern}" 2>/dev/null || true
-}
-
-local_service_start() {
-    case "$(uname -s)" in
-        Darwin)
-            if launchctl print "gui/$(id -u)/${LAUNCHD_LABEL}" >/dev/null 2>&1; then
-                launchctl kickstart -k "gui/$(id -u)/${LAUNCHD_LABEL}"
-            else
-                launchctl bootstrap "gui/$(id -u)" "${HOME}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist" \
-                    || launchctl load "${HOME}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"
-            fi
-            ;;
-        Linux)
-            systemctl --user start tabybot.service
-            ;;
-        *)
-            if is_ko; then echo "백그라운드 서비스를 지원하지 않는 OS입니다." >&2
-            else echo "Unsupported OS for background service." >&2; fi
-            return 1
-            ;;
-    esac
-}
-
-local_service_status() {
-    require_node
-    if pgrep -f "${INDEX_PATTERN}" >/dev/null 2>&1; then
-        if is_ko; then echo "실행 중 (pid $(pgrep -f "${INDEX_PATTERN}" | head -1))"; else echo "running (pid $(pgrep -f "${INDEX_PATTERN}" | head -1))"; fi
-        return 0
-    fi
-    if is_ko; then echo "실행 중 아님"; else echo "not running"; fi
-    return 1
-}
-
-run_local_command() {
-    local cmd="$1"
-    shift
-    case "${cmd}" in
-        daemon|foreground|run)
-            require_node
-            exec "${NODE_BIN}" "${INDEX_JS}"
-            ;;
-        start)
-            local_service_start
-            local_service_status || true
-            ;;
-        stop)
-            stop_local_runtime
-            if is_ko; then echo "중지됨"; else echo "stopped"; fi
-            ;;
-        restart)
-            stop_local_runtime
-            sleep 1
-            local_service_start
-            local_service_status || true
-            ;;
-        status)
-            local_service_status
-            ;;
-        logs)
-            tail -n 80 -f "${LOG_DIR}/stderr.log" 2>/dev/null || tail -n 80 -f "${LOG_DIR}/stdout.log" 2>/dev/null || {
-                if is_ko; then echo "로그 없음"; else echo "no logs yet"; fi
-            }
-            ;;
-        *)
-            echo "Unknown command: ${cmd}" >&2
-            print_help >&2
-            exit 1
-            ;;
-    esac
-}
-
-uninstall_local_service() {
-    stop_local_runtime
-    case "$(uname -s)" in
-        Darwin)
-            rm -f "${HOME}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"
-            ;;
-        Linux)
-            if command -v systemctl >/dev/null 2>&1; then
-                systemctl --user disable --now tabybot.service 2>/dev/null || true
-                rm -f "${HOME}/.config/systemd/user/tabybot.service"
-                systemctl --user daemon-reload 2>/dev/null || true
-            fi
-            ;;
-    esac
-}
-
-confirm_uninstall() {
-    local purge="$1" reply
-    if [ "${TABYBOT_UNINSTALL_YES:-}" = "1" ]; then
-        return 0
-    fi
-    if is_ko; then
-        echo "tabyBot를 제거합니다: ${INSTALL_DIR}"
-        [ "${purge}" = true ] && echo "  (--purge: Docker 볼륨·로컬 user 데이터도 삭제)"
-        printf "계속할까요? [y/N] "
-    else
-        echo "This will remove tabyBot from: ${INSTALL_DIR}"
-        [ "${purge}" = true ] && echo "  (--purge: also deletes Docker volume and local user data)"
-        printf "Continue? [y/N] "
-    fi
-    if [ -r /dev/tty ] 2>/dev/null; then
-        IFS= read -r reply </dev/tty
-    elif [ -t 0 ]; then
-        IFS= read -r reply
-    else
-        if is_ko; then echo "비대화형 환경입니다. TABYBOT_UNINSTALL_YES=1 을 설정하세요." >&2
-        else echo "Non-interactive shell. Set TABYBOT_UNINSTALL_YES=1 to confirm." >&2; fi
-        return 1
-    fi
-    reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
-    [ "${reply}" = y ] || [ "${reply}" = yes ]
-}
-
-do_uninstall() {
-    local purge=false arg
-    shift
-    while [ $# -gt 0 ]; do
-        arg="$1"
-        shift
-        case "${arg}" in
-            --purge|-p) purge=true ;;
-            -h|--help)
-                if is_ko; then
-                    echo "사용법: tabybot uninstall [--purge]"
-                    echo "  --purge  Docker 볼륨·로컬 user/ 폴더까지 삭제"
-                else
-                    echo "Usage: tabybot uninstall [--purge]"
-                    echo "  --purge  Also remove Docker volume and local user/ data"
-                fi
-                exit 0
-                ;;
-            *)
-                echo "Unknown option: ${arg}" >&2
-                exit 1
-                ;;
-        esac
-    done
-
-    read_install_mode >/dev/null 2>&1 || {
-        rm -f "${USER_BIN}" 2>/dev/null || true
-        not_installed_message
-        exit 1
-    }
-
-    confirm_uninstall "${purge}" || {
-        if is_ko; then echo "취소됨."; else echo "Cancelled."; fi
-        exit 0
-    }
-
-    local mode
-    mode="$(read_install_mode)"
-
-    if [ "${mode}" = docker ]; then
-        if [ "${purge}" = true ]; then
-            local compose
-            compose="$(compose_cmd)" || true
-            if [ -n "${compose:-}" ] && docker_daemon_ok; then
-                (cd "${INSTALL_DIR}" && ${compose} -f "${COMPOSE_FILE}" down -v 2>/dev/null) || true
-            fi
-        else
-            docker_service_stop
-        fi
-    else
-        uninstall_local_service
-    fi
-
-    rm -f "${USER_BIN}" 2>/dev/null || true
-    local dir="${INSTALL_DIR}"
-    if [ "${purge}" = true ] && [ "${mode}" = local ] && [ -d "${INSTALL_DIR}/user" ]; then
-        rm -rf "${INSTALL_DIR}/user"
-    fi
-    (
-        sleep 0.3
-        rm -rf "${dir}"
-    ) &
-
-    if is_ko; then
-        echo "제거 완료."
-        [ "${purge}" != true ] && [ "${mode}" = docker ] && echo "  (Docker 사용자 데이터 볼륨은 남아 있을 수 있습니다. 완전 삭제: tabybot uninstall --purge)"
-    else
-        echo "Uninstall complete."
-        [ "${purge}" != true ] && [ "${mode}" = docker ] && echo "  (Docker user-data volume may remain. Full removal: tabybot uninstall --purge)"
-    fi
-}
-
-run_docker_command() {
-    local cmd="$1"
-    shift
-    local compose
-    compose="$(compose_cmd)" || {
-        if is_ko; then echo "Docker Compose를 찾을 수 없습니다." >&2; else echo "Docker Compose not found." >&2; fi
-        exit 1
-    }
-    case "${cmd}" in
-        start)
-            docker_service_start
-            docker_service_status || true
-            ;;
-        stop)
-            docker_service_stop
-            if is_ko; then echo "중지됨"; else echo "stopped"; fi
-            ;;
-        restart)
-            docker_service_stop
-            sleep 1
-            docker_service_start
-            docker_service_status || true
-            ;;
-        status)
-            docker_service_status
-            ;;
-        logs)
-            docker_daemon_ok || exit 1
-            ${compose} -f "${COMPOSE_FILE}" logs -f --tail=80 tabybot
-            ;;
-        foreground|run)
-            docker_daemon_ok || exit 1
-            exec ${compose} -f "${COMPOSE_FILE}" up
-            ;;
-        *)
-            echo "Unknown command: ${cmd}" >&2
-            print_help >&2
-            exit 1
-            ;;
-    esac
-}
-
-main() {
-    local command="${1:-help}"
-
-    case "${command}" in
-        help|-h|--help)
-            print_help
-            exit 0
-            ;;
-        uninstall)
-            do_uninstall "$@"
-            exit 0
-            ;;
-    esac
-
-    if ! read_install_mode >/dev/null 2>&1; then
-        not_installed_message
-        exit 1
-    fi
-
-    local mode
-    mode="$(read_install_mode)"
-
-    if [ "${mode}" = local ]; then
-        run_local_command "${command}" "$@"
-        exit 0
-    fi
-
-    run_docker_command "${command}" "$@"
-}
-
-main "$@"
-EOF
-    chmod +x "${TABYBOT_CLI}"
-}
-
-install_tabybot_cli() {
-    mkdir -p "${USER_BIN}"
-    ln -sf "${TABYBOT_CLI}" "${USER_BIN}/tabybot"
-    case ":${PATH}:" in
-        *":${USER_BIN}:"*) ;;
-        *)
-            if is_ko; then
-                echo "  PATH에 ${USER_BIN} 추가: export PATH=\"${USER_BIN}:\$PATH\""
-            else
-                echo "  Add ${USER_BIN} to PATH: export PATH=\"${USER_BIN}:\$PATH\""
-            fi
-            ;;
-    esac
-}
-
-print_manage_hints() {
-    echo ""
-    if is_ko; then
-        echo "관리 명령 (터미널을 닫아도 백그라운드에서 실행):"
-        echo "  tabybot status|stop|restart|logs|help"
-        echo "  tabybot uninstall"
-        echo "  (디버그: tabybot foreground)"
-    else
-        echo "Manage (runs in background — safe to close the terminal):"
-        echo "  tabybot status|stop|restart|logs|help"
-        echo "  tabybot uninstall"
-        echo "  (Debug: tabybot foreground)"
-    fi
-}
-
 install_launchd_service() {
     local plist="${HOME}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"
     local node_bin
@@ -1405,8 +726,13 @@ install_launchd_service() {
     <string>${LAUNCHD_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${TABYBOT_CLI}</string>
-        <string>daemon</string>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>set -a; . "$1"; exec "$2" "$3"</string>
+        <string>tabybot</string>
+        <string>${ENV_FILE}</string>
+        <string>${node_bin}</string>
+        <string>${APP_DIR}/codes/index.js</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -1440,15 +766,14 @@ install_systemd_user_service() {
     local unit_dir="${HOME}/.config/systemd/user"
     local unit_file="${unit_dir}/tabybot.service"
     local env_file_line="EnvironmentFile=${ENV_FILE}"
-    local exec_start_line="ExecStart=${TABYBOT_CLI} daemon"
+    local node_bin="$(resolve_node_bin)"
+    local exec_start_line="ExecStart=${node_bin} ${APP_DIR}/codes/index.js"
     local workdir_line="WorkingDirectory=${APP_DIR}"
     if [[ "${ENV_FILE}" == *" "* ]]; then
         env_file_line="EnvironmentFile=\"${ENV_FILE}\""
     fi
-    if [[ "${TABYBOT_CLI}" == *" "* ]]; then
-        exec_start_line="ExecStart=\"${TABYBOT_CLI}\" daemon"
-    fi
     if [[ "${APP_DIR}" == *" "* ]]; then
+        exec_start_line="ExecStart=${node_bin} \"${APP_DIR}/codes/index.js\""
         workdir_line="WorkingDirectory=\"${APP_DIR}\""
     fi
     mkdir -p "${unit_dir}" "${INSTALL_DIR}/logs"
@@ -1486,10 +811,6 @@ install_local_service() {
     esac
 }
 
-print_local_service_hints() {
-    print_manage_hints
-}
-
 install_local() {
     local updating="$1"
 
@@ -1497,18 +818,14 @@ install_local() {
     mkdir -p "${INSTALL_DIR}" "${USER_DATA_DIR}"
     stop_local_runtime
     stop_docker_runtime
-    resolve_host_workspace "${updating}" local
     update_local_source
     write_local_version
     install_local_deps
-    write_tabybot_cli
-    install_tabybot_cli
     write_env local
     if is_ko; then echo "==> 실행 중..."; else echo "==> Starting..."; fi
     install_local_service
     ensure_systemd_linger
     verify_install local || true
-    print_local_service_hints
 }
 
 deploy_tabybot_docker() {
@@ -1517,17 +834,13 @@ deploy_tabybot_docker() {
     stop_local_runtime
     ensure_docker
     compose="$(compose_cmd)"
-    resolve_host_workspace "${updating}" docker
     write_compose "${image}"
-    write_tabybot_cli
-    install_tabybot_cli
     write_env docker
     cd "${INSTALL_DIR}"
     pull_image "${compose}" "${image}"
     if is_ko; then echo "==> 실행 중..."; else echo "==> Starting..."; fi
     ${compose} -f "${COMPOSE_FILE}" up -d
     verify_install docker || true
-    print_manage_hints
 }
 
 main() {

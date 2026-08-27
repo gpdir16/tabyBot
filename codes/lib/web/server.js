@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
-import { CODES_DIR, isWorkspaceEnabled } from "../paths.js";
+import { CODES_DIR } from "../paths.js";
 import { isDockerRuntime } from "../runtime.js";
 import { loadUserConfig, saveUserConfig, getMergedProvider, loadProviderConfig } from "../config-loader.js";
 import { isConfigReady } from "../onboarding.js";
@@ -191,7 +191,6 @@ export function startWebServer() {
         ctx.json200({
             version: getRunningVersion() || process.env.TABYBOT_VERSION || "dev",
             dockerRuntime: isDockerRuntime(),
-            workspaceEnabled: isWorkspaceEnabled(),
             configured: isConfigReady(),
             language: config.language || "en",
             agentName: firstAgent()?.name || DEFAULT_AGENT_NAME,

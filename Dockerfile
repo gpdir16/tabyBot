@@ -9,7 +9,6 @@ ENV TABYBOT_MODE=docker
 RUN printf '%s\n' "${TABYBOT_VERSION}" > /app/VERSION
 LABEL org.opencontainers.image.version="${TABYBOT_VERSION}"
 ENV USER_DIR=/app/user
-ENV WORKSPACE_DIR=/workspace
 ENV APP_ROOT=/app
 EXPOSE 8999
 ENV CODES_DIR=/app/codes
@@ -52,7 +51,7 @@ RUN chmod +x /app/codes/skills/browser-use/install-stealth.sh \
     && /app/codes/skills/browser-use/install-stealth.sh
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh codes/cli.js
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["start"]

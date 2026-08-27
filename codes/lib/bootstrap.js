@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { USER_DIR, TEMPLATES_USER_DIR, AGENTS_SKILLS_LINK, WORKSPACE_DIR, isWorkspaceEnabled } from "./paths.js";
-import { isDockerRuntime, shouldLinkAgentsSkillsDir } from "./runtime.js";
+import { USER_DIR, TEMPLATES_USER_DIR, AGENTS_SKILLS_LINK } from "./paths.js";
+import { shouldLinkAgentsSkillsDir } from "./runtime.js";
 function copyDirRecursive(src, dest) {
     fs.mkdirSync(dest, { recursive: true });
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -70,12 +70,4 @@ export function ensureUserDir() {
     }
 
     linkAgentsSkillsDir(path.join(USER_DIR, "skills"));
-
-    if (isWorkspaceEnabled()) {
-        if (isDockerRuntime()) {
-            console.log(`tabyBot: host workspace mounted at ${WORKSPACE_DIR}`);
-        } else {
-            console.log(`tabyBot: project workspace enabled at ${WORKSPACE_DIR}`);
-        }
-    }
 }
