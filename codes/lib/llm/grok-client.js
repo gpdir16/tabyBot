@@ -195,8 +195,9 @@ export async function grokComplete({
     const headers = buildHeaders(accessToken);
     const payload = buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
 
-    const includeTools = Boolean(tools?.length) && tool_choice !== "none";
-    const useStream = Boolean(stream && onTextDelta && !includeTools);
+    // 스트리밍 중에도 function_call 이벤트를 조립할 수 있으므로 툴 라운드에서도 스트리밍한다.
+    // 비활성화하면 중간 라운드 텍스트가 프론트엔드에 도달하지 않는다.
+    const useStream = Boolean(stream && onTextDelta);
     const requestOptions = { method: "POST", headers, signal };
 
     if (useStream) {

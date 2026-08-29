@@ -532,12 +532,15 @@
         for (const turn of c.turns) {
             for (const m of turn.messages) flat.push({ m, stats: turn.stats });
         }
+        // 서버 히스토리의 role:"tool" 메시지(JSON 원문)는 화면에 버블로 그리지 않는다.
+        // 라이브에서는 툴 카드로 표시되므로 새로고침 화면과의 일관성을 위해 제외.
+        const visible = flat.filter((f) => f.m.role !== "tool");
         let lastA = -1;
-        flat.forEach((f, i) => {
+        visible.forEach((f, i) => {
             if (f.m.role === "assistant") lastA = i;
         });
 
-        flat.forEach((f, i) => {
+        visible.forEach((f, i) => {
             let el;
             if (f.m.role === "user") {
                 el = buildUserMessage(f.m.isParts ? t("imagePlaceholder") : f.m.content || "", f.m.imageUrl, false, f.m.attachments);
@@ -582,11 +585,12 @@
         const detailEl = T.h("span", { class: "gen-detail hidden" });
         const elapsedEl = T.h("span", { class: "gen-elapsed hidden" });
         const statusEl = T.h("div", { class: "gen-label is-idle" }, [shimmerEl, detailEl, elapsedEl]);
+        const interEl = T.h("div", { class: "live-inter hidden" });
         const toolsEl = T.h("div", { class: "tool-stack hidden" });
         const asksEl = T.h("div", { class: "asks hidden" });
         const textEl = T.h("div", { class: "md empty streaming" });
         const bubble = T.h("div", { class: "bubble" }, [statusEl, textEl]);
-        root.append(T.h("div", { class: "msg-stack" }, [toolsEl, asksEl, bubble]));
+        root.append(T.h("div", { class: "msg-stack" }, [interEl, toolsEl, asksEl, bubble]));
         thread.append(root);
         liveEls = {
             root,
@@ -598,7 +602,9 @@
             toolsEl,
             asksEl,
             textEl,
+            interEl,
             toolN: -1,
+            interN: -1,
             askSig: "",
             textSig: null,
             labelKey: null,
@@ -633,6 +639,13 @@
                 liveEls.elapsedEl.textContent = "";
                 liveEls.elapsedEl.classList.add("hidden");
             }
+        }
+
+        // 중간 라운드 텍스트(툴 호출 전 코멘트) — 새로고침 시 히스토리에 남는 것과 동일하게 표시
+        if (live.intermediate.length !== liveEls.interN) {
+            liveEls.interN = live.intermediate.length;
+            liveEls.interEl.replaceChildren(...live.intermediate.map((t) => T.h("div", { class: "bubble inter" }, [T.md.render(t)])));
+            liveEls.interEl.classList.toggle("hidden", !live.intermediate.length);
         }
 
         // 도구 카드

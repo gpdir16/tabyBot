@@ -734,6 +734,16 @@ kbd {
 .msg-stack .bubble {
     max-width: 100%;
 }
+/* 라이브 중간 과정 버블(툴 호출 전 코멘트) */
+.live-inter {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-2);
+}
+.live-inter .bubble {
+    background: var(--surface-2);
+}
 .bubble.tall {
     border-radius: var(--radius-l);
 }

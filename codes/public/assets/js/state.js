@@ -142,7 +142,7 @@
 
     /* ── SSE 이벤트 반영(mutator) ──────────────────────────── */
     function freshLive() {
-        return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [] };
+        return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [] };
     }
 
     // live가 시작되는 전환 지점에서만 "live"를 방출한다(컴포저 정지 버튼 등이 구독).
@@ -158,6 +158,12 @@
     function applyStatus(id, phase, detail, elapsedMs) {
         const c = ensureLive(id);
         if (phase) c.live.phase = phase;
+        // 새 라운드(툴 실행) 진입 시점에 이전 라운드 텍스트를 중간 과정 버블로 굳힌다.
+        // 새로고침 시 서버 히스토리에 남는 중간 assistant 메시지와 동일하게 보이도록 한다.
+        if (phase === "tools" && c.live.text.trim()) {
+            c.live.intermediate.push(c.live.text);
+            c.live.text = "";
+        }
         c.live.detail = detail || "";
         c.live.elapsedMs = elapsedMs != null ? elapsedMs : c.live.elapsedMs;
         emit("status", { id });
@@ -250,18 +256,23 @@
         const c = conv(id);
         const hadLive = !!c.live;
         const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
+        // 중간 과정 텍스트(툴 호출 전 코멘트)도 턴에 함께 남긴다.
+        // 서버 히스토리(새로고침 시 표시)와 동일하게 유지하기 위함.
+        const inter = ((c.live && c.live.intermediate) || [])
+            .map((t) => ({ role: "assistant", content: t }))
+            .filter((m) => m.content && m.content.trim());
         c.live = null;
         // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
         // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
         const finalText = String(text || fallback || "");
-        if (finalText) {
+        if (finalText || inter.length) {
             const last = c.turns[c.turns.length - 1];
             const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
             const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === finalText;
             if (!already) {
                 c.turns.push({
                     at: new Date().toISOString(),
-                    messages: [{ role: "assistant", content: finalText }],
+                    messages: [...inter, ...(finalText ? [{ role: "assistant", content: finalText }] : [])],
                     stats: stats || null,
                 });
             }
