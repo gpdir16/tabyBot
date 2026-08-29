@@ -26,16 +26,6 @@
         // 토글 아이콘: 다크에서는 sun(라이트로 전환), 라이트에서는 moon
         const use = document.querySelector("#themeIcon use");
         if (use) use.setAttribute("href", v === "dark" ? "#i-sun" : "#i-moon");
-        const themeBtns = document.querySelectorAll(".seg-btn");
-        themeBtns.forEach((button) => {
-            if (
-                !["dark", "light"].includes(button.textContent.trim().toLowerCase()) &&
-                button.textContent !== t("dark") &&
-                button.textContent !== t("light")
-            )
-                return;
-            button.setAttribute("aria-pressed", String(button.textContent === t(v)));
-        });
     }
 
     function storedTheme() {
@@ -87,14 +77,30 @@
         };
     }
 
-    // 1회성 파라미터 적용 후 주소를 깔끔한 /a/<uuid>로 정리
+    function hasSavedProviderSetup(settings) {
+        const provider = settings?.provider || {};
+        const defaultPreset = settings?.providers?.find((p) => p.id === "default");
+        const customBaseURL = provider.id === "default" && provider.baseURL && provider.baseURL !== defaultPreset?.baseURL;
+        return (
+            Boolean(provider.id && provider.id !== "default") ||
+            Boolean(provider.model?.trim()) ||
+            Boolean(provider.apiKeySet) ||
+            Boolean(customBaseURL)
+        );
+    }
+
+    // 1회성 q/m만 제거하고 설정 팝업의 동적 URL은 유지한다.
     function consumeParams(p) {
         if (p.q) T.composer.setValue(p.q);
         if (p.settings) {
             const agentId = p.bot && state.state.bots.some((b) => b.id === p.bot) ? p.bot : undefined;
-            T.settingsUI.open({ tab: p.tab || "general", agentId });
+            T.settingsUI.open({ tab: p.tab || "general", agentId, fromUrl: true });
         }
-        history.replaceState(null, "", location.pathname);
+        const params = new URLSearchParams(location.search);
+        params.delete("q");
+        params.delete("m");
+        const query = params.toString();
+        history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
     }
 
     async function boot() {
@@ -154,7 +160,18 @@
             T.events.connect();
             T.onboarding.dismiss();
 
-            if (bs.configured === false) T.onboarding.wizard();
+            if (bs.configured === false) {
+                // 사용자가 설정 URL로 직접 들어온 경우에는 온보딩이 설정창을 가리지 않게 한다.
+                const requested = urlParams();
+                const requestedAgent = requested.bot && bots.some((b) => b.id === requested.bot) ? requested.bot : undefined;
+                if (requested.settings) {
+                    if (!T.settingsUI.isOpen()) T.settingsUI.open({ tab: requested.tab || "general", agentId: requestedAgent, fromUrl: true });
+                } else if (hasSavedProviderSetup(state.state.settings)) {
+                    T.settingsUI.open({ tab: "provider" });
+                } else {
+                    T.onboarding.wizard();
+                }
+            }
         } catch (e) {
             if (token !== bootToken) return;
             if (e instanceof T.api.ApiError && e.status === 401) {
@@ -168,9 +185,17 @@
     // 뒤/앞 탐색: 경로의 봇 스레드로 복원
     window.addEventListener("popstate", () => {
         if (!booted) return;
+        const p = urlParams();
+        if (p.settings) {
+            const agentId = p.bot && state.state.bots.some((b) => b.id === p.bot) ? p.bot : undefined;
+            if (!T.settingsUI.isOpen()) T.settingsUI.open({ tab: p.tab || "general", agentId, fromUrl: true });
+        } else if (T.settingsUI.isOpen()) {
+            T.settingsUI.close({ updateUrl: false });
+        }
+
         const uuid = botUuidFromPath();
         const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
-        if (bot) T.chat.open(bot.threadId, { replaceState: true });
+        if (bot && bot.threadId !== state.state.currentId) T.chat.open(bot.threadId, { replaceState: true });
     });
 
     // "/" → 컴포저 포커스. 입력 요소 내부에서는 무시.

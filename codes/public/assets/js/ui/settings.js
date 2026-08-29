@@ -1,5 +1,5 @@
-/* tabyBot 웹 클라이언트 — 설정 시트.
-   우측 슬라이드 시트(420px, Esc 닫기). 탭: 일반/모델/에이전트.
+/* tabyBot 웹 클라이언트 — 설정 팝업.
+   동적 URL(?settings=1&tab=&bot=)로 현재 화면을 공유/복원한다.
    변경은 즉시 PUT(낙관적 반영 + 실패 시 롤백 + 토스트).
    provider.apiKey는 쓰기 전용 — 응답에 절대 포함되지 않는다. */
 (function (T) {
@@ -12,40 +12,74 @@
     const scrim = document.getElementById("sheetScrim");
 
     let openTab = null;
-    let editingAgent = null; // 에이전트 탭에서 펼친 항목 id ('__new__' = 추가)
+    let editingAgent = null; // 에이전트 페이지 id ('__new__' = 추가)
     let armDelete = null; // 삭제 확인 2단계 버튼 상태
-    let modelsCache = null; // 마지막 models/fetch 결과
+    let modelsCache = null; // { key, models }
     let modelsLoading = false;
-    let modelsError = false;
+    let modelsFailedKey = null;
+    let modelsReq = 0;
     let modelFilter = "";
+    let providerChoice = null;
     let lastFocused = null;
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
+    let putChain = Promise.resolve();
 
-    /* ── 열기/닫기 ──────────────────────────────────────────── */
+    /* ── URL / 열기 / 닫기 ──────────────────────────────────── */
+    function syncUrl({ open: isOpen, tab, agentId, replace = false }) {
+        try {
+            const url = new URL(location.href);
+            if (isOpen) {
+                url.searchParams.set("settings", "1");
+                url.searchParams.set("tab", tab || "general");
+                if (agentId && agentId !== "__new__") url.searchParams.set("bot", agentId);
+                else url.searchParams.delete("bot");
+            } else {
+                url.searchParams.delete("settings");
+                url.searchParams.delete("tab");
+                url.searchParams.delete("bot");
+            }
+            const next = url.pathname + (url.search ? url.search : "") + (url.hash ? url.hash : "");
+            history[replace ? "replaceState" : "pushState"](null, "", next);
+        } catch (_) {}
+    }
+
     function open(opt) {
         // open({tab, agentId}) 또는 open("model") 형태 모두 지원
         const o = typeof opt === "object" && opt ? opt : { tab: opt };
         if (document.activeElement instanceof HTMLElement) lastFocused = document.activeElement;
-        openTab = o.tab || "general";
-        editingAgent = o.agentId != null && o.agentId !== "" ? o.agentId : null;
+        providerChoice = null;
+        if (o.agentId != null && o.agentId !== "" && (!o.tab || o.tab === "agents")) {
+            openTab = "agents";
+            editingAgent = o.agentId;
+        } else if (["general", "provider", "model", "agents"].includes(o.tab)) {
+            openTab = o.tab;
+            editingAgent = o.tab === "agents" ? firstAgentId() || "__new__" : null;
+        } else {
+            openTab = "general";
+            editingAgent = null;
+        }
         armDelete = null;
+        syncUrl({ open: true, tab: openTab, agentId: editingAgent, replace: !!o.fromUrl });
         build();
         sheet.classList.add("open");
-        sheet.focus();
-        sheet.querySelector("input, textarea, select, button:not([disabled])")?.focus({ preventScroll: true });
         sheet.setAttribute("aria-hidden", "false");
         scrim.classList.add("open");
+        sheet.focus();
+        sheet.querySelector("input, textarea, select, button:not([disabled])")?.focus({ preventScroll: true });
     }
 
-    function close() {
+    function close(options) {
+        if (!options || options.updateUrl !== false) syncUrl({ open: false, replace: true });
         sheet.classList.remove("open");
         sheet.setAttribute("aria-hidden", "true");
         scrim.classList.remove("open");
         openTab = null;
         modelsCache = null;
-        modelsError = false;
         modelsLoading = false;
-        if (lastFocused instanceof HTMLElement) lastFocused.focus();
+        modelsFailedKey = null;
+        modelsReq++;
+        providerChoice = null;
+        if (lastFocused instanceof HTMLElement && document.contains(lastFocused)) lastFocused.focus();
         lastFocused = null;
         sheet.replaceChildren();
     }
@@ -59,18 +93,28 @@
         } catch (_) {}
     }
 
-    async function put(patch) {
-        const prev = state.state.settings;
-        state.mergeSettingsLocal(patch);
-        try {
-            const s = await T.api.putSettings(patch);
-            if (s) state.setSettings(s);
-            return true;
-        } catch (_) {
-            if (prev) state.setSettings(prev);
-            T.toast.show("error", t("saveFailed"));
-            return false;
-        }
+    function put(patch) {
+        const run = async () => {
+            const prev = state.state.settings;
+            const localPatch = patch && patch.provider && patch.provider.apiKey !== undefined ? { ...patch, provider: { ...patch.provider } } : patch;
+            if (localPatch?.provider && localPatch.provider.apiKey !== undefined) {
+                delete localPatch.provider.apiKey;
+                localPatch.provider.apiKeySet = true;
+            }
+            state.mergeSettingsLocal(localPatch);
+            try {
+                const s = await T.api.putSettings(patch);
+                if (s) state.setSettings(s);
+                return true;
+            } catch (_) {
+                if (prev) state.setSettings(prev);
+                T.toast.show("error", t("saveFailed"));
+                return false;
+            }
+        };
+        const result = putChain.then(run, run);
+        putChain = result.catch(() => {});
+        return result;
     }
 
     /* ── 프레임 ─────────────────────────────────────────────── */
@@ -78,27 +122,45 @@
         sheet.replaceChildren();
 
         const head = T.h("div", { class: "sheet-head" }, [
-            T.h("div", { class: "sheet-title", text: t("settings") }),
+            T.h("div", { id: "settingsTitle", class: "sheet-title", text: t("settings") }),
             T.h("button", { class: "btn-icon", "aria-label": t("cancel"), onclick: close }, [T.icon("x")]),
         ]);
 
-        const tabs = T.h("div", { class: "tabs", role: "tablist", "aria-label": t("settings") }, [
+        const agents = agentList();
+        const nav = T.h("nav", { class: "sheet-nav", role: "tablist", "aria-label": t("settings") }, [
             tabBtn("general", t("general")),
+            tabBtn("provider", t("provider")),
             tabBtn("model", t("model")),
-            tabBtn("agents", t("agents")),
+            T.h("hr", { class: "divider" }),
+            ...agents.map(agentNavBtn),
+            T.h("button", {
+                class: "sb-row" + (openTab === "agents" && editingAgent === "__new__" ? " active" : ""),
+                role: "tab",
+                "aria-selected": String(openTab === "agents" && editingAgent === "__new__"),
+                tabindex: openTab === "agents" && editingAgent === "__new__" ? "0" : "-1",
+                text: t("addAgent"),
+                onclick() {
+                    openTab = "agents";
+                    editingAgent = "__new__";
+                    armDelete = null;
+                    syncUrl({ open: true, tab: "agents", agentId: null, replace: true });
+                    build();
+                },
+            }),
         ]);
 
         const body = T.h("div", { class: "sheet-body" });
         if (openTab === "general") buildGeneral(body);
+        else if (openTab === "provider") buildProvider(body);
         else if (openTab === "model") buildModel(body);
         else buildAgents(body);
 
-        sheet.append(head, tabs, body);
+        sheet.append(head, T.h("div", { class: "sheet-main" }, [nav, body]));
     }
 
     function tabBtn(id, label) {
         return T.h("button", {
-            class: "tab" + (openTab === id ? " active" : ""),
+            class: "sb-row" + (openTab === id ? " active" : ""),
             role: "tab",
             "aria-selected": String(openTab === id),
             tabindex: openTab === id ? "0" : "-1",
@@ -107,6 +169,34 @@
                 openTab = id;
                 editingAgent = null;
                 armDelete = null;
+                syncUrl({ open: true, tab: openTab, agentId: null, replace: true });
+                build();
+            },
+        });
+    }
+
+    function agentList() {
+        const s = state.state.settings;
+        return state.state.bots?.length ? state.state.bots : (s && s.agents) || [];
+    }
+
+    function firstAgentId() {
+        return agentList()[0]?.id || null;
+    }
+
+    function agentNavBtn(agent) {
+        const active = openTab === "agents" && editingAgent === agent.id;
+        return T.h("button", {
+            class: "sb-row" + (active ? " active" : ""),
+            role: "tab",
+            "aria-selected": String(active),
+            tabindex: active ? "0" : "-1",
+            text: agent.name || "?",
+            onclick() {
+                openTab = "agents";
+                editingAgent = agent.id;
+                armDelete = null;
+                syncUrl({ open: true, tab: "agents", agentId: agent.id, replace: true });
                 build();
             },
         });
@@ -121,27 +211,22 @@
     }
 
     /* ── 공통 컴포넌트 ──────────────────────────────────────── */
-    function switchEl(checked, onChange) {
-        const input = T.h("input", { type: "checkbox" });
+    function switchEl(checked, onChange, label) {
+        const input = T.h("input", { type: "checkbox", "aria-label": label || "" });
         input.checked = !!checked;
         input.addEventListener("change", () => onChange(input.checked));
         return T.h("label", { class: "switch" }, [input, T.h("span", { class: "tr" }), T.h("span", { class: "kn" })]);
     }
 
-    function segmented(options, current, onPick) {
-        const box = T.h("div", { class: "segmented" });
+    function settingSelect(options, current, onPick, label) {
+        const select = T.h("select", { "aria-label": label || "" });
         for (const o of options) {
-            box.append(
-                T.h("button", {
-                    class: "seg-btn" + (o.value === current ? " active" : ""),
-                    text: o.label,
-                    onclick() {
-                        if (o.value !== current) onPick(o.value);
-                    },
-                }),
-            );
+            const option = T.h("option", { value: o.value, text: o.label });
+            option.selected = o.value === current;
+            select.append(option);
         }
-        return box;
+        select.addEventListener("change", () => onPick(select.value));
+        return T.h("div", { class: "select-wrap" }, [select, T.icon("chevron")]);
     }
 
     function fieldLabel(text) {
@@ -154,7 +239,7 @@
         const sec = T.h("div", { class: "set-section" });
 
         // 언어
-        const langSel = T.h("select", {});
+        const langSel = T.h("select", { "aria-label": t("language") });
         [
             ["en", "English"],
             ["ko", "한국어"],
@@ -186,7 +271,7 @@
         sec.append(
             T.h("div", { class: "set-row" }, [
                 T.h("div", { class: "set-label", text: t("theme") }),
-                segmented(
+                settingSelect(
                     [
                         { value: "dark", label: t("dark") },
                         { value: "light", label: t("light") },
@@ -194,8 +279,8 @@
                     curTheme,
                     (v) => {
                         if (T.app) T.app.applyTheme(v);
-                        build();
                     },
+                    t("theme"),
                 ),
             ]),
         );
@@ -205,11 +290,8 @@
         // 응답 통계 푸터
         sec.append(
             T.h("div", { class: "set-row" }, [
-                T.h("div", {}, [
-                    T.h("div", { class: "set-label", text: t("statsFooter") }),
-                    T.h("div", { class: "set-desc", text: t("statsFooterExample") }),
-                ]),
-                switchEl(s.showReplyFooter, (v) => put({ showReplyFooter: v })),
+                T.h("div", { class: "set-label", text: t("statsFooter") }),
+                switchEl(s.showReplyFooter, (v) => put({ showReplyFooter: v }), t("statsFooter")),
             ]),
         );
 
@@ -217,7 +299,7 @@
         sec.append(
             T.h("div", { class: "set-row" }, [
                 T.h("div", { class: "set-label", text: t("updateCheck") }),
-                switchEl(s.updateCheckEnabled, (v) => put({ updateCheckEnabled: v })),
+                switchEl(s.updateCheckEnabled, (v) => put({ updateCheckEnabled: v }), t("updateCheck")),
             ]),
         );
 
@@ -225,16 +307,17 @@
         if (T.notifications && typeof Notification !== "undefined") {
             sec.append(
                 T.h("div", { class: "set-row" }, [
-                    T.h("div", {}, [
-                        T.h("div", { class: "set-label", text: t("notifications") }),
-                        T.h("div", { class: "set-desc", text: t("notificationsDesc") }),
-                    ]),
-                    switchEl(T.notifications.enabled(), (v) => {
-                        T.notifications.setOn(v).then((ok) => {
-                            if (v && !ok) T.toast.show("error", t("notificationsDenied"));
-                            build();
-                        });
-                    }),
+                    T.h("div", { class: "set-label", text: t("notifications") }),
+                    switchEl(
+                        T.notifications.enabled(),
+                        (v) => {
+                            T.notifications.setOn(v).then((ok) => {
+                                if (v && !ok) T.toast.show("error", t("notificationsDenied"));
+                                build();
+                            });
+                        },
+                        t("notifications"),
+                    ),
                 ]),
             );
         }
@@ -256,38 +339,41 @@
 
         sec.append(T.h("hr", { class: "divider" }));
 
-        // NSFW 컨텐츠 제한
         const nsfwLabels = {
             strict: t("nsfwStrict"),
             moderate: t("nsfwModerate"),
             explicit: t("nsfwExplicit"),
         };
-        sec.append(fieldLabel(t("nsfwLevel")));
         sec.append(
-            segmented(
-                (s.nsfwLevels || ["strict", "moderate", "explicit"]).map((v) => ({ value: v, label: nsfwLabels[v] || v })),
-                s.nsfwLevel,
-                (v) => put({ nsfwLevel: v }),
-            ),
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("nsfwLevel") }),
+                settingSelect(
+                    (s.nsfwLevels || ["strict", "moderate", "explicit"]).map((v) => ({ value: v, label: nsfwLabels[v] || v })),
+                    s.nsfwLevel,
+                    (v) => put({ nsfwLevel: v }),
+                    t("nsfwLevel"),
+                ),
+            ]),
         );
 
-        // 영구적 행위 승인 정책
         const approvalLabels = { user: t("approvalUser"), model: t("approvalModel"), always: t("approvalAlways") };
-        sec.append(T.h("div", { class: "set-label", text: t("approvalLevel") }));
         sec.append(
-            segmented(
-                (s.approvalLevels || ["user", "model", "always"]).map((v) => ({ value: v, label: approvalLabels[v] || v })),
-                s.approvalLevel,
-                (v) => put({ approvalLevel: v }),
-            ),
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("approvalLevel") }),
+                settingSelect(
+                    (s.approvalLevels || ["user", "model", "always"]).map((v) => ({ value: v, label: approvalLabels[v] || v })),
+                    s.approvalLevel,
+                    (v) => put({ approvalLevel: v }),
+                    t("approvalLevel"),
+                ),
+            ]),
         );
-        sec.append(T.h("div", { class: "set-desc", text: t("approvalDesc") }));
 
         body.append(sec);
     }
 
-    /* ── 모델 탭 ────────────────────────────────────────────── */
-    function buildModel(body) {
+    /* ── 프로바이더 페이지 ──────────────────────────────────── */
+    function buildProvider(body) {
         const s = state.state.settings;
         if (!s) {
             body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
@@ -296,101 +382,113 @@
         const sec = T.h("div", { class: "set-section" });
         const provider = s.provider || {};
         const providers = s.providers || [];
-
-        // 프로바이더 카드 목록
-        sec.append(fieldLabel(t("provider")));
-        const plist = T.h("div", { class: "provider-list" });
-        for (const p of providers) {
-            const selected = provider.id === p.id;
-            const card = T.h(
-                "button",
-                {
-                    class: "provider-card" + (selected ? " selected" : ""),
-                    onclick() {
-                        if (selected) return;
-                        modelsCache = null;
-                        put({ provider: { id: p.id } }).then(() => build());
-                    },
-                },
-                [
-                    T.h("div", {}, [
-                        T.h("div", { class: "provider-name", text: p.label || p.id }),
-                        T.h("div", { class: "provider-type", text: p.type || "" }),
-                    ]),
-                    p.apiKeyOptional ? T.h("span", { class: "provider-badge", text: t("apiKeyOptional") }) : null,
-                    selected ? T.icon("check") : null,
-                ],
-            );
-            plist.append(card);
+        const defaultPreset = providers.find((p) => p.id === "default");
+        const customActive =
+            providerChoice === "custom" || (provider.id === "default" && defaultPreset && provider.baseURL !== defaultPreset.baseURL);
+        const selectedProviderId = customActive ? "custom" : provider.id;
+        if (!providers.length) {
+            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+            return;
         }
-        sec.append(plist);
 
-        // 선택된 프로바이더 상세
-        const meta = providers.find((p) => p.id === provider.id);
+        const meta = providers.find((p) => p.id === (customActive ? "default" : provider.id) && !p.custom);
         if (meta) {
-            sec.append(T.h("hr", { class: "divider" }));
-
-            if (meta.needsBaseURL) {
-                sec.append(fieldLabel(t("baseURL")));
-                sec.append(baseURLInput(provider));
+            if (customActive || meta.needsBaseURL) {
+                sec.append(
+                    T.h("div", { class: "set-row" }, [
+                        T.h("div", { class: "set-label", text: t("baseURL") }),
+                        T.h("div", { class: "set-control" }, [baseURLInput(provider, customActive && provider.baseURL === defaultPreset?.baseURL)]),
+                    ]),
+                );
             }
-
-            // OAuth 프로바이더(Codex/Grok)는 API 키 대신 디바이스 플로우 로그인을 쓴다.
             if (isOauthProvider(meta)) {
                 sec.append(oauthSection(provider.id));
             } else {
-                sec.append(fieldLabel(t("apiKey")));
-                sec.append(apiKeyRow(provider, meta));
+                sec.append(
+                    T.h("div", { class: "set-row" }, [
+                        T.h("div", { class: "set-label", text: t("apiKey") }),
+                        T.h("div", { class: "set-control" }, [apiKeyRow(provider, meta)]),
+                    ]),
+                );
             }
+            sec.append(T.h("hr", { class: "divider" }));
+        }
 
-            // 현재 모델 + 불러오기
-            sec.append(fieldLabel(t("model")));
+        const plist = T.h("div", { class: "provider-list", role: "radiogroup", "aria-label": t("provider") });
+        for (const p of providers) {
+            const selected = selectedProviderId === p.id;
+            plist.append(
+                T.h(
+                    "button",
+                    {
+                        class: "provider-card" + (selected ? " selected" : ""),
+                        role: "radio",
+                        "aria-checked": String(selected),
+                        onclick() {
+                            if (selected) return;
+                            providerChoice = p.id;
+                            modelsReq++;
+                            modelsLoading = false;
+                            modelsCache = null;
+                            modelsFailedKey = null;
+                            const patch = p.id === "custom" || p.id === "default" ? { id: p.id, baseURL: "", model: "" } : { id: p.id, model: "" };
+                            put({ provider: patch }).then(() => build());
+                        },
+                    },
+                    [T.h("div", { class: "provider-name", text: p.label || p.id }), selected ? T.icon("check") : null],
+                ),
+            );
+        }
+        sec.append(plist);
+
+        body.append(sec);
+    }
+
+    /* ── 모델 페이지 ────────────────────────────────────────── */
+    function buildModel(body) {
+        const s = state.state.settings;
+        if (!s) {
+            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+            return;
+        }
+        const sec = T.h("div", { class: "set-section" });
+        const provider = s.provider || {};
+        const key = modelsKey(provider);
+        const ready = modelsCache && modelsCache.key === key;
+        if (!ready && !modelsLoading && modelsFailedKey !== key) void loadModels(provider);
+
+        if (ready) {
+            sec.append(modelsPanel(provider));
+            if (!modelsCache.models.length) sec.append(manualModelInput(provider));
+        } else if (modelsFailedKey === key) {
+            sec.append(manualModelInput(provider));
+            sec.append(
+                T.h("button", {
+                    class: "btn ghost",
+                    text: t("retry"),
+                    onclick() {
+                        modelsFailedKey = null;
+                        build();
+                    },
+                }),
+            );
+        } else {
+            sec.append(T.h("div", { class: "empty-note", text: t("loadingModels") }));
+        }
+
+        if (Array.isArray(s.thinkingLevels) && s.thinkingLevels.length) {
+            sec.append(T.h("hr", { class: "divider" }));
             sec.append(
                 T.h("div", { class: "set-row" }, [
-                    T.h("div", { class: "current-model", text: provider.model || "—" }),
-                    T.h(
-                        "button",
-                        {
-                            class: "btn ghost",
-                            text: modelsLoading ? t("loadingModels") : t("loadModels"),
-                            disabled: modelsLoading,
-                            onclick() {
-                                loadModels(provider, meta);
-                            },
-                        },
-                        [],
-                    ),
-                ]),
-            );
-
-            if (modelsLoading) {
-                sec.append(T.h("div", { class: "empty-note", text: t("loadingModels") }));
-            } else if (modelsError) {
-                sec.append(
-                    T.h("button", {
-                        class: "btn ghost",
-                        text: t("retry"),
-                        onclick() {
-                            loadModels(provider, meta);
-                        },
-                    }),
-                );
-            } else if (modelsCache) {
-                sec.append(modelsPanel(provider));
-            }
-
-            // 추론 깊이
-            if (Array.isArray(s.thinkingLevels) && s.thinkingLevels.length) {
-                sec.append(T.h("hr", { class: "divider" }));
-                sec.append(fieldLabel(t("thinkingLevel")));
-                sec.append(
-                    segmented(
+                    T.h("div", { class: "set-label", text: t("thinkingLevel") }),
+                    settingSelect(
                         s.thinkingLevels.map((l) => ({ value: l.value, label: l.label || l.value })),
                         s.thinkingLevel,
                         (v) => put({ thinkingLevel: v }),
+                        t("thinkingLevel"),
                     ),
-                );
-            }
+                ]),
+            );
         }
 
         body.append(sec);
@@ -441,15 +539,15 @@
             return box;
         }
 
-        box.append(fieldLabel(t("oauthAccount")));
-        const row = T.h("div", { class: "set-row" }, [T.h("div", { class: "set-desc", text: t("oauthChecking") })]);
+        const account = T.h("div", { class: "set-control" }, [T.h("div", { class: "set-desc", text: t("oauthChecking") })]);
+        const row = T.h("div", { class: "set-row" }, [T.h("div", { class: "set-label", text: t("oauthAccount") }), account]);
         box.append(row);
 
         T.api
             .authStatus()
             .then((st) => {
                 const loggedIn = Boolean(st && st[kind]);
-                row.replaceChildren(
+                account.replaceChildren(
                     T.h("div", { class: "key-state" }, [
                         loggedIn ? T.icon("check", "icon-sm") : null,
                         T.h("span", { text: loggedIn ? t("oauthLoggedIn") : t("oauthNotLoggedIn") }),
@@ -478,22 +576,29 @@
                 );
             })
             .catch(() => {
-                row.replaceChildren(T.h("div", { class: "set-desc", text: t("offlineNote") }));
+                account.replaceChildren(T.h("div", { class: "set-desc", text: t("offlineNote") }));
             });
         return box;
     }
 
-    function baseURLInput(provider) {
+    function baseURLInput(provider, blank = false) {
         const input = T.h("input", {
+            value: blank ? "" : provider.baseURL || "",
             class: "input",
+            "aria-label": t("baseURL"),
             type: "text",
-            value: provider.baseURL || "",
             placeholder: "https://api.example.com/v1",
             spellcheck: "false",
         });
         const commit = () => {
             const v = input.value.trim();
-            if (v !== (provider.baseURL || "")) put({ provider: { baseURL: v } });
+            if (v !== (provider.baseURL || "")) {
+                modelsReq++;
+                modelsLoading = false;
+                modelsCache = null;
+                modelsFailedKey = null;
+                put({ provider: { baseURL: v } });
+            }
         };
         input.addEventListener("blur", commit);
         input.addEventListener("keydown", (e) => {
@@ -509,6 +614,7 @@
             type: "password",
             value: "",
             placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
+            "aria-label": t("apiKey"),
             autocomplete: "new-password",
         });
         const stateEl = T.h("span", {});
@@ -539,6 +645,10 @@
             if (!v) return;
             put({ provider: { apiKey: v } }).then((ok) => {
                 if (ok) {
+                    modelsReq++;
+                    modelsLoading = false;
+                    modelsCache = null;
+                    modelsFailedKey = null;
                     input.value = "";
                     stateEl.className = "key-state";
                     stateEl.replaceChildren(T.icon("check", "icon-sm"), t("apiKeySaved"));
@@ -551,36 +661,44 @@
             if (e.key === "Enter") input.blur();
         });
 
-        return T.h("div", {}, [
-            T.h("div", { class: "key-row" }, [input, eye]),
-            T.h("div", { class: "set-desc" }, [stateEl, " ", t("setupApiKeyHint")]),
-        ]);
+        return T.h("div", { class: "key-row" }, [input, eye, stateEl]);
     }
 
-    async function loadModels(provider, meta) {
+    function modelsKey(provider) {
+        return String(provider.id || "") + "\n" + String(provider.baseURL || "");
+    }
+
+    async function loadModels(provider) {
+        const req = ++modelsReq;
+        const key = modelsKey(provider);
         modelsLoading = true;
-        modelsError = false;
-        build();
         const payload = { providerId: provider.id };
         if (provider.baseURL) payload.baseURL = provider.baseURL;
         try {
             const r = await T.api.models(payload);
-            modelsCache = (r && r.models) || [];
+            if (req !== modelsReq) return;
+            modelsCache = { key, models: Array.isArray(r?.models) ? r.models : [] };
             modelsLoading = false;
-            build();
+            modelsFailedKey = null;
+            if (openTab === "model") build();
         } catch (_) {
+            if (req !== modelsReq) return;
             modelsLoading = false;
-            modelsError = true;
-            T.toast.show("error", t("modelsFailed"));
-            build();
+            modelsFailedKey = key;
+            if (openTab === "model") {
+                T.toast.show("error", t("modelsFailed"));
+                build();
+            }
         }
     }
 
     function modelsPanel(provider) {
         const panel = T.h("div", { class: "models-panel" });
         const search = T.h("input", {
+            class: "input",
             type: "text",
             placeholder: t("searchModels"),
+            "aria-label": t("searchModels"),
             value: modelFilter,
             spellcheck: "false",
         });
@@ -589,16 +707,22 @@
             renderList();
         });
         search.addEventListener("keydown", (e) => e.stopPropagation());
-        panel.append(T.h("div", { class: "models-search" }, [T.icon("search", "icon-sm"), search]));
+        panel.append(search);
 
-        const list = T.h("div", { class: "models-list" });
+        const list = T.h("div", {
+            class: "models-list",
+            role: "radiogroup",
+            "aria-label": t("model"),
+        });
         panel.append(list);
 
         function renderList() {
             list.replaceChildren();
-            const models = modelsCache.filter(
-                (m) => !modelFilter || (m.id || "").toLowerCase().includes(modelFilter) || (m.label || "").toLowerCase().includes(modelFilter),
-            );
+            const models = (modelsCache.models || []).filter((m) => {
+                const id = String(m.id || "").toLowerCase();
+                const label = String(m.label || "").toLowerCase();
+                return !modelFilter || id.includes(modelFilter) || label.includes(modelFilter);
+            });
             if (!models.length) {
                 list.append(T.h("div", { class: "empty-note", text: t("noModels") }));
                 return;
@@ -610,6 +734,8 @@
                         "button",
                         {
                             class: "radio-row" + (selected ? " selected" : ""),
+                            role: "radio",
+                            "aria-checked": String(selected),
                             onclick() {
                                 put({ provider: { model: m.id } }).then(() => {
                                     modelFilter = "";
@@ -623,7 +749,9 @@
                                 T.h("div", { class: "model-label", text: m.label || m.id }),
                                 T.h("div", { class: "model-id", text: m.id }),
                             ]),
-                            m.contextWindow ? T.h("span", { class: "model-ctx", text: Number(m.contextWindow).toLocaleString() }) : null,
+                            Number.isFinite(Number(m.contextWindow)) && Number(m.contextWindow) > 0
+                                ? T.h("span", { class: "model-ctx", text: Number(m.contextWindow).toLocaleString() })
+                                : null,
                         ],
                     ),
                 );
@@ -632,80 +760,64 @@
         renderList();
         return panel;
     }
+
+    function manualModelInput(provider) {
+        const input = T.h("input", {
+            class: "input",
+            type: "text",
+            value: provider.model || "",
+            placeholder: t("manualModelPlaceholder"),
+            "aria-label": t("manualModel"),
+            spellcheck: "false",
+        });
+        const commit = () => {
+            const model = input.value.trim();
+            if (model !== provider.model) put({ provider: { model } }).then(() => build());
+        };
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") input.blur();
+        });
+        return T.h("div", { class: "set-row" }, [
+            T.h("div", { class: "set-label", text: t("manualModel") }),
+            T.h("div", { class: "set-control" }, [input]),
+        ]);
+    }
+
     function buildAgents(body) {
-        const s = state.state.settings;
-        const agents = state.state.bots?.length ? state.state.bots : (s && s.agents) || [];
-        const sec = T.h("div", { class: "set-section" });
-
-        if (!agents.length) sec.append(T.h("div", { class: "empty-note", text: "—" }));
-
-        for (const a of agents) {
-            const expanded = editingAgent === a.id;
-            const item = T.h("div", { class: "agent-item" + (expanded ? " selected" : "") });
-            item.append(
-                T.h(
-                    "button",
-                    {
-                        class: "agent-head",
-                        onclick() {
-                            editingAgent = expanded ? null : a.id;
-                            armDelete = null;
-                            build();
-                        },
-                    },
-                    [
-                        T.h("span", {
-                            class: "avatar",
-                            style: "background:" + (a.color || "#0a84ff"),
-                            text: (a.name || "?").trim().charAt(0).toUpperCase(),
-                        }),
-                        T.h("div", { style: "flex:1;min-width:0" }, [
-                            T.h("div", { class: "set-label", text: a.name || "?" }),
-                            T.h("div", { class: "agent-persona", text: a.persona || "" }),
-                        ]),
-                        T.icon("chevron"),
-                    ],
-                ),
-            );
-            if (expanded) item.append(agentEditor(a));
-            sec.append(item);
-        }
-
         if (editingAgent === "__new__") {
-            const item = T.h("div", { class: "agent-item selected" });
-            item.append(agentEditor(null));
-            sec.append(item);
+            body.append(agentEditor(null));
+            return;
         }
-
-        sec.append(
-            T.h(
-                "button",
-                {
-                    class: "btn ghost",
-                    onclick() {
-                        editingAgent = editingAgent === "__new__" ? null : "__new__";
-                        armDelete = null;
-                        build();
-                    },
-                },
-                [T.icon("plus", "icon-sm"), t("addAgent")],
-            ),
-        );
-
-        body.append(sec);
+        const agent = agentList().find((a) => a.id === editingAgent);
+        if (!agent) {
+            body.append(T.h("div", { class: "empty-note", text: "—" }));
+            return;
+        }
+        body.append(agentEditor(agent));
     }
 
     function agentEditor(agent) {
         const isNew = !agent;
         const editor = T.h("div", { class: "agent-editor" });
 
-        editor.append(fieldLabel(t("agentName")));
-        const name = T.h("input", { class: "input", type: "text", value: agent ? agent.name || "" : "" });
+        const name = T.h("input", {
+            class: "input",
+            type: "text",
+            value: agent ? agent.name || "" : "",
+            "aria-label": t("agentName"),
+        });
         name.addEventListener("keydown", (e) => e.stopPropagation());
-        editor.append(name);
+        editor.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("agentName") }),
+                T.h("div", { class: "set-control" }, [name]),
+            ]),
+        );
 
         editor.append(fieldLabel(t("persona")));
-        const persona = T.h("textarea", { class: "textarea", placeholder: t("personaPlaceholder") });
+        const persona = T.h("textarea", { class: "textarea", placeholder: t("personaPlaceholder"), "aria-label": t("persona") });
         persona.value = agent ? agent.persona || "" : "";
         persona.addEventListener("keydown", (e) => e.stopPropagation());
         editor.append(persona);
@@ -733,8 +845,9 @@
                         if (s) state.setSettings(s);
                         await refreshBots();
                     }
-                    editingAgent = null;
+                    editingAgent = isNew && r?.agent?.id ? r.agent.id : agent?.id || firstAgentId();
                     armDelete = null;
+                    syncUrl({ open: true, tab: "agents", agentId: editingAgent, replace: true });
                     build();
                 } catch (err) {
                     saveBtn.disabled = false;
@@ -784,8 +897,9 @@
                                 if (next && T.chat) T.chat.open(next.threadId);
                                 else if (T.chat) T.chat.open(null);
                             }
-                            editingAgent = null;
+                            editingAgent = agents[0]?.id || "__new__";
                             armDelete = null;
+                            syncUrl({ open: true, tab: "agents", agentId: editingAgent === "__new__" ? null : editingAgent, replace: true });
                             build();
                         })
                         .catch((err) => {
@@ -799,25 +913,31 @@
             actions.append(T.h("span", { class: "set-desc", text: t("lastBotTooltip") }));
         }
 
-        actions.append(T.h("span", { class: "spacer" }));
-        actions.append(
-            T.h("button", {
-                class: "btn ghost",
-                text: t("cancel"),
-                onclick() {
-                    editingAgent = null;
-                    armDelete = null;
-                    build();
-                },
-            }),
-        );
         editor.append(actions);
         return editor;
     }
 
     /* ── 전역 바인딩 ────────────────────────────────────────── */
+    function trapFocus(e) {
+        if (e.key !== "Tab" || !openTab) return;
+        const focusable = [...sheet.querySelectorAll("button, input, textarea, select, a[href]")].filter(
+            (el) => !el.disabled && el.getAttribute("aria-hidden") !== "true",
+        );
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
     function init() {
         scrim.addEventListener("click", close);
+        sheet.addEventListener("keydown", trapFocus);
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && openTab) {
                 close();
@@ -837,7 +957,11 @@
                 })
                 .catch(() => {});
             T.toast.show(p.ok ? "info" : "error", p.ok ? t("oauthSuccess") : t("errorPrefix") + ": " + (p.detail || t("oauthFailed")));
-            if (openTab === "model") build();
+            modelsReq++;
+            modelsLoading = false;
+            modelsCache = null;
+            modelsFailedKey = null;
+            if (openTab === "model" || openTab === "provider") build();
         });
         T.i18n.onChange(() => {
             if (openTab) build();

@@ -78,8 +78,6 @@
     // 마지막 발화 → 없으면 "아직 맡은 일이 없어요". 미리보기 줄은 항상 채운다.
     function previewOf(bot) {
         const c = state.conv(bot.threadId);
-        const liveText = snippet(c?.live?.text);
-        if (liveText) return liveText;
         const fromMeta = snippet(c?.meta?.preview);
         if (fromMeta) return fromMeta;
         const fromBot = snippet(bot.preview);

@@ -55,6 +55,10 @@ export function isAgentSessionRunning(chatId) {
     return Boolean(getActiveAgentSession(chatId));
 }
 
+export function listRunningSessionKeys() {
+    return [...sessions.keys()].filter((id) => sessions.get(id)?.running);
+}
+
 export function requestAgentStop(chatId) {
     const session = getActiveAgentSession(chatId);
     if (!session) return false;

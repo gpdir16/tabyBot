@@ -29,6 +29,7 @@ import { subscribe, emit } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import { createRouter } from "./http.js";
 import { dispatchMessage, stopConversation } from "./turns.js";
+import { listRunningSessionKeys } from "../agent/session.js";
 import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
 const PUBLIC_DIR = path.join(CODES_DIR, "public");
@@ -37,11 +38,11 @@ const PORT = Number(process.env.TABYBOT_PORT || 8999);
 const HOST = process.env.TABYBOT_HOST || "127.0.0.1";
 
 const PROVIDER_LABELS = {
-    default: "OpenAI Compatible",
+    default: "OpenAI",
     openrouter: "OpenRouter",
-    grok: "xAI Grok",
-    codex: "OpenAI Codex",
-    ollama: "Ollama",
+    grok: "Grok OAuth",
+    codex: "Codex OAuth (ChatGPT Plus/Pro)",
+    ollama: "Ollama (local)",
     "ollama-cloud": "Ollama Cloud",
     synthetic: "Synthetic",
     upstage: "Upstage",
@@ -54,25 +55,36 @@ function providerPresets() {
     try {
         files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
     } catch {
-        return [];
+        return [{ id: "custom", label: "Custom API URL", type: "openai-compatible", baseURL: null, apiKeyOptional: false, needsBaseURL: true }];
     }
-    return files
-        .map((f) => {
-            try {
-                const p = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-                return {
-                    id: p.id || f.replace(/\.json$/, ""),
-                    label: PROVIDER_LABELS[p.id] || p.id,
-                    type: p.type || "openai-compatible",
-                    baseURL: p.baseURL || null,
-                    apiKeyOptional: Boolean(p.apiKeyOptional),
-                    needsBaseURL: Boolean(p.needsBaseURL),
-                };
-            } catch {
-                return null;
-            }
-        })
+    const byId = new Map(
+        files
+            .map((f) => {
+                try {
+                    const p = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+                    return [
+                        p.id || f.replace(/\.json$/, ""),
+                        {
+                            id: p.id || f.replace(/\.json$/, ""),
+                            label: PROVIDER_LABELS[p.id] || p.id,
+                            type: p.type || "openai-compatible",
+                            baseURL: p.baseURL || null,
+                            apiKeyOptional: Boolean(p.apiKeyOptional),
+                            needsBaseURL: Boolean(p.needsBaseURL),
+                        },
+                    ];
+                } catch {
+                    return null;
+                }
+            })
+            .filter(Boolean),
+    );
+    const presets = ["default", "openrouter", "synthetic", "ollama", "ollama-cloud", "zenmux", "upstage", "codex", "grok"]
+        .map((id) => byId.get(id))
         .filter(Boolean);
+    // tabyAgent와 동일하게 실제 프리셋 9개에 Custom API URL을 별도 선택지로 제공한다.
+    presets.push({ id: "custom", label: "Custom API URL", type: "openai-compatible", baseURL: null, apiKeyOptional: false, needsBaseURL: true });
+    return presets;
 }
 
 // 진행 중인 OAuth 디바이스 플로우. kind(codex|grok)별로 AbortController 1개만 유지한다.
@@ -145,6 +157,12 @@ function buildSettingsPayload() {
     } catch {
         // 사용자 지정 커스텀 프로바이더일 수 있다
     }
+    let merged = null;
+    try {
+        merged = getMergedProvider(config);
+    } catch {
+        // 삭제되거나 이름이 바뀐 provider도 설정창에서 복구할 수 있게 한다.
+    }
     const presets = providerPresets();
     if (!presets.some((p) => p.id === pid)) {
         presets.push({
@@ -174,7 +192,7 @@ function buildSettingsPayload() {
             type: currentPreset?.type || "openai-compatible",
             baseURL: config.provider?.baseURL || currentPreset?.baseURL || "",
             model: config.provider?.model || "",
-            apiKeySet: Boolean(getMergedProvider(config).apiKey),
+            apiKeySet: Boolean(merged?.apiKey),
         },
         providers: presets,
         agents: listAgents().map(publicAgent),
@@ -201,6 +219,10 @@ export function startWebServer() {
     // ---- 실시간 이벤트 (SSE) ----
     router.add("GET", "/api/events", (ctx) => {
         ctx.sse();
+        // 새로고침 직후 진행 중 턴을 바로 붙인다. 다음 phase 이벤트까지 기다리지 않는다.
+        for (const conversationId of listRunningSessionKeys()) {
+            emit({ type: "status", conversationId, phase: "generating" });
+        }
     });
 
     // ---- 대화 ----
@@ -397,10 +419,12 @@ export function startWebServer() {
         if (patch.provider !== undefined && typeof patch.provider === "object") {
             config.provider = config.provider || {};
             if (patch.provider.id !== undefined) {
-                const pid = String(patch.provider.id).trim() || "default";
-                if (pid !== prevPid) {
+                const requestedPid = String(patch.provider.id).trim() || "default";
+                const custom = requestedPid === "custom";
+                const pid = custom ? "default" : requestedPid;
+                if (custom || pid !== prevPid) {
                     providerChanged = true;
-                    // 프리셋을 바꾸면 커스텀 baseURL은 초기화한다.
+                    // provider를 바꾸면 기존 모델과 커스텀 URL을 초기화한다.
                     delete config.provider.baseURL;
                 }
                 config.provider.id = pid;
@@ -427,8 +451,9 @@ export function startWebServer() {
 
         const newPid = config.provider?.id || "default";
         if (providerChanged) {
-            // 프리셋이 바뀌면 사고수준을 새 프리셋 기준으로 재정규화한다.
+            // 프리셋이 바뀌면 사고수준을 새 프리셋 기준으로 재정규화하고, 이전 모델은 비운다.
             config.thinkingLevel = normalizeThinkingLevel(config.thinkingLevel, newPid);
+            if (patch.provider.model === undefined) config.provider.model = "";
         }
 
         saveUserConfig(config);
@@ -443,7 +468,11 @@ export function startWebServer() {
         try {
             let provider;
             if (body.providerId || body.baseURL || body.apiKey) {
-                const base = loadProviderConfig(String(body.providerId || config.provider?.id || "default"));
+                const providerId =
+                    String(body.providerId || config.provider?.id || "default") === "custom"
+                        ? "default"
+                        : String(body.providerId || config.provider?.id || "default");
+                const base = loadProviderConfig(providerId);
                 provider = {
                     id: base.id || "custom",
                     type: base.type,
