@@ -1,7 +1,7 @@
 /* tabyBot 웹 클라이언트 — 채팅 영역.
-   메시지 리스트/스트리밍(rAF 배치), 도구카드, ask카드, 첨부 미리보기,
+   메시지 리스트, 도구카드, ask카드, 첨부 미리보기,
    자동 스크롤 고정 + "새 메시지" 플로팅 버튼, hover 액션(복사/재생성).
-   다른 대화의 스트림은 state에서 버퍼링되고, 돌아오면 한 번에 렌더된다. */
+   응답 토큰은 그리지 않고, 구간이 끝나면 말풍선으로 뜬다. */
 (function (T) {
     "use strict";
 
@@ -44,12 +44,6 @@
             return String(n);
         }
     }
-    function fmtElapsed(ms) {
-        const s = Math.max(0, Math.round(ms / 1000));
-        if (s < 60) return s + "s";
-        return Math.floor(s / 60) + "m " + (s % 60) + "s";
-    }
-
     // 이미지 src: blob/data는 그대로, 파일 API는 쿼리 토큰을 붙인다.
     function setThumbSrc(img, pathOrUrl) {
         if (!pathOrUrl) return;
@@ -581,32 +575,24 @@
 
     function mountLive(live) {
         const root = T.h("div", { class: "msg-row assistant live" });
-        const shimmerEl = T.h("span", { class: "shimmer" });
-        const detailEl = T.h("span", { class: "gen-detail hidden" });
-        const elapsedEl = T.h("span", { class: "gen-elapsed hidden" });
-        const statusEl = T.h("div", { class: "gen-label is-idle" }, [shimmerEl, detailEl, elapsedEl]);
+        const shimmerEl = T.h("span", { class: "shimmer", text: "●●●" });
+        const statusEl = T.h("div", { class: "gen-label", role: "status" }, [shimmerEl]);
         const interEl = T.h("div", { class: "live-inter hidden" });
         const toolsEl = T.h("div", { class: "tool-stack hidden" });
         const asksEl = T.h("div", { class: "asks hidden" });
-        const textEl = T.h("div", { class: "md empty streaming" });
-        const bubble = T.h("div", { class: "bubble" }, [statusEl, textEl]);
+        const bubble = T.h("div", { class: "bubble" }, [statusEl]);
         root.append(T.h("div", { class: "msg-stack" }, [interEl, toolsEl, asksEl, bubble]));
         thread.append(root);
         liveEls = {
             root,
             bubble,
             statusEl,
-            shimmerEl,
-            detailEl,
-            elapsedEl,
             toolsEl,
             asksEl,
-            textEl,
             interEl,
             toolN: -1,
             interN: -1,
             askSig: "",
-            textSig: null,
             labelKey: null,
         };
         watchBubble(bubble);
@@ -615,30 +601,12 @@
 
     function syncLive(live) {
         if (!liveEls) return;
-        const hasText = !!live.text;
 
-        // shimmer 노드를 갈아끼우지 않는다. 다시 만들면 글씨 그라데이션이 중간에서 끊긴다.
-        liveEls.statusEl.classList.toggle("is-idle", hasText);
-        if (!hasText) {
-            const key = PHASE_KEY[live.phase] || "generating";
-            if (liveEls.labelKey !== key) {
-                liveEls.labelKey = key;
-                liveEls.shimmerEl.textContent = t(key);
-            }
-            if (live.detail) {
-                liveEls.detailEl.textContent = live.detail;
-                liveEls.detailEl.classList.remove("hidden");
-            } else {
-                liveEls.detailEl.textContent = "";
-                liveEls.detailEl.classList.add("hidden");
-            }
-            if (live.elapsedMs != null) {
-                liveEls.elapsedEl.textContent = fmtElapsed(live.elapsedMs);
-                liveEls.elapsedEl.classList.remove("hidden");
-            } else {
-                liveEls.elapsedEl.textContent = "";
-                liveEls.elapsedEl.classList.add("hidden");
-            }
+        // 원은 고정. 글자를 갈아끼우면 shimmer가 끊긴다.
+        const key = PHASE_KEY[live.phase] || "generating";
+        if (liveEls.labelKey !== key) {
+            liveEls.labelKey = key;
+            liveEls.statusEl.setAttribute("aria-label", t(key));
         }
 
         // 중간 라운드 텍스트(툴 호출 전 코멘트) — 새로고침 시 히스토리에 남는 것과 동일하게 표시
@@ -661,28 +629,6 @@
             liveEls.askSig = sig;
             liveEls.asksEl.replaceChildren(...live.asks.map(buildAskCard));
             liveEls.asksEl.classList.toggle("hidden", !live.asks.length);
-        }
-
-        // 스트리밍 중에는 마크다운을 파싱하지 않는다.
-        // 미완성 ** / ` / 리스트가 한 토큰은 정상, 다음은 본문을 삼켜 애니메이션이 끊긴 것처럼 보인다.
-        if (hasText) {
-            if (live.text !== liveEls.textSig) {
-                liveEls.textSig = live.text;
-                liveEls.textEl.classList.remove("empty");
-                let textNode = liveEls.textEl.firstChild;
-                const caret = liveEls.textEl.querySelector(".cursor");
-                if (!textNode || textNode.nodeType !== 3) {
-                    liveEls.textEl.textContent = live.text;
-                    T.md.appendCursor(liveEls.textEl);
-                } else {
-                    textNode.nodeValue = live.text;
-                    if (!caret) T.md.appendCursor(liveEls.textEl);
-                }
-            }
-        } else if (liveEls.textSig !== "") {
-            liveEls.textSig = "";
-            liveEls.textEl.textContent = "";
-            liveEls.textEl.classList.add("empty");
         }
 
         if (pinnedBottom) scroller.scrollTop = scroller.scrollHeight;
@@ -875,7 +821,6 @@
             if (p.id === state.state.currentId) requestSync();
         };
 
-        state.on("delta", routeIfCurrent);
         state.on("status", routeIfCurrent);
         state.on("tool", routeIfCurrent);
         state.on("ask", routeIfCurrent);

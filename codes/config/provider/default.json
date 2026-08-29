@@ -2,7 +2,6 @@
     "id": "default",
     "type": "openai-compatible",
     "baseURL": "https://api.openai.com/v1",
-    "needsBaseURL": true,
     "thinkingLevels": ["none", "minimal", "low", "medium", "high", "xhigh"],
     "defaultThinkingLevel": "high",
     "thinkingParam": "reasoning_effort"

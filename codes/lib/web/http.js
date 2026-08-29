@@ -158,12 +158,16 @@ export function createRouter({ publicDir, token = "" }) {
                   if (!res.destroyed) res.write(`data: ${payload}\n\n`);
               })
             : () => {};
+        let closed = false;
         const close = () => {
+            if (closed) return;
+            closed = true;
             clearInterval(heartbeat);
             unsubscribe();
             if (!res.destroyed) res.end();
         };
         req.on("close", close);
+        res.on("close", close);
         return close;
     }
 

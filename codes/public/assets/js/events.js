@@ -241,6 +241,10 @@
         if (!state.state.offline && state.state.conn === "disconnected") connect();
     });
 
+    window.addEventListener("pagehide", stopInternal);
+    window.addEventListener("pageshow", (e) => {
+        if (e.persisted) connect();
+    });
     window.addEventListener("beforeunload", stopInternal);
 
     T.events = { connect, refreshConversations };

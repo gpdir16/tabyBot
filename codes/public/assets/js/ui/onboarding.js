@@ -15,16 +15,20 @@
     const STEP_COUNT = 5;
     let models = null; // 3단계 모델 목록
     let modelsState = "idle"; // idle | loading | error | done
+    let modelsReq = 0;
     let modelFilter = "";
+    let finishing = false;
 
     /* ── 토큰 입력 화면(401) ────────────────────────────────── */
     function showToken(onSuccess) {
         dismiss();
+        let submitting = false;
         const err = T.h("div", { class: "set-desc", style: "color:var(--danger);min-height:16px" });
         const input = T.h("input", {
             class: "input",
             type: "password",
             placeholder: "TABYBOT_WEB_TOKEN",
+            "aria-label": "TABYBOT_WEB_TOKEN",
             autocomplete: "off",
         });
         input.addEventListener("keydown", (e) => {
@@ -43,17 +47,19 @@
             ]),
         ]);
 
-        const overlay = T.h("div", { class: "overlay" }, [card]);
+        const overlay = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
         root.append(overlay);
         wizardEl = overlay;
         setTimeout(() => input.focus(), 50);
 
         async function submit() {
+            if (submitting) return;
             const v = input.value.trim();
             if (!v) {
                 input.focus();
                 return;
             }
+            submitting = true;
             T.api.setToken(v);
             try {
                 await T.api.bootstrap(); // 토큰 검증
@@ -61,6 +67,7 @@
                 wizardEl = null;
                 if (onSuccess) onSuccess();
             } catch (_) {
+                submitting = false;
                 err.textContent = t("tokenFailed");
             }
         }
@@ -79,7 +86,9 @@
         step = 0;
         models = null;
         modelsState = "idle";
+        modelsReq++;
         modelFilter = "";
+        finishing = false;
         render();
     }
 
@@ -146,7 +155,7 @@
             );
         }
 
-        wizardEl = T.h("div", { class: "overlay" }, [card]);
+        wizardEl = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
         root.append(wizardEl);
 
         // 구조(body/foot/wizardEl) 확정 후 단계 콘텐츠를 채운다.
@@ -171,6 +180,8 @@
 
     /* 0. 언어 — 선택 즉시 UI 전환 + 다음 단계로 */
     function stepLanguage(body) {
+        body.setAttribute("role", "radiogroup");
+        body.setAttribute("aria-label", t("language"));
         body.append(T.h("div", { class: "step-label", text: t("setupLanguage") }));
         [
             ["en", "English", "Default"],
@@ -182,6 +193,8 @@
                     "button",
                     {
                         class: "opt" + (data.lang === v ? " selected" : ""),
+                        role: "radio",
+                        "aria-checked": String(data.lang === v),
                         onclick() {
                             data.lang = v;
                             T.i18n.setLang(v, { persist: false });
@@ -200,11 +213,13 @@
 
     /* 1. 프로바이더 */
     function stepProvider(body) {
+        body.setAttribute("role", "radiogroup");
+        body.setAttribute("aria-label", t("provider"));
         body.append(T.h("div", { class: "step-label", text: t("setupProvider") }));
         const list = providers();
         if (!list.length) {
-            body.append(T.h("div", { class: "empty-note", text: "—" }));
-            nextBtn(t("next"), true, () => {});
+            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+            nextBtn(t("retry"), false, () => T.app?.retryBoot());
             return;
         }
         for (const p of list) {
@@ -213,22 +228,22 @@
                     "button",
                     {
                         class: "opt" + (data.providerId === p.id ? " selected" : ""),
+                        role: "radio",
+                        "aria-checked": String(data.providerId === p.id),
                         onclick() {
                             data.providerId = p.id;
                             data.baseURL = "";
                             data.apiKey = "";
                             data.model = null;
+                            models = null;
+                            modelsState = "idle";
+                            modelsReq++;
+                            modelFilter = "";
                             step++;
                             render();
                         },
                     },
-                    [
-                        T.h("div", {}, [
-                            T.h("div", { class: "opt-name", text: p.label || p.id }),
-                            T.h("div", { class: "opt-sub", text: p.type || "" }),
-                        ]),
-                        p.apiKeyOptional ? T.h("span", { class: "provider-badge", text: t("apiKeyOptional") }) : null,
-                    ],
+                    [T.h("div", { class: "opt-name", text: p.label || p.id })],
                 ),
             );
         }
@@ -260,9 +275,21 @@
             body.append(
                 T.h("div", { class: "field" }, [
                     fieldLabel(t("baseURL")),
-                    mkInput("text", data.baseURL, "https://api.example.com/v1", (v) => {
-                        data.baseURL = v;
-                    }),
+                    mkInput(
+                        "text",
+                        data.baseURL,
+                        "https://api.example.com/v1",
+                        (v) => {
+                            if (data.baseURL !== v) {
+                                data.baseURL = v;
+                                models = null;
+                                modelsState = "idle";
+                                modelsReq++;
+                                modelFilter = "";
+                            }
+                        },
+                        t("baseURL"),
+                    ),
                 ]),
             );
         }
@@ -270,9 +297,21 @@
             body.append(
                 T.h("div", { class: "field" }, [
                     fieldLabel(t("apiKey")),
-                    mkInput("password", data.apiKey, "sk-…", (v) => {
-                        data.apiKey = v;
-                    }),
+                    mkInput(
+                        "password",
+                        data.apiKey,
+                        "sk-…",
+                        (v) => {
+                            if (data.apiKey !== v) {
+                                data.apiKey = v;
+                                models = null;
+                                modelsState = "idle";
+                                modelsReq++;
+                                modelFilter = "";
+                            }
+                        },
+                        t("apiKey"),
+                    ),
                 ]),
             );
         }
@@ -294,8 +333,16 @@
         });
     }
 
-    function mkInput(type, value, placeholder, onInput) {
-        const el = T.h("input", { class: "input", type, value, placeholder, autocomplete: "off", spellcheck: "false" });
+    function mkInput(type, value, placeholder, onInput, label) {
+        const el = T.h("input", {
+            class: "input",
+            type,
+            value,
+            placeholder,
+            "aria-label": label || placeholder,
+            autocomplete: "off",
+            spellcheck: "false",
+        });
         el.addEventListener("input", () => onInput(el.value));
         el.addEventListener("keydown", (e) => e.stopPropagation());
         return el;
@@ -317,6 +364,7 @@
             return;
         }
         if (modelsState === "error") {
+            const input = manualModelInput(body);
             body.append(
                 T.h("button", {
                     class: "btn ghost",
@@ -327,10 +375,35 @@
                     },
                 }),
             );
+            const next = nextBtn(t("next"), !data.model, () => {
+                step++;
+                render();
+            });
+            input.addEventListener("input", () => {
+                next.disabled = !data.model;
+            });
             return;
         }
 
-        const search = T.h("input", { class: "input", type: "text", placeholder: t("searchModels"), value: modelFilter });
+        if (!models.length) {
+            const input = manualModelInput(body);
+            const next = nextBtn(t("next"), !data.model, () => {
+                step++;
+                render();
+            });
+            input.addEventListener("input", () => {
+                next.disabled = !data.model;
+            });
+            return;
+        }
+
+        const search = T.h("input", {
+            class: "input",
+            type: "text",
+            placeholder: t("searchModels"),
+            "aria-label": t("searchModels"),
+            value: modelFilter,
+        });
         search.addEventListener("input", () => {
             modelFilter = search.value.toLowerCase();
             renderList();
@@ -338,14 +411,20 @@
         search.addEventListener("keydown", (e) => e.stopPropagation());
         body.append(search);
 
-        const list = T.h("div", { class: "models-list", style: "border:1px solid var(--border);border-radius:var(--radius-m);max-height:240px" });
+        const list = T.h("div", {
+            class: "models-list",
+            role: "radiogroup",
+            "aria-label": t("model"),
+        });
         body.append(list);
 
         function renderList() {
             list.replaceChildren();
-            const filtered = (models || []).filter(
-                (m) => !modelFilter || (m.id || "").toLowerCase().includes(modelFilter) || (m.label || "").toLowerCase().includes(modelFilter),
-            );
+            const filtered = (models || []).filter((m) => {
+                const id = String(m.id || "").toLowerCase();
+                const label = String(m.label || "").toLowerCase();
+                return !modelFilter || id.includes(modelFilter) || label.includes(modelFilter);
+            });
             if (!filtered.length) {
                 list.append(T.h("div", { class: "empty-note", text: t("noModels") }));
                 return;
@@ -356,6 +435,8 @@
                         "button",
                         {
                             class: "radio-row" + (data.model === m.id ? " selected" : ""),
+                            role: "radio",
+                            "aria-checked": String(data.model === m.id),
                             onclick() {
                                 data.model = m.id;
                                 renderList();
@@ -369,7 +450,9 @@
                                 T.h("div", { class: "model-label", text: m.label || m.id }),
                                 T.h("div", { class: "model-id", text: m.id }),
                             ]),
-                            m.contextWindow ? T.h("span", { class: "model-ctx", text: Number(m.contextWindow).toLocaleString() }) : null,
+                            Number.isFinite(Number(m.contextWindow)) && Number(m.contextWindow) > 0
+                                ? T.h("span", { class: "model-ctx", text: Number(m.contextWindow).toLocaleString() })
+                                : null,
                         ],
                     ),
                 );
@@ -382,19 +465,38 @@
         });
     }
 
+    function manualModelInput(body) {
+        const input = T.h("input", {
+            class: "input",
+            type: "text",
+            value: data.model || "",
+            placeholder: t("manualModelPlaceholder"),
+            "aria-label": t("manualModel"),
+            spellcheck: "false",
+        });
+        input.addEventListener("input", () => {
+            data.model = input.value.trim();
+        });
+        input.addEventListener("keydown", (e) => e.stopPropagation());
+        body.append(T.h("div", { class: "field" }, [fieldLabel(t("manualModel")), input]));
+        return input;
+    }
+
     async function loadModels() {
-        const meta = providerMeta();
+        const req = ++modelsReq;
         const payload = { providerId: data.providerId };
         if (data.baseURL.trim()) payload.baseURL = data.baseURL.trim();
         if (data.apiKey.trim()) payload.apiKey = data.apiKey.trim();
         try {
             const r = await T.api.models(payload);
-            models = (r && r.models) || [];
+            if (req !== modelsReq) return;
+            models = Array.isArray(r?.models) ? r.models : [];
             modelsState = "done";
         } catch (_) {
+            if (req !== modelsReq) return;
             modelsState = "error";
         }
-        if (wizardEl) render();
+        if (req === modelsReq && wizardEl) render();
     }
 
     /* 4. 완료 */
@@ -434,6 +536,8 @@
     }
 
     async function finish() {
+        if (finishing) return;
+        finishing = true;
         const meta = providerMeta();
         const provider = { id: data.providerId, model: data.model };
         if (meta && meta.needsBaseURL) provider.baseURL = data.baseURL.trim();
@@ -460,6 +564,7 @@
             if (bot) T.chat.open(bot.threadId);
             T.events.connect();
         } catch (_) {
+            finishing = false;
             T.toast.show("error", t("saveFailed"));
         }
     }
