@@ -18,6 +18,9 @@
 
     const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
+    // 모바일 구분은 화면 크기(≤860px)로 한다 — sidebar.js와 동일 기준. 좁은 화면엔 Shift가 없으므로 Enter 전송 대신 기본 줄바꿈 유지
+    const isTouch = window.matchMedia?.("(max-width: 860px)").matches;
+
     // attachments: [{ id: string|null, name, mime, size, objUrl, uploading }]
     let attachments = [];
     let dragDepth = 0;
@@ -231,7 +234,7 @@
         input.addEventListener("keydown", (e) => {
             e.stopPropagation();
             // IME 조합(한/일 입력) 중 Enter는 전송하지 않는다
-            if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+            if (e.key === "Enter" && !e.shiftKey && !isTouch && !e.isComposing && e.keyCode !== 229) {
                 e.preventDefault();
                 send();
             }

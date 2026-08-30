@@ -1,6 +1,14 @@
 // tabyBot 서비스 워커: 정적 셸 캐시 + 푸시 알림 표시 + 클릭 시 앱 포커스.
-const CACHE = "tabybot-shell-v2";
-const PRECACHE = ["/", "/index.html", "/manifest.webmanifest", "/assets/icons/icon-192.png", "/assets/icons/icon-512.png"];
+const CACHE = "tabybot-shell-v3";
+const PRECACHE = [
+    "/",
+    "/index.html",
+    "/manifest.webmanifest",
+    "/assets/icons/icon-192.png",
+    "/assets/icons/icon-512.png",
+    "/assets/icons/icon-192-maskable.png",
+    "/assets/icons/icon-512-maskable.png",
+];
 
 self.addEventListener("install", (event) => {
     event.waitUntil(

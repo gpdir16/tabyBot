@@ -48,8 +48,7 @@
         ]);
 
         const overlay = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
-        root.append(overlay);
-        wizardEl = overlay;
+        mountOverlay(overlay);
         setTimeout(() => input.focus(), 50);
 
         async function submit() {
@@ -97,6 +96,34 @@
             wizardEl.remove();
             wizardEl = null;
         }
+    }
+
+    function focusables() {
+        return [...(wizardEl?.querySelectorAll("button, input, textarea, select, a[href]") || [])].filter(
+            (el) => !el.disabled && el.getAttribute("aria-hidden") !== "true",
+        );
+    }
+
+    function trapFocus(e) {
+        if (e.key !== "Tab" || !wizardEl) return;
+        const items = focusables();
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    function mountOverlay(overlay) {
+        wizardEl = overlay;
+        overlay.addEventListener("keydown", trapFocus);
+        root.append(overlay);
+        setTimeout(() => focusables()[0]?.focus({ preventScroll: true }), 0);
     }
 
     function providers() {
@@ -155,8 +182,8 @@
             );
         }
 
-        wizardEl = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
-        root.append(wizardEl);
+        const overlay = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
+        mountOverlay(overlay);
 
         // 구조(body/foot/wizardEl) 확정 후 단계 콘텐츠를 채운다.
         // 단계 함수의 nextBtn→footAppend가 .ob-foot을 찾을 수 있어야 하므로 순서가 중요.
