@@ -8,7 +8,7 @@
 /* ── 1. 디자인 토큰 ─────────────────────────────────────── */
 :root {
     /* 색상 */
-    --bg: #0d0d0f;
+    --bg: #000000;
     --surface: #161618;
     --surface-2: #1e1e21;
     --surface-3: #2e2e34;
@@ -2325,6 +2325,7 @@ select:focus-visible {
     --sb-w: 300px;
     width: var(--sb-w);
     position: relative;
+    background: var(--bg);
 }
 #sidebar.collapsed {
     width: 0;
@@ -2713,7 +2714,7 @@ body.sb-collapsed .btn-menu {
         overflow: hidden;
         visibility: visible;
         pointer-events: auto;
-        background: var(--surface);
+        background: var(--bg);
     }
     #sidebar.collapsed {
         width: 100%;
@@ -2753,8 +2754,8 @@ body.sb-collapsed .btn-menu {
         gap: 4px;
         padding: env(safe-area-inset-top) 8px 0;
         border-bottom: 1px solid var(--border);
-        background: var(--surface);
-        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        background: var(--bg);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
         backdrop-filter: blur(18px) saturate(1.25);
         -webkit-backdrop-filter: blur(18px) saturate(1.25);
     }
@@ -2899,8 +2900,8 @@ body.sb-collapsed .btn-menu {
         flex: none;
         gap: 8px;
         padding: env(safe-area-inset-top) 8px 0;
-        background: var(--surface);
-        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        background: var(--bg);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
         backdrop-filter: blur(18px) saturate(1.25);
         -webkit-backdrop-filter: blur(18px) saturate(1.25);
         z-index: 2;
