@@ -11,11 +11,13 @@
     const listEl = document.getElementById("botList");
     const searchEl = document.getElementById("searchInput");
     const connDot = document.getElementById("connDot");
+    const mobileConnDot = document.getElementById("mobileConnDot");
     const addBtn = document.getElementById("btnAddBot");
     const settingsBtn = document.getElementById("btnSettings");
     const collapseBtn = document.getElementById("btnCollapse");
     const resizeEl = document.getElementById("sbResize");
     const sidebarEl = document.getElementById("sidebar");
+    const mainEl = document.getElementById("main");
     const menuBtn = document.getElementById("btnMenu");
     const sbScrim = document.getElementById("sbScrim");
     const mobileMq = window.matchMedia("(max-width: 860px)");
@@ -176,6 +178,54 @@
         return mobileMq.matches;
     }
 
+    function setIcon(button, name) {
+        button?.querySelector("use")?.setAttribute("href", `#i-${name}`);
+    }
+
+    function syncMobileNavigation() {
+        const chatOpen = isMobile() && document.body.classList.contains("mobile-chat");
+        setIcon(collapseBtn, isMobile() ? "settings" : "chevron");
+        collapseBtn.setAttribute("data-tip", isMobile() ? t("settings") : t(collapsedState ? "expand" : "collapse"));
+        collapseBtn.setAttribute("aria-label", isMobile() ? t("settings") : t(collapsedState ? "expand" : "collapse"));
+        if (isMobile()) collapseBtn.setAttribute("aria-expanded", "false");
+        if (!menuBtn) return;
+        if (!isMobile()) {
+            setIcon(menuBtn, "menu");
+            return;
+        }
+        setIcon(menuBtn, chatOpen ? "arrow-left" : "menu");
+        menuBtn.setAttribute("data-tip", t(chatOpen ? "back" : "menu"));
+        menuBtn.setAttribute("aria-label", t(chatOpen ? "back" : "menu"));
+        menuBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function setMobileChat(open, options) {
+        if (!isMobile()) return;
+        const chatOpen = !!open;
+        const instant = options?.animate === false;
+        const activeInHiddenPanel = chatOpen ? sidebarEl.contains(document.activeElement) : mainEl?.contains(document.activeElement);
+        document.body.classList.toggle("mobile-route-sync", instant);
+        document.body.classList.toggle("mobile-chat", chatOpen);
+        sidebarEl.setAttribute("aria-hidden", String(chatOpen));
+        mainEl?.setAttribute("aria-hidden", String(!chatOpen));
+        setMobileOpen(false);
+        syncMobileNavigation();
+        if (activeInHiddenPanel) {
+            requestAnimationFrame(() => (chatOpen ? menuBtn : searchEl)?.focus({ preventScroll: true }));
+        }
+        if (instant) requestAnimationFrame(() => document.body.classList.remove("mobile-route-sync"));
+    }
+
+    function showMobileList() {
+        if (!isMobile()) return;
+        setMobileChat(false);
+        if (/^\/a\//.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
+    }
+
+    function setMobileChatFromRoute() {
+        if (isMobile()) setMobileChat(/^\/a\//.test(location.pathname), { animate: false });
+    }
+
     function setMobileOpen(open) {
         if (open) applyCollapsed(false);
         sidebarEl.classList.toggle("mobile-open", !!open);
@@ -190,8 +240,8 @@
             localStorage.setItem("tabybot.lastAgent", bot.id);
             history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid || bot.id)}`);
         } catch (_) {}
+        if (isMobile()) setMobileChat(true);
         T.chat.open(bot.threadId);
-        if (isMobile()) setMobileOpen(false);
     }
 
     let botMenu = null;
@@ -257,17 +307,16 @@
 
     /* ── 연결 상태 점: 끊겼을 때만 설정 옆에 빨간 점 ───────── */
     function renderConn() {
-        const ok = state.state.conn === "connected";
-        connDot.hidden = ok;
-        connDot.setAttribute("aria-hidden", "true");
-        if (ok) {
-            settingsBtn.setAttribute("aria-label", t("settings"));
-            connDot.removeAttribute("title");
-        } else {
-            const label = t("connectionLost");
-            settingsBtn.setAttribute("aria-label", `${t("settings")} — ${label}`);
-            connDot.setAttribute("title", label);
+        // 연결 중에는 끊김으로 표시하지 않는다. 실제 연결이 끊긴 상태만 경고한다.
+        const lost = state.state.conn === "disconnected" && !state.state.offline;
+        const label = t("connectionLost");
+        for (const dot of [connDot, mobileConnDot]) {
+            dot.hidden = !lost;
+            dot.setAttribute("aria-hidden", "true");
+            if (lost) dot.setAttribute("title", label);
+            else dot.removeAttribute("title");
         }
+        settingsBtn.setAttribute("aria-label", lost ? `${t("settings")} — ${label}` : t("settings"));
     }
     /* ── 렌더 ───────────────────────────────────────────────── */
     function render() {
@@ -330,7 +379,7 @@
         });
         collapseBtn.addEventListener("click", () => {
             if (isMobile()) {
-                setMobileOpen(false);
+                T.settingsUI.open();
                 return;
             }
             const next = !collapsedState;
@@ -342,7 +391,7 @@
         if (menuBtn) {
             menuBtn.addEventListener("click", () => {
                 if (isMobile()) {
-                    setMobileOpen(!sidebarEl.classList.contains("mobile-open"));
+                    showMobileList();
                     return;
                 }
                 if (!collapsedState) return;
@@ -357,14 +406,21 @@
         }
         const onMq = () => {
             if (!isMobile()) {
+                document.body.classList.remove("mobile-chat");
+                mainEl?.removeAttribute("aria-hidden");
                 setMobileOpen(false);
                 applyCollapsed(collapsedState);
             } else {
                 applyCollapsed(false);
+                setMobileChatFromRoute();
             }
+            syncMobileNavigation();
         };
         if (mobileMq.addEventListener) mobileMq.addEventListener("change", onMq);
         else mobileMq.addListener(onMq);
+        window.addEventListener("popstate", setMobileChatFromRoute);
+        window.addEventListener("pageshow", setMobileChatFromRoute);
+        onMq();
     }
 
     /* ── 바인딩 ─────────────────────────────────────────────── */
@@ -396,11 +452,12 @@
         state.on("turn_done", render);
         state.on("settings", render);
         state.on("conn", renderConn);
+        T.i18n.onChange(syncMobileNavigation);
 
         initResize();
         renderConn();
         render();
     }
 
-    T.sidebar = { init, hydrate: hydratePreviews };
+    T.sidebar = { init, hydrate: hydratePreviews, showChat: () => setMobileChat(true), showList: showMobileList };
 })((window.Taby = window.Taby || {}));

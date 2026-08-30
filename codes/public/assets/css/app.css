@@ -63,6 +63,7 @@
 
     --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    --app-height: 100dvh;
 
     color-scheme: dark;
 }
@@ -101,6 +102,7 @@
 html,
 body {
     height: 100%;
+    overscroll-behavior: none;
 }
 
 body {
@@ -280,7 +282,7 @@ kbd {
 /* ── 3. 앱 레이아웃 셸 ─────────────────────────────────── */
 #app {
     display: flex;
-    height: 100dvh;
+    height: var(--app-height);
     min-width: 0;
 }
 
@@ -312,6 +314,9 @@ kbd {
 .sb-top .btn-icon {
     position: relative;
     z-index: 1;
+}
+.sb-top .conn-dot {
+    display: none;
 }
 .sb-top .logo-word {
     position: absolute;
@@ -1556,8 +1561,8 @@ kbd {
     top: 50%;
     left: 50%;
     width: min(720px, calc(100vw - 32px));
-    height: min(560px, calc(100dvh - 48px));
-    max-height: calc(100dvh - 48px);
+    height: min(560px, calc(var(--app-height) - 48px));
+    max-height: calc(var(--app-height) - 48px);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 20px;
@@ -1979,7 +1984,7 @@ kbd {
 .card {
     width: 560px;
     max-width: calc(100vw - 48px);
-    max-height: calc(100dvh - 64px);
+    max-height: calc(var(--app-height) - 64px);
     overflow-y: auto;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -2641,69 +2646,547 @@ body.sb-collapsed .btn-menu {
     display: inline-flex;
 }
 
-/* 좁은 화면: 사이드바를 오버레이 서랍으로 전환 */
+/* 모바일: 목록과 채팅을 앱 화면처럼 나누고 모든 조작 영역을 터치 기준으로 확장 */
 @media (max-width: 860px) {
-    .btn-menu {
-        display: inline-flex;
+    /* 모바일 키보드 대응: html/body를 뷰포트에 고정해 iOS가 포커스 시
+       문서를 밀어올려 화면 전체가 사라지는 것을 방지한다.
+       키보드에 따른 높이 변화는 --app-height 동기화(app.js)가 처리한다. */
+    html,
+    body {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        touch-action: pan-x pan-y;
+    }
+    body {
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-text-size-adjust: 100%;
+    }
+    button,
+    a,
+    input,
+    textarea,
+    select {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    #app {
+        position: relative;
+        width: 100%;
+        height: var(--app-height);
+        min-height: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: pan-x pan-y;
+        isolation: isolate;
+    }
+    #sidebar,
+    #main {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        flex: none;
+        overflow: hidden;
+        overscroll-behavior: none;
+        transition:
+            transform 260ms var(--ease),
+            opacity 180ms var(--ease);
+        will-change: transform;
+    }
+    body.mobile-route-sync #sidebar,
+    body.mobile-route-sync #main {
+        transition: none !important;
     }
     #sidebar {
-        position: fixed;
-        inset: 0 auto 0 0;
-        width: min(320px, 86vw);
-        --sb-w: min(320px, 86vw);
-        z-index: 40;
-        transform: translateX(-100%);
-        transition: transform var(--dur-2) var(--ease);
-        box-shadow: var(--shadow-sheet);
+        --sb-w: 100%;
+        z-index: 20;
+        border: 0;
+        box-shadow: none;
+        transform: translateX(0);
+        overflow: hidden;
+        visibility: visible;
+        pointer-events: auto;
+        background: var(--surface);
     }
     #sidebar.collapsed {
-        width: min(320px, 86vw);
+        width: 100%;
         min-width: 0;
-        border-right-width: 1px;
-        overflow: auto;
+        border: 0;
+        overflow: hidden;
         visibility: visible;
         pointer-events: auto;
     }
-    #sidebar.mobile-open {
-        transform: none;
+    #main {
+        z-index: 10;
+        background: var(--bg);
+        transform: translateX(100%);
+        pointer-events: none;
     }
-    .sb-resize {
-        display: none;
+    body.mobile-chat #sidebar {
+        transform: translateX(-100%);
+        pointer-events: none;
+    }
+    body.mobile-chat #main {
+        z-index: 30;
+        transform: translateX(0);
+        pointer-events: auto;
+    }
+    .sb-resize,
+    .sb-scrim {
+        display: none !important;
+    }
+    .btn-menu {
+        display: inline-flex;
+    }
+
+    /* 목록 상단: Telegram식 탐색 바 */
+    .sb-top {
+        height: calc(58px + env(safe-area-inset-top));
+        flex: none;
+        gap: 4px;
+        padding: env(safe-area-inset-top) 8px 0;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        backdrop-filter: blur(18px) saturate(1.25);
+        -webkit-backdrop-filter: blur(18px) saturate(1.25);
+    }
+    .sb-top .btn-icon {
+        width: 44px;
+        height: 44px;
+        flex: none;
+    }
+    .sb-top .conn-dot:not([hidden]) {
+        display: block;
+        position: absolute;
+        top: 4px;
+        right: 4px;
+    }
+    .sb-top .logo-word {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: max-content;
+        font-size: 17px;
+        letter-spacing: -0.3px;
+    }
+    #btnAddBot {
+        margin-left: auto;
+    }
+    .sb-search {
+        flex: none;
+        height: 44px;
+        margin: 10px 12px 8px;
+        padding: 0 12px;
+        gap: 8px;
+        border-radius: 11px;
+        background: var(--surface-2);
+    }
+    .sb-search .icon {
+        width: 17px;
+        height: 17px;
+    }
+    .sb-search input {
+        min-width: 0;
+        height: 44px;
+        font-size: 16px;
+    }
+    input,
+    textarea,
+    select {
+        font-size: 16px;
     }
     .sb-search kbd {
         display: none;
     }
-    .sb-scrim {
+    .sb-scroll {
+        flex: 1;
+        min-height: 0;
+        padding: 0 0 env(safe-area-inset-bottom);
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+    }
+    .bot-row {
+        min-height: 72px;
+        padding: 10px 12px;
+        gap: 12px;
+        border-radius: 0;
+        transition:
+            background-color 120ms var(--ease),
+            transform 120ms var(--ease);
+        touch-action: manipulation;
+    }
+    .bot-row + .bot-row {
+        border-top: 1px solid var(--border);
+    }
+    .bot-row:hover,
+    .bot-row:focus-visible {
+        background: transparent;
+    }
+    .bot-row:active {
+        background: var(--surface-2);
+        transform: scale(0.995);
+    }
+    .bot-row.active {
+        background: var(--surface-2);
+    }
+    /* 목록 화면(채팅 닫힘)에서는 마지막으로 연 봇을 하이라이트하지 않는다 */
+    body:not(.mobile-chat) .bot-row.active {
+        background: transparent;
+    }
+    .bot-avatar {
+        width: 50px;
+        height: 50px;
+        font-size: 18px;
+    }
+    .bot-name {
+        font-size: 16px;
+        line-height: 1.3;
+    }
+    .bot-persona {
+        margin-top: 2px;
+        font-size: 14px;
+        line-height: 1.3;
+    }
+    .bot-actions {
+        align-self: center;
+        min-width: 44px;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+    }
+    .bot-more {
+        width: 44px;
+        height: 44px;
+    }
+    .sb-empty {
+        margin: 24px 16px;
+        font-size: 14px;
+    }
+    .sb-bottom {
+        flex: none;
+        padding: 8px 12px calc(24px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+    }
+    /* 모바일은 좌상단 버튼으로 설정을 열 수 있으므로 하단 설정 버튼은 숨긴다 */
+    .sb-bottom {
         display: none;
-        position: fixed;
-        inset: 0;
-        background: var(--scrim);
-        z-index: 35;
     }
-    .sb-scrim.open {
-        display: block;
+    .sb-row {
+        min-height: 44px;
+        height: 44px;
+        font-size: 15px;
+        touch-action: manipulation;
     }
-    .sheet {
-        width: min(720px, calc(100vw - 24px));
-        height: min(560px, calc(100dvh - 24px));
-        max-height: calc(100dvh - 24px);
+    .btn-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    /* 채팅 상단 */
+    #header {
+        min-height: calc(58px + env(safe-area-inset-top));
+        flex: none;
+        gap: 8px;
+        padding: env(safe-area-inset-top) 8px 0;
+        background: var(--surface);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        backdrop-filter: blur(18px) saturate(1.25);
+        -webkit-backdrop-filter: blur(18px) saturate(1.25);
+        z-index: 2;
+    }
+    #header .btn-menu {
+        width: 44px;
+        height: 44px;
+        margin: 0;
+    }
+    .hdr-avatar {
+        width: 40px;
+        height: 40px;
+        margin-left: 0;
+        font-size: 16px;
+    }
+    .hd-name-wrap {
+        gap: 6px;
+    }
+    #hdrName {
+        font-size: 16px;
+    }
+    .hd-status {
+        display: none;
+    }
+    #scroller {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+        scroll-padding: 12px 0;
+    }
+    .thread {
+        width: 100%;
+        max-width: none;
+        padding: 12px 12px 8px;
+        gap: 8px;
+    }
+    .thread-intro {
+        margin: 8px auto 12px;
+        padding: 5px 10px;
+        border-radius: 12px;
+        background: var(--surface-2);
+        font-size: 12px;
+        text-align: center;
+    }
+    .msg-stack,
+    .msg-user-stack {
+        max-width: 88%;
+    }
+    .bubble {
+        max-width: 100%;
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-size: 16px;
+        line-height: 1.45;
+    }
+    .bubble.tall {
+        border-radius: 18px;
+    }
+    .msg-row.user .bubble {
+        background: var(--accent);
+        color: #fff;
+    }
+    .msg-row.user .bubble .bubble-text {
+        color: #fff;
+    }
+    .msg-atts {
+        gap: 8px;
+    }
+    .msg-atts .thumb,
+    .file-attachment {
+        width: 104px;
+        height: 104px;
+    }
+    .msg-actions {
+        display: none;
+    }
+    .code-copy {
+        width: 44px;
+        height: 44px;
+    }
+    .tool-head {
+        min-height: 44px;
+        padding: 8px 12px;
+        touch-action: manipulation;
+    }
+    .ask-card {
+        width: 100%;
+        max-width: none;
+        padding: 14px;
+        border-radius: 18px;
+    }
+    .ask-opt {
+        min-height: 44px;
+        padding: 9px 12px;
+        touch-action: manipulation;
+    }
+    .ask-input,
+    .ask-send {
+        min-height: 44px;
+        height: 44px;
+    }
+    .ask-send {
+        width: 44px;
+    }
+    .jump-latest {
+        bottom: 10px;
+        height: 44px;
+        min-height: 44px;
+    }
+
+    /* 키보드와 safe-area를 고려한 하단 입력 바 */
+    #composerWrap {
+        flex: none;
+        padding: 4px 24px 24px;
+        background: var(--bg);
     }
     #composer {
-        margin: 0 var(--sp-3) var(--sp-3);
+        width: 100%;
+        max-width: none;
+        min-height: 48px;
+        margin: 0;
+        padding: 4px 4px 4px 8px;
+        border-radius: 30px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
     }
-}
+    .composer-row {
+        min-height: 44px;
+        gap: 2px;
+    }
+    #composerInput {
+        min-height: 44px;
+        padding: 8px 4px;
+        font-size: 16px;
+        line-height: 1.45;
+        max-height: 128px;
+    }
+    #btnAttach,
+    #btnSend,
+    #btnStop {
+        width: 44px;
+        height: 44px;
+    }
+    .chips {
+        padding-bottom: 8px;
+    }
 
-@media (max-width: 520px) {
+    /* iOS 26+ 반투명 키보드가 비추는 앱 바탕을 입력창 색으로 맞춘다 */
+    body.kb-open {
+        background: var(--surface-2);
+    }
+
+    /* 키보드가 열려 있을 때는 여백을 없애고 입력 바를 화면 끝에 딱 붙인다 */
+    body.kb-open #composerWrap {
+        padding: 0;
+        background: linear-gradient(to bottom, var(--bg) 0 var(--radius-l), var(--surface-2) var(--radius-l) 100%);
+    }
+    body.kb-open #composer {
+        border-radius: calc(var(--radius-l) + var(--sp-2)) calc(var(--radius-l) + var(--sp-2)) 0 0;
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+    }
+    body.kb-open #composer:focus-within {
+        border-color: var(--border);
+        border-bottom: 0;
+        box-shadow: none;
+    }
+
+    /* 설정/온보딩: 중앙 팝업 대신 손가락으로 끌어올린 앱 시트.
+       bottom을 '보이는 영역(--app-height) 하단'에 붙인다 — 고정 하단(bottom:0)에
+       두면 키보드가 열렸을 때 시트가 키보드 뒤로 숨는다. */
+    .sheet {
+        top: auto;
+        right: 0;
+        bottom: calc(100% - var(--app-height));
+        left: 0;
+        width: 100%;
+        height: min(calc(var(--app-height) * 0.92), 760px);
+        max-height: calc(var(--app-height) - env(safe-area-inset-top));
+        border-right: 0;
+        border-bottom: 0;
+        border-radius: 22px 22px 0 0;
+        transform: translateY(100%);
+        transition:
+            opacity var(--dur-2) var(--ease),
+            transform var(--dur-2) var(--ease),
+            visibility 0s linear var(--dur-2);
+    }
+    .sheet.open {
+        transform: translateY(0);
+    }
+    .sheet-head {
+        min-height: 56px;
+        padding: 6px 12px 6px 16px;
+    }
+    .sheet-main {
+        flex-direction: column;
+    }
     .sheet-nav {
-        width: 128px;
-        padding-inline: 6px;
+        display: flex;
+        width: 100%;
+        height: 54px;
+        padding: 5px 8px;
+        gap: 4px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+    .sheet-nav .sb-row {
+        width: auto;
+        min-width: max-content;
+        height: 44px;
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 12px;
+        touch-action: manipulation;
+    }
+    .sheet-nav .sb-row.active {
+        background: var(--surface-3);
+    }
+    .sheet-nav .divider {
+        display: none;
     }
     .sheet-body {
-        padding: 12px 12px 24px;
+        padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
+        -webkit-overflow-scrolling: touch;
     }
     .set-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(132px, 48%);
+        min-height: 52px;
         height: auto;
-        min-height: 38px;
+        gap: 12px;
+    }
+    .set-label {
+        min-width: 0;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+    .set-control {
+        width: 100%;
+        min-width: 0;
+        flex: none;
+        justify-content: flex-end;
+    }
+    .input,
+    .select-wrap,
+    .select-wrap select,
+    .textarea {
+        min-height: 44px;
+        font-size: 16px;
+    }
+    .select-wrap {
+        width: 100%;
+    }
+    .textarea {
+        min-height: 96px;
+    }
+    .switch {
+        position: relative;
+        width: 44px;
+        height: 44px;
+    }
+    .switch .tr {
+        top: 8px;
+        right: 0;
+        bottom: auto;
+        left: 0;
+        height: 28px;
+    }
+    .switch .kn {
+        top: 10px;
+        width: 24px;
+        height: 24px;
+    }
+    .switch input:checked ~ .kn {
+        transform: translateX(16px);
+    }
+    .radio-row,
+    .provider-card,
+    .agent-head {
+        min-height: 52px;
+        padding: 10px 12px;
+        touch-action: manipulation;
     }
     .provider-name,
     .opt-name,
@@ -2715,5 +3198,152 @@ body.sb-collapsed .btn-menu {
     }
     .opt > div:first-child {
         overflow: visible;
+    }
+    .models-list {
+        max-height: calc(var(--app-height) * 0.36);
+    }
+
+    .overlay {
+        align-items: flex-end;
+        padding: 0;
+        /* 시트와 동일하게 키보드 위쪽 보이는 영역 안에만 카드를 배치한다 */
+        inset: 0 0 calc(100% - var(--app-height)) 0;
+    }
+    .card,
+    .card.narrow {
+        width: 100%;
+        max-width: none;
+        max-height: calc(var(--app-height) - env(safe-area-inset-top));
+        padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+        border: 0;
+        border-radius: 24px 24px 0 0;
+    }
+    .ob-body {
+        min-height: 0;
+        padding: 16px 0 8px;
+    }
+    .opt,
+    .btn {
+        min-height: 44px;
+    }
+    .opt {
+        padding: 12px 14px;
+    }
+    .confirm-scrim {
+        align-items: flex-end;
+    }
+    .confirm-modal {
+        width: 100%;
+        border-radius: 22px 22px 0 0;
+        padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+    }
+    .sheet-head .btn-icon,
+    .key-row .btn-icon,
+    .chip .chip-x {
+        width: 44px;
+        height: 44px;
+    }
+    .chip .chip-x {
+        top: -14px;
+        right: -14px;
+    }
+
+    /* 토스트/메뉴도 손가락과 키보드에 맞춘다 */
+    #toasts {
+        top: auto;
+        right: 12px;
+        bottom: calc(76px + env(safe-area-inset-bottom));
+        left: 12px;
+        transform: none;
+    }
+
+    /* 모바일에서는 hover 상태를 만들지 않고 탭/활성 상태만 사용한다. */
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar);
+    }
+    .btn-icon:hover,
+    .btn.ghost:hover:not(:disabled),
+    .sb-row:hover,
+    .agent-row:hover,
+    .title-btn:hover,
+    .tool-head:hover,
+    .menu button:hover,
+    .conv-item:hover,
+    .radio-row:hover,
+    .agent-head:hover {
+        background: transparent;
+        color: inherit;
+    }
+    .btn-icon:hover {
+        color: var(--text-secondary);
+    }
+    .btn.primary:hover:not(:disabled),
+    .btn-send:hover:not(:disabled),
+    .ask-send:hover {
+        background: var(--accent);
+    }
+    .btn.danger:hover:not(:disabled) {
+        filter: none;
+    }
+    .mini-btn:hover,
+    .btn-send.stop:hover {
+        filter: none;
+    }
+    .mini-btn.cancel:hover {
+        background: transparent;
+    }
+    .sb-row-action:hover {
+        color: var(--text-tertiary);
+    }
+    .file-attachment:hover,
+    .provider-card:hover,
+    .opt:hover {
+        border-color: var(--border);
+    }
+    .md a:hover {
+        text-decoration: none;
+    }
+    .code-copy:hover {
+        color: inherit;
+        background: transparent;
+    }
+    .ask-opt:hover:not(:disabled),
+    .suggestion-chip:hover {
+        border-color: var(--border);
+        color: inherit;
+    }
+    .chip .chip-x:hover {
+        color: inherit;
+        transform: none;
+    }
+    .menu button.danger:hover,
+    .btn-xs.danger:hover {
+        background: transparent;
+        color: var(--danger);
+    }
+    .conv-item:not(.menu-open):hover .ci-menu {
+        opacity: 0;
+    }
+
+    .toast {
+        width: 100%;
+        max-width: none;
+        min-height: 44px;
+        border-radius: 14px;
+        padding: 10px 14px;
+    }
+    .menu {
+        min-width: 200px;
+        max-width: calc(100vw - 24px);
+        border-radius: 14px;
+        padding: 4px;
+    }
+    .menu button {
+        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 15px;
+    }
+    #globalTooltip {
+        display: none;
     }
 }
