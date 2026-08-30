@@ -23,7 +23,7 @@
         const v = theme === "light" ? "light" : "dark";
         document.documentElement.dataset.theme = v;
         const themeMeta = document.querySelector('meta[name="theme-color"]');
-        if (themeMeta) themeMeta.setAttribute("content", v === "light" ? "#ffffff" : "#0d0d0f");
+        if (themeMeta) themeMeta.setAttribute("content", v === "light" ? "#ffffff" : "#000000");
         try {
             localStorage.setItem(THEME_KEY, v);
         } catch (_) {}
