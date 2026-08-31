@@ -698,7 +698,6 @@ kbd {
     overflow-x: hidden;
 }
 .thread {
-    max-width: 760px;
     margin: 0 auto;
     padding: var(--sp-5) var(--sp-5) var(--sp-2);
     display: flex;
@@ -2222,7 +2221,7 @@ body.settings-route #composerWrap {
     align-items: center;
     gap: var(--sp-2);
     width: 100%;
-    padding: 7px 10px;
+    padding: 4px 8px;
     border-radius: var(--radius-s);
     font-size: var(--fs-m);
     text-align: left;
@@ -2366,7 +2365,7 @@ body.resizing {
 }
 .bot-row:hover,
 .bot-row:focus-visible {
-    background: var(--surface-2);
+    background: var(--hover);
 }
 .bot-row.active {
     background: var(--surface-3);
