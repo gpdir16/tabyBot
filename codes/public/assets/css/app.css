@@ -534,6 +534,11 @@ kbd {
     background: var(--hover);
     color: var(--text);
 }
+/* 설정 행: 대화방 행과 동일한 선택 표시 */
+#btnSettings.active {
+    background: var(--surface-3);
+    color: var(--text);
+}
 .sb-row-action {
     color: var(--text-tertiary);
 }
@@ -1540,68 +1545,47 @@ kbd {
     background: var(--accent);
 }
 
-/* ── 11. 설정 시트 공통 ────────────────────────────────── */
-.sheet-scrim {
-    position: fixed;
-    inset: 0;
-    background: var(--scrim);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-2) var(--ease);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    z-index: 49;
-}
-.sheet-scrim.open {
-    opacity: 1;
-    pointer-events: auto;
-}
-.sheet {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    width: min(720px, calc(100vw - 32px));
-    height: min(560px, calc(var(--app-height) - 48px));
-    max-height: calc(var(--app-height) - 48px);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    box-shadow: var(--shadow-sheet);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translate(-50%, -50%) scale(0.96);
-    transition:
-        opacity var(--dur-2) var(--ease),
-        transform var(--dur-2) var(--ease),
-        visibility 0s linear var(--dur-2);
-    z-index: 50;
+/* ── 11. 설정 페이지: 채팅 뷰와 같은 계층의 라우트 뷰(스왑 방식) ── */
+.settings-page {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     outline: none;
 }
-.sheet.open {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: translate(-50%, -50%) scale(1);
-    transition-delay: 0s;
+.settings-page[hidden] {
+    display: none;
 }
-.sheet-head {
+/* 설정 라우트에서는 채팅 뷰를 숨긴다 — 한 번에 한 페이지만 표시된다 */
+body.settings-route #header,
+body.settings-route #scroller,
+body.settings-route #composerWrap {
+    display: none;
+}
+.sp-head {
+    flex: none;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: var(--sp-2) var(--sp-4);
+    gap: var(--sp-2);
+    padding: 0 var(--sp-4);
+    height: 50px;
     border-bottom: 1px solid var(--border);
-    flex: none;
 }
-.sheet-main {
+.sp-back {
+    display: none;
+}
+.sp-title {
+    font-size: var(--fs-t);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+.sp-main {
     display: flex;
     flex: 1;
     min-height: 0;
 }
-.sheet-nav {
+.sp-nav {
     flex: none;
     width: 148px;
     padding: var(--sp-2);
@@ -1609,7 +1593,7 @@ kbd {
     overflow-x: hidden;
     overflow-y: auto;
 }
-.sheet-nav .sb-row {
+.sp-nav .sb-row {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
@@ -1617,20 +1601,15 @@ kbd {
     display: flex;
     line-height: normal;
 }
-.sheet-nav .sb-row.active {
+.sp-nav .sb-row.active {
     background: var(--surface-3);
     color: var(--text);
 }
-.sheet-nav .divider {
+.sp-nav .divider {
     margin: var(--sp-2) 0;
 }
-.sheet-title {
-    font-size: var(--fs-t);
-    font-weight: 700;
-    letter-spacing: -0.01em;
-}
 
-.sheet-body {
+.sp-body {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -2316,10 +2295,6 @@ select:focus-visible {
     box-shadow: none;
 }
 
-.sheet {
-    width: min(720px, calc(100vw - 32px));
-}
-
 /* ── 사이드바 ───────────────────────────────────────────── */
 #sidebar {
     --sb-w: 300px;
@@ -2843,6 +2818,9 @@ body.sb-collapsed .btn-menu {
     body:not(.mobile-chat) .bot-row.active {
         background: transparent;
     }
+    .sb-bottom .sb-row.active {
+        background: var(--surface-2);
+    }
     .bot-avatar {
         width: 50px;
         height: 50px;
@@ -3070,37 +3048,19 @@ body.sb-collapsed .btn-menu {
         box-shadow: none;
     }
 
-    /* 설정/온보딩: 중앙 팝업 대신 손가락으로 끌어올린 앱 시트.
-       bottom을 '보이는 영역(--app-height) 하단'에 붙인다 — 고정 하단(bottom:0)에
-       두면 키보드가 열렸을 때 시트가 키보드 뒤로 숨는다. */
-    .sheet {
-        top: auto;
-        right: 0;
-        bottom: calc(100% - var(--app-height));
-        left: 0;
-        width: 100%;
-        height: min(calc(var(--app-height) * 0.92), 760px);
-        max-height: calc(var(--app-height) - env(safe-area-inset-top));
-        border-right: 0;
-        border-bottom: 0;
-        border-radius: 22px 22px 0 0;
-        transform: translateY(100%);
-        transition:
-            opacity var(--dur-2) var(--ease),
-            transform var(--dur-2) var(--ease),
-            visibility 0s linear var(--dur-2);
-    }
-    .sheet.open {
-        transform: translateY(0);
-    }
-    .sheet-head {
+    /* 설정 페이지: 베이스 규칙 + 모바일 헤더/탭 조정 */
+    .sp-head {
         min-height: 56px;
+        height: auto;
         padding: 6px 12px 6px 16px;
     }
-    .sheet-main {
+    .sp-back {
+        display: inline-flex;
+    }
+    .sp-main {
         flex-direction: column;
     }
-    .sheet-nav {
+    .sp-nav {
         display: flex;
         width: 100%;
         height: 54px;
@@ -3112,7 +3072,7 @@ body.sb-collapsed .btn-menu {
         overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
     }
-    .sheet-nav .sb-row {
+    .sp-nav .sb-row {
         width: auto;
         min-width: max-content;
         height: 44px;
@@ -3121,13 +3081,13 @@ body.sb-collapsed .btn-menu {
         border-radius: 12px;
         touch-action: manipulation;
     }
-    .sheet-nav .sb-row.active {
+    .sp-nav .sb-row.active {
         background: var(--surface-3);
     }
-    .sheet-nav .divider {
+    .sp-nav .divider {
         display: none;
     }
-    .sheet-body {
+    .sp-body {
         padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
         -webkit-overflow-scrolling: touch;
     }
@@ -3238,7 +3198,7 @@ body.sb-collapsed .btn-menu {
         border-radius: 22px 22px 0 0;
         padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
     }
-    .sheet-head .btn-icon,
+    .sp-head .btn-icon,
     .key-row .btn-icon,
     .chip .chip-x {
         width: 44px;

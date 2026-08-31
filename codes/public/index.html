@@ -255,12 +255,13 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 설정 페이지: 채팅 뷰(#header/#scroller/#composerWrap)와 같은 계층의 라우트 뷰 -->
+                <section id="settingsPage" class="settings-page" hidden aria-labelledby="settingsTitle" tabindex="-1"></section>
             </main>
         </div>
 
-        <!-- 설정 팝업 / 오버레이 / 토스트 -->
-        <div id="sheetScrim" class="sheet-scrim"></div>
-        <aside id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1" aria-hidden="true"></aside>
+        <!-- 오버레이 / 토스트 -->
         <div id="overlayRoot"></div>
         <div id="toasts" role="status" aria-live="polite"></div>
 

@@ -142,8 +142,8 @@
         const row = T.h(
             "div",
             {
-                class: "bot-row" + (state.state.currentId === bot.threadId ? " active" : ""),
-                "aria-current": state.state.currentId === bot.threadId ? "true" : null,
+                class: "bot-row" + (state.state.currentId === bot.threadId && !T.settingsUI.isOpen() ? " active" : ""),
+                "aria-current": state.state.currentId === bot.threadId && !T.settingsUI.isOpen() ? "true" : null,
                 role: "button",
                 "aria-label": `${bot.name}. ${previewText}`.trim(),
                 tabindex: "0",
@@ -219,11 +219,12 @@
     function showMobileList() {
         if (!isMobile()) return;
         setMobileChat(false);
-        if (/^\/a\//.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
+        if (/^(\/a\/|\/s\/)/.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
+        T.app?.renderRoute();
     }
 
     function setMobileChatFromRoute() {
-        if (isMobile()) setMobileChat(/^\/a\//.test(location.pathname), { animate: false });
+        if (isMobile()) setMobileChat(/^(\/a\/|\/s\/)/.test(location.pathname), { animate: false });
     }
 
     function setMobileOpen(open) {
@@ -238,10 +239,18 @@
     function openBot(bot) {
         try {
             localStorage.setItem("tabybot.lastAgent", bot.id);
+            if (T.settingsUI.isOpen()) T.settingsUI.hide();
             history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid || bot.id)}`);
         } catch (_) {}
         if (isMobile()) setMobileChat(true);
-        T.chat.open(bot.threadId);
+        T.app?.renderRoute();
+    }
+
+    // 설정 페이지 내비게이션 — 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다.
+    function settingsPush(agentId) {
+        const path = agentId == null ? "/s/general" : agentId === "__new__" ? "/s/agents/new" : `/s/agents/${agentId}`;
+        history.pushState(null, "", path);
+        T.app?.renderRoute();
     }
 
     let botMenu = null;
@@ -285,7 +294,8 @@
             onclick(e) {
                 e.stopPropagation();
                 closeBotMenu();
-                T.settingsUI.open({ tab: "agents", agentId: bot.id });
+                // 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링된다.
+                settingsPush(bot.id);
             },
         });
         botMenu = T.h("div", { class: "menu bot-ctx-menu", role: "menu" }, [item]);
@@ -318,6 +328,14 @@
         }
         settingsBtn.setAttribute("aria-label", lost ? `${t("settings")} — ${label}` : t("settings"));
     }
+    // 라우트에 맞춰 선택 표시를 동기화한다: /s/면 설정 행이, /a/면 해당 봇 행이 '선택'된다.
+    function syncRoute() {
+        const on = T.settingsUI.isOpen();
+        settingsBtn.classList.toggle("active", on);
+        settingsBtn.setAttribute("aria-current", on ? "page" : null);
+        render();
+    }
+
     /* ── 렌더 ───────────────────────────────────────────────── */
     function render() {
         if (!listEl) return;
@@ -459,5 +477,5 @@
         render();
     }
 
-    T.sidebar = { init, hydrate: hydratePreviews, showChat: () => setMobileChat(true), showList: showMobileList };
+    T.sidebar = { init, hydrate: hydratePreviews, showChat: () => setMobileChat(true), showList: showMobileList, syncRoute };
 })((window.Taby = window.Taby || {}));

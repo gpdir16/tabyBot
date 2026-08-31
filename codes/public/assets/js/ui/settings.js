@@ -1,5 +1,5 @@
-/* tabyBot 웹 클라이언트 — 설정 팝업.
-   동적 URL(?settings=1&tab=&bot=)로 현재 화면을 공유/복원한다.
+/* tabyBot 웹 클라이언트 — 설정 페이지.
+   경로 기반 라우팅(/s/<탭>, /s/agents/<id>)으로 현재 화면을 공유/복원한다.
    변경은 즉시 PUT(낙관적 반영 + 실패 시 롤백 + 토스트).
    provider.apiKey는 쓰기 전용 — 응답에 절대 포함되지 않는다. */
 (function (T) {
@@ -8,10 +8,12 @@
     const { state } = T;
     const t = (k) => T.i18n.t(k);
 
-    const sheet = document.getElementById("sheet");
-    const scrim = document.getElementById("sheetScrim");
+    const page = document.getElementById("settingsPage");
 
     let openTab = null;
+    let returnPath = null; // 설정 진입 전 경로(닫을 때 돌아갈 페이지)
+    let pushed = false; // open()에서 히스토리 항목을 push했는지
+    let mobileFromList = false; // 모바일 목록 화면에서 열었는지
     let editingAgent = null; // 에이전트 페이지 id ('__new__' = 추가)
     let armDelete = null; // 삭제 확인 2단계 버튼 상태
     let modelsCache = null; // { key, models }
@@ -20,68 +22,118 @@
     let modelsReq = 0;
     let modelFilter = "";
     let providerChoice = null;
-    let lastFocused = null;
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
     let putChain = Promise.resolve();
 
-    /* ── URL / 열기 / 닫기 ──────────────────────────────────── */
-    function syncUrl({ open: isOpen, tab, agentId, replace = false }) {
+    /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
+    const TABS = ["general", "provider", "model", "agents"];
+
+    // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
+    function routeFromPath() {
+        const m = /^\/s\/(general|provider|model|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
+        if (!m) return null;
+        const tab = m[1];
+        let agentId = null;
+        if (tab === "agents") {
+            if (m[2] === "new") agentId = "__new__";
+            else if (m[2]) agentId = agentList().some((a) => a.id === m[2]) ? m[2] : firstAgentId() || "__new__";
+            else agentId = firstAgentId() || "__new__";
+        }
+        return { tab, agentId };
+    }
+
+    // 탭/에이전트를 /s/ 경로로 만든다.
+    function pathFor(tab, agent) {
+        if (tab === "agents") return "/s/agents/" + (agent === "__new__" ? "new" : agent);
+        return "/s/" + (tab || "general");
+    }
+
+    // 탭/에이전트 전환: 현재 설정 페이지의 경로만 교체한다.
+    function syncPath() {
         try {
-            const url = new URL(location.href);
-            if (isOpen) {
-                url.searchParams.set("settings", "1");
-                url.searchParams.set("tab", tab || "general");
-                if (agentId && agentId !== "__new__") url.searchParams.set("bot", agentId);
-                else url.searchParams.delete("bot");
-            } else {
-                url.searchParams.delete("settings");
-                url.searchParams.delete("tab");
-                url.searchParams.delete("bot");
-            }
-            const next = url.pathname + (url.search ? url.search : "") + (url.hash ? url.hash : "");
-            history[replace ? "replaceState" : "pushState"](null, "", next);
+            history.replaceState(null, "", pathFor(openTab, editingAgent) + location.search + location.hash);
         } catch (_) {}
     }
 
+    /* ── 렌더링(뷰 레이어) — 히스토리는 호출자/라우터가 담당한다 ──
+       채팅의 T.chat.open과 동일한 역할: 경로에 맞게 화면을 그린다. */
     function open(opt) {
         // open({tab, agentId}) 또는 open("model") 형태 모두 지원
         const o = typeof opt === "object" && opt ? opt : { tab: opt };
-        if (document.activeElement instanceof HTMLElement) lastFocused = document.activeElement;
         providerChoice = null;
+        let tab, agent;
         if (o.agentId != null && o.agentId !== "" && (!o.tab || o.tab === "agents")) {
-            openTab = "agents";
-            editingAgent = o.agentId;
-        } else if (["general", "provider", "model", "agents"].includes(o.tab)) {
-            openTab = o.tab;
-            editingAgent = o.tab === "agents" ? firstAgentId() || "__new__" : null;
+            tab = "agents";
+            agent = o.agentId;
+        } else if (TABS.includes(o.tab)) {
+            tab = o.tab;
+            agent = o.tab === "agents" ? o.agentId || firstAgentId() || "__new__" : null;
         } else {
-            openTab = "general";
-            editingAgent = null;
+            tab = "general";
+            agent = null;
         }
+        openTab = tab;
+        editingAgent = agent;
         armDelete = null;
-        syncUrl({ open: true, tab: openTab, agentId: editingAgent, replace: !!o.fromUrl });
+        returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
+        const wasChatOpen = document.body.classList.contains("mobile-chat");
+        T.sidebar?.showChat();
+        mobileFromList = !wasChatOpen && document.body.classList.contains("mobile-chat");
+        pushed = false;
+        if (!o.fromUrl) {
+            try {
+                history.pushState(null, "", pathFor(openTab, editingAgent));
+                pushed = true;
+            } catch (_) {}
+        }
         build();
-        sheet.classList.add("open");
-        sheet.setAttribute("aria-hidden", "false");
-        scrim.classList.add("open");
-        sheet.focus();
-        sheet.querySelector("input, textarea, select, button:not([disabled])")?.focus({ preventScroll: true });
+        page.hidden = false;
+        document.body.classList.add("settings-route");
+        T.sidebar?.syncRoute?.();
+        page.focus({ preventScroll: true });
     }
 
     function close(options) {
-        if (!options || options.updateUrl !== false) syncUrl({ open: false, replace: true });
-        sheet.classList.remove("open");
-        sheet.setAttribute("aria-hidden", "true");
-        scrim.classList.remove("open");
+        const o = options || {};
+        if (o.updateUrl !== false) {
+            if (pushed) {
+                pushed = false;
+                history.back();
+                return;
+            }
+            try {
+                history.replaceState(null, "", (returnPath || "/") + location.hash);
+            } catch (_) {}
+        }
+        pushed = false;
+        returnPath = null;
+        page.hidden = true;
+        document.body.classList.remove("settings-route");
         openTab = null;
         modelsCache = null;
         modelsLoading = false;
         modelsFailedKey = null;
         modelsReq++;
         providerChoice = null;
-        if (lastFocused instanceof HTMLElement && document.contains(lastFocused)) lastFocused.focus();
-        lastFocused = null;
-        sheet.replaceChildren();
+        page.replaceChildren();
+        if (mobileFromList) {
+            mobileFromList = false;
+            T.sidebar?.showList();
+        }
+        T.sidebar?.syncRoute?.();
+    }
+
+    /* 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다. */
+    function navigate(tab, agentId) {
+        try {
+            history.pushState(null, "", pathFor(tab, agentId));
+        } catch (_) {}
+        T.app?.renderRoute();
+    }
+
+    /* 페이지를 내린다 — 히스토리/모바일 전환은 라우터가 담당한다. */
+    function hide() {
+        close({ updateUrl: false });
     }
 
     /* ── 낙관적 PUT ─────────────────────────────────────────── */
@@ -117,17 +169,29 @@
         return result;
     }
 
-    /* ── 프레임 ─────────────────────────────────────────────── */
+    /* ── 프레임: 채팅 헤더와 같은 구조(뒤로 버튼 + 제목) ── */
     function build() {
-        sheet.replaceChildren();
+        page.replaceChildren();
 
-        const head = T.h("div", { class: "sheet-head" }, [
-            T.h("div", { id: "settingsTitle", class: "sheet-title", text: t("settings") }),
-            T.h("button", { class: "btn-icon", "aria-label": t("cancel"), onclick: close }, [T.icon("x")]),
+        const head = T.h("header", { class: "sp-head" }, [
+            // 채팅 헤더의 뒤로 버튼과 동일: 목록 화면으로 돌아간 뒤 라우터가 화면을 맞춘다.
+            T.h(
+                "button",
+                {
+                    class: "btn-icon sp-back",
+                    "aria-label": t("back"),
+                    onclick() {
+                        T.sidebar?.showList();
+                        T.app?.renderRoute();
+                    },
+                },
+                [T.icon("arrow-left")],
+            ),
+            T.h("div", { id: "settingsTitle", class: "sp-title", text: t("settings") }),
         ]);
 
         const agents = agentList();
-        const nav = T.h("nav", { class: "sheet-nav", role: "tablist", "aria-label": t("settings") }, [
+        const nav = T.h("nav", { class: "sp-nav", role: "tablist", "aria-label": t("settings") }, [
             tabBtn("general", t("general")),
             tabBtn("provider", t("provider")),
             tabBtn("model", t("model")),
@@ -140,22 +204,18 @@
                 tabindex: openTab === "agents" && editingAgent === "__new__" ? "0" : "-1",
                 text: t("addAgent"),
                 onclick() {
-                    openTab = "agents";
-                    editingAgent = "__new__";
-                    armDelete = null;
-                    syncUrl({ open: true, tab: "agents", agentId: null, replace: true });
-                    build();
+                    navigate("agents", "__new__");
                 },
             }),
         ]);
 
-        const body = T.h("div", { class: "sheet-body" });
+        const body = T.h("div", { class: "sp-body" });
         if (openTab === "general") buildGeneral(body);
         else if (openTab === "provider") buildProvider(body);
         else if (openTab === "model") buildModel(body);
         else buildAgents(body);
 
-        sheet.append(head, T.h("div", { class: "sheet-main" }, [nav, body]));
+        page.append(head, T.h("div", { class: "sp-main" }, [nav, body]));
     }
 
     function tabBtn(id, label) {
@@ -166,11 +226,7 @@
             tabindex: openTab === id ? "0" : "-1",
             text: label,
             onclick() {
-                openTab = id;
-                editingAgent = null;
-                armDelete = null;
-                syncUrl({ open: true, tab: openTab, agentId: null, replace: true });
-                build();
+                navigate(id, null);
             },
         });
     }
@@ -193,20 +249,16 @@
             tabindex: active ? "0" : "-1",
             text: agent.name || "?",
             onclick() {
-                openTab = "agents";
-                editingAgent = agent.id;
-                armDelete = null;
-                syncUrl({ open: true, tab: "agents", agentId: agent.id, replace: true });
-                build();
+                navigate("agents", agent.id);
             },
         });
     }
 
     // 입력 중 재렌더 방지: 시트 내부에 포커스가 있으면 스킵
     function rebuildIfIdle() {
-        if (!openTab) return;
+        if (openTab == null) return;
         const ae = document.activeElement;
-        if (ae && sheet.contains(ae) && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT")) return;
+        if (ae && page.contains(ae) && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT")) return;
         build();
     }
 
@@ -847,7 +899,7 @@
                     }
                     editingAgent = isNew && r?.agent?.id ? r.agent.id : agent?.id || firstAgentId();
                     armDelete = null;
-                    syncUrl({ open: true, tab: "agents", agentId: editingAgent, replace: true });
+                    syncPath();
                     build();
                 } catch (err) {
                     saveBtn.disabled = false;
@@ -899,7 +951,7 @@
                             }
                             editingAgent = agents[0]?.id || "__new__";
                             armDelete = null;
-                            syncUrl({ open: true, tab: "agents", agentId: editingAgent === "__new__" ? null : editingAgent, replace: true });
+                            syncPath();
                             build();
                         })
                         .catch((err) => {
@@ -918,32 +970,7 @@
     }
 
     /* ── 전역 바인딩 ────────────────────────────────────────── */
-    function trapFocus(e) {
-        if (e.key !== "Tab" || !openTab) return;
-        const focusable = [...sheet.querySelectorAll("button, input, textarea, select, a[href]")].filter(
-            (el) => !el.disabled && el.getAttribute("aria-hidden") !== "true",
-        );
-        if (!focusable.length) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-        }
-    }
-
     function init() {
-        scrim.addEventListener("click", close);
-        sheet.addEventListener("keydown", trapFocus);
-        document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && openTab) {
-                close();
-                e.stopPropagation();
-            }
-        });
         state.on("settings", rebuildIfIdle);
         state.on("bots", rebuildIfIdle);
         state.on("pwa", rebuildIfIdle);
@@ -968,5 +995,5 @@
         });
     }
 
-    T.settingsUI = { init, open, close, isOpen: () => !!openTab, oauthSection };
+    T.settingsUI = { init, open, close, hide, isOpen: () => !!openTab && !page.hidden, routeFromPath, oauthSection };
 })((window.Taby = window.Taby || {}));

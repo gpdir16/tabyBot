@@ -732,20 +732,17 @@
         open._token = token;
         state.setCurrent(id == null ? null : String(id));
 
-        // URL 동기화: /a/<uuid>?m=&q=&settings=1&tab=&bot=
+        // URL 동기화: /a/<uuid>?m=&q= — 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
         try {
             const bot = id ? state.botByThreadId(String(id)) : null;
-            const qs = new URLSearchParams();
-            if (o.params?.q) qs.set("q", o.params.q);
-            if (o.params?.m != null) qs.set("m", String(o.params.m));
-            if (o.params?.settings) {
-                qs.set("settings", "1");
-                if (o.params.tab) qs.set("tab", o.params.tab);
-                if (o.params.bot) qs.set("bot", o.params.bot);
+            if (!/^\/s\//.test(location.pathname)) {
+                const qs = new URLSearchParams();
+                if (o.params?.q) qs.set("q", o.params.q);
+                if (o.params?.m != null) qs.set("m", String(o.params.m));
+                const query = qs.toString();
+                const path = bot?.uuid ? `/a/${bot.uuid}` : "/";
+                history.replaceState(null, "", path + (query ? `?${query}` : ""));
             }
-            const query = qs.toString();
-            const path = bot?.uuid ? `/a/${bot.uuid}` : "/";
-            history.replaceState(null, "", path + (query ? `?${query}` : ""));
         } catch (_) {}
 
         if (id != null) {
