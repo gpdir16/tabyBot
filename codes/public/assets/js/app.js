@@ -140,7 +140,7 @@
         if (!initial) T.toast.show("error", t("offlineNote"));
     }
 
-    /* ── URL 라우팅: /a/<uuid>?m=&q=&settings=1&tab=&bot= ── */
+    /* ── URL 라우팅: /a/<uuid>(채팅) · /s/<탭>(설정 페이지) ── */
     function botUuidFromPath() {
         const m = /^\/a\/([0-9a-f-]{36})$/.exec(location.pathname || "");
         return m ? m[1] : null;
@@ -151,9 +151,6 @@
         return {
             q: p.get("q") || "",
             m: p.get("m") != null && !Number.isNaN(Number(p.get("m"))) ? Number(p.get("m")) : null,
-            settings: p.get("settings") === "1",
-            tab: p.get("tab") || undefined,
-            bot: p.get("bot") || undefined,
         };
     }
 
@@ -169,13 +166,9 @@
         );
     }
 
-    // 1회성 q/m만 제거하고 설정 팝업의 동적 URL은 유지한다.
+    // 1회성 q/m만 제거한다.
     function consumeParams(p) {
         if (p.q) T.composer.setValue(p.q);
-        if (p.settings) {
-            const agentId = p.bot && state.state.bots.some((b) => b.id === p.bot) ? p.bot : undefined;
-            T.settingsUI.open({ tab: p.tab || "general", agentId, fromUrl: true });
-        }
         const params = new URLSearchParams(location.search);
         params.delete("q");
         params.delete("m");
@@ -183,6 +176,10 @@
         history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
     }
 
+    // 현재 경로가 설정 페이지(/s/...)인지 해석한다.
+    function settingsRoute() {
+        return T.settingsUI.routeFromPath();
+    }
     async function boot() {
         // file:// 직접 실행: 네트워크 오류 콘솔 출력 없이 오프라인 모드 진입
         if (location.protocol === "file:") {
@@ -230,28 +227,32 @@
                 }
             }
             if (token !== bootToken) return;
+            // 설정 라우트 판별을 봇 복원보다 먼저 한다(showList의 경로 리셋과 충돌 방지).
+            const sr = settingsRoute();
             if (bot) {
                 await T.chat.open(bot.threadId, { params: urlParams() });
-                if (fromPath) T.sidebar.showChat?.();
+                if (fromPath || sr) T.sidebar.showChat?.();
                 else T.sidebar.showList?.();
                 consumeParams(urlParams());
-            } else {
+            } else if (!sr) {
                 history.replaceState(null, "", "/");
             }
+
+            // 설정 페이지 경로(/s/...)면 설정을 연 상태로 복원한다.
+            if (sr) T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
 
             T.events.connect();
             T.onboarding.dismiss();
 
             if (bs.configured === false) {
                 // 사용자가 설정 URL로 직접 들어온 경우에는 온보딩이 설정창을 가리지 않게 한다.
-                const requested = urlParams();
-                const requestedAgent = requested.bot && bots.some((b) => b.id === requested.bot) ? requested.bot : undefined;
-                if (requested.settings) {
-                    if (!T.settingsUI.isOpen()) T.settingsUI.open({ tab: requested.tab || "general", agentId: requestedAgent, fromUrl: true });
-                } else if (hasSavedProviderSetup(state.state.settings)) {
-                    T.settingsUI.open({ tab: "provider" });
-                } else {
-                    T.onboarding.wizard();
+                if (!T.settingsUI.isOpen()) {
+                    if (hasSavedProviderSetup(state.state.settings)) {
+                        history.pushState(null, "", "/s/provider");
+                        renderRoute();
+                    } else {
+                        T.onboarding.wizard();
+                    }
                 }
             }
         } catch (e) {
@@ -264,20 +265,28 @@
         }
     }
 
-    // 뒤/앞 탐색: 경로의 봇 스레드로 복원
-    window.addEventListener("popstate", () => {
-        if (!booted) return;
-        const p = urlParams();
-        if (p.settings) {
-            const agentId = p.bot && state.state.bots.some((b) => b.id === p.bot) ? p.bot : undefined;
-            if (!T.settingsUI.isOpen()) T.settingsUI.open({ tab: p.tab || "general", agentId, fromUrl: true });
-        } else if (T.settingsUI.isOpen()) {
-            T.settingsUI.close({ updateUrl: false });
+    /* ── 공용 라우터: 현재 경로를 해석해 화면을 렌더링한다 ──
+       채팅(/a/<uuid>)과 설정(/s/<탭>)이 같은 로직으로 구동된다. */
+    function renderRoute() {
+        const sr = T.settingsUI.routeFromPath();
+        if (sr) {
+            // 설정 라우트: 모바일에서도 /a/와 마찬가지로 메인 패널을 표시한다.
+            T.sidebar?.showChat?.();
+            T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
+            return;
         }
-
+        T.settingsUI.hide();
         const uuid = botUuidFromPath();
         const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
         if (bot && bot.threadId !== state.state.currentId) T.chat.open(bot.threadId, { replaceState: true });
+        // 사이드바 선택 표시(설정 행/봇 행)를 라우트에 맞춘다.
+        T.sidebar?.syncRoute?.();
+    }
+
+    // 뒤/앞 탐색: 경로로 화면 복원
+    window.addEventListener("popstate", () => {
+        if (!booted) return;
+        renderRoute();
     });
 
     // "/" → 컴포저 포커스. 입력 요소 내부에서는 무시.
@@ -291,6 +300,7 @@
     });
 
     /* ── 시작 ───────────────────────────────────────────────── */
+    // 함수 선언은 호이스팅되므로 모듈 의존 코드보다 먼저 노출한다.
     initViewportHeight();
     initTouchGuard();
     applyTheme(storedTheme() || "dark");
@@ -306,5 +316,5 @@
 
     boot();
 
-    T.app = { applyTheme, retryBoot: boot };
+    T.app = { applyTheme, retryBoot: boot, renderRoute };
 })((window.Taby = window.Taby || {}));
