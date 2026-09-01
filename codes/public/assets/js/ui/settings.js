@@ -552,11 +552,50 @@
 
     // OAuth 디바이스 플로우 섹션: 상태 표시 + 로그인 버튼 + 대기 중 안내(코드/링크).
     // rerender: 로그인 시작 후 화면을 다시 그릴 콜백(설정 시트는 build, 온보딩은 render).
+
+    // 대기 박스가 떠 있는 동안 서버 폴링 주기(최대 ~8초)에만 의존하지 않고
+    // 클라이언트가 직접 로그인 완료를 확인한다. SSE oauth_done 유실에도 동작한다.
+    let oauthPollTimer = 0;
+    let oauthPollTries = 0;
+    function stopOauthPoll() {
+        clearTimeout(oauthPollTimer);
+        oauthPollTimer = 0;
+    }
+    function startOauthPoll(kind, refresh) {
+        stopOauthPoll();
+        oauthPollTries = 0;
+        const tick = () => {
+            // pending이 사라졌으면(다른 경로에서 완료/취소) 종료.
+            if (!oauthPending || oauthPending.kind !== kind) return;
+            oauthPollTries++;
+            // 5분 후 포기 — 디바이스 코드 만료와 맞춘다.
+            if (oauthPollTries > 100) return;
+            T.api
+                .authStatus()
+                .then((st) => {
+                    if (!oauthPending || oauthPending.kind !== kind) return;
+                    if (st && st[kind]) {
+                        oauthPending = null;
+                        stopOauthPoll();
+                        refresh();
+                    } else {
+                        oauthPollTimer = setTimeout(tick, 3000);
+                    }
+                })
+                .catch(() => {
+                    if (oauthPending && oauthPending.kind === kind) oauthPollTimer = setTimeout(tick, 3000);
+                });
+        };
+        oauthPollTimer = setTimeout(tick, 3000);
+    }
+
     function oauthSection(kind, rerender) {
         const refresh = rerender || build;
         const box = T.h("div", {});
 
         if (oauthPending && oauthPending.kind === kind) {
+            // 완료 감지: SSE 이벤트 + 상태 폴링 병행
+            startOauthPoll(kind, refresh);
             const codeBtn = T.h("button", {
                 class: "btn ghost",
                 text: oauthPending.userCode,
@@ -583,6 +622,7 @@
                         onclick() {
                             T.api.cancelOauth(kind).catch(() => {});
                             oauthPending = null;
+                            stopOauthPoll();
                             refresh();
                         },
                     }),
@@ -977,6 +1017,7 @@
         // OAuth 결과는 시트가 닫혀 있어도 반영한다(설정 갱신 + 토스트).
         state.on("oauth_done", (p) => {
             oauthPending = null;
+            stopOauthPoll();
             void T.api
                 .getSettings()
                 .then((s) => {
@@ -995,5 +1036,14 @@
         });
     }
 
-    T.settingsUI = { init, open, close, hide, isOpen: () => !!openTab && !page.hidden, routeFromPath, oauthSection };
+    T.settingsUI = {
+        init,
+        open,
+        close,
+        hide,
+        isOpen: () => !!openTab && !page.hidden,
+        routeFromPath,
+        oauthSection,
+        resetOauth: () => (oauthPending = null),
+    };
 })((window.Taby = window.Taby || {}));

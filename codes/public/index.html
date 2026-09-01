@@ -220,6 +220,7 @@
             <div id="sbScrim" class="sb-scrim"></div>
             <main id="main">
                 <header id="header">
+                    <div class="pblur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
                     <button id="btnMenu" class="btn-icon btn-menu" data-i18n-tip="menu" data-i18n-aria="menu" aria-expanded="false">
                         <svg class="icon"><use href="#i-menu" /></svg>
                     </button>
@@ -238,6 +239,7 @@
                 </div>
 
                 <div id="composerWrap">
+                    <div class="pblur flip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
                     <div id="composer" class="composer">
                         <div id="chips" class="chips hidden"></div>
                         <div class="composer-row">
@@ -260,6 +262,9 @@
                 <section id="settingsPage" class="settings-page" hidden aria-labelledby="settingsTitle" tabindex="-1"></section>
             </main>
         </div>
+
+        <!-- 온보딩: 초기 설정이 안 된 경우에만 앱 전체를 덮는 전용 페이지 -->
+        <section id="onboardingPage" class="onb-page" hidden aria-labelledby="onbTitle" tabindex="-1"></section>
 
         <!-- 오버레이 / 토스트 -->
         <div id="overlayRoot"></div>
