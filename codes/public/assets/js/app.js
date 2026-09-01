@@ -103,6 +103,18 @@
         window.visualViewport?.addEventListener("scroll", syncViewportHeight, { passive: true });
     }
 
+    // 컴포저(하단 유리 바) 높이를 CSS 변수로 동기화한다.
+    // #scroller가 헤더/컴포저 아래까지 전체 높이를 차지하므로, 마지막 메시지가
+    // 컴포저에 가려지지 않으려면 하단 패딩(--composer-h)이 실제 높이를 따라야 한다.
+    function initComposerHeight() {
+        const el = document.getElementById("composerWrap");
+        if (!el || !window.ResizeObserver) return;
+        const ro = new ResizeObserver(() => {
+            document.documentElement.style.setProperty("--composer-h", `${el.offsetHeight}px`);
+        });
+        ro.observe(el);
+    }
+
     // 스크롤 가능 영역 밖(헤더, 여백 등)에서 시작된 터치 이동을 차단한다.
     // iOS는 키보드 열림 상태에서 이런 드래그로 문서/비주얼 뷰포트를 끌어당겨
     // 화면 전체가 흔들리는 현상이 생기는데, 당김 자체를 막아 원천 차단한다.
@@ -132,12 +144,12 @@
         }
     });
 
-    function enterOffline(initial) {
+    function enterOffline() {
+        // 오프라인은 온보딩과 무관: 마법사를 띄우지 않고 안내만 표시한다.
         state.state.offline = true;
         state.setConn("disconnected");
         T.i18n.init(storedLang(), null);
-        T.onboarding.wizard();
-        if (!initial) T.toast.show("error", t("offlineNote"));
+        T.toast.show("error", t("offlineNote"));
     }
 
     /* ── URL 라우팅: /a/<uuid>(채팅) · /s/<탭>(설정 페이지) ── */
@@ -183,7 +195,7 @@
     async function boot() {
         // file:// 직접 실행: 네트워크 오류 콘솔 출력 없이 오프라인 모드 진입
         if (location.protocol === "file:") {
-            enterOffline(true);
+            enterOffline();
             return;
         }
 
@@ -242,8 +254,8 @@
             if (sr) T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
 
             T.events.connect();
-            T.onboarding.dismiss();
 
+            // 온보딩은 서버가 "설정 안 됨"(configured=false)이라고 응답했을 때만 연다.
             if (bs.configured === false) {
                 // 사용자가 설정 URL로 직접 들어온 경우에는 온보딩이 설정창을 가리지 않게 한다.
                 if (!T.settingsUI.isOpen()) {
@@ -261,7 +273,7 @@
                 T.onboarding.showToken(() => boot());
                 return;
             }
-            enterOffline(false);
+            enterOffline();
         }
     }
 
@@ -302,6 +314,7 @@
     /* ── 시작 ───────────────────────────────────────────────── */
     // 함수 선언은 호이스팅되므로 모듈 의존 코드보다 먼저 노출한다.
     initViewportHeight();
+    initComposerHeight();
     initTouchGuard();
     applyTheme(storedTheme() || "dark");
     T.i18n.init(storedLang(), null);

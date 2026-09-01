@@ -1,372 +1,196 @@
 /* tabyBot 웹 클라이언트 — 온보딩.
-   bootstrap.configured === false → 전체화면 마법사.
-   단계: 언어 → 프로바이더 → API 키(+Custom baseURL) → 모델 → 완료.
-   401이면 먼저 토큰 입력 화면. 각 단계 뒤로 가기 + 진행 점 인디케이터. */
+   앱 전체를 덮는 전용 풀페이지(#onboardingPage). 서버가
+   bootstrap.configured === false일 때만 연다(오프라인/401과는 별개).
+   진행 구조: STEPS 배열 + draft 한 덩어리. 단계마다 title/desc/build/done.
+   1 언어 → 2 프로바이더+인증 → 3 모델 → 4 NSFW·승인 정책.
+   컨트롤은 설정과 같은 공통 요소(select, provider-card, radio-row, input)를 쓴다. */
 (function (T) {
     "use strict";
 
-    const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
+    const page = document.getElementById("onboardingPage");
 
-    const root = document.getElementById("overlayRoot");
-    let wizardEl = null; // 열려 있는 오버레이 엘리먼트
-    let data = null; // 마법사 수집 상태
-    let step = 0;
-    const STEP_COUNT = 5;
-    let models = null; // 3단계 모델 목록
-    let modelsState = "idle"; // idle | loading | error | done
+    const STEP_TOTAL = 4;
+    let draft = null; // 각 단계에서 수집한 값
+    let idx = 0; // 현재 단계(0 기반)
+    let visible = false;
+    let saving = false;
+
+    // 모델 목록 로딩 상태
+    let models = null;
+    let modelsState = "idle"; // idle | loading | ready | failed
     let modelsReq = 0;
-    let modelFilter = "";
-    let finishing = false;
+    let modelsTimer = 0;
+    let modelQuery = "";
 
-    /* ── 토큰 입력 화면(401) ────────────────────────────────── */
+    /* ── 단계 정의 ──────────────────────────────────────────── */
+    const STEPS = [
+        { title: "onbLangTitle", desc: "onbLangDesc", build: buildLangStep, done: () => true },
+        { title: "onbProvTitle", desc: "onbProvDesc", build: buildProviderStep, done: providerPicked },
+        { title: "onbModelTitle", desc: "onbModelDesc", build: buildModelStep, done: () => Boolean(draft && draft.model) },
+        { title: "onbPolicyTitle", desc: "onbPolicyDesc", build: buildPolicyStep, done: () => true },
+    ];
+
+    /* ── 진입 / 종료 (app.js가 호출하는 공개 인터페이스) ────── */
+    function wizard() {
+        const s = T.state.state.settings || {};
+        draft = {
+            lang: T.i18n.getLang(),
+            providerId: "",
+            baseURL: "",
+            apiKey: "",
+            model: "",
+            nsfw: s.nsfwLevel || "strict",
+            approval: s.approvalLevel || "user",
+        };
+        idx = 0;
+        saving = false;
+        forgetModels();
+        reveal();
+    }
+
+    function dismiss() {
+        visible = false;
+        page.hidden = true;
+        page.replaceChildren();
+        forgetModels();
+    }
+
+    // 401 — 서버 접속 토큰. 성공하면 onSuccess로 부트를 다시 시도한다.
     function showToken(onSuccess) {
-        dismiss();
-        let submitting = false;
-        const err = T.h("div", { class: "set-desc", style: "color:var(--danger);min-height:16px" });
-        const input = T.h("input", {
-            class: "input",
+        draft = null;
+        const errLine = T.h("p", { class: "onb-error", role: "alert" });
+        const token = T.h("input", {
+            class: "input onb-token-input",
             type: "password",
             placeholder: "TABYBOT_WEB_TOKEN",
             "aria-label": "TABYBOT_WEB_TOKEN",
             autocomplete: "off",
         });
-        input.addEventListener("keydown", (e) => {
+        token.addEventListener("keydown", (e) => {
             e.stopPropagation();
-            if (e.key === "Enter") submit();
+            if (e.key === "Enter") connect();
         });
 
-        const card = T.h("div", { class: "card narrow" }, [
-            T.h("div", { class: "ob-logo" }, [T.icon("logo", "logo-mark")]),
-            T.h("div", { class: "ob-title", text: t("tokenTitle") }),
-            T.h("div", { class: "ob-sub", text: t("tokenDesc") }),
-            T.h("div", { style: "display:flex;flex-direction:column;gap:10px;margin-top:20px" }, [
-                input,
-                err,
-                T.h("button", { class: "btn primary", text: t("tokenSubmit"), onclick: submit }),
-            ]),
+        const box = T.h("div", { class: "onb-token" }, [
+            T.h("h1", { class: "onb-title", text: t("onbTokenTitle") }),
+            T.h("p", { class: "onb-desc", text: t("onbTokenDesc") }),
+            token,
+            errLine,
+            T.h("button", { class: "btn primary", text: t("onbConnect"), onclick: connect }),
         ]);
 
-        const overlay = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
-        mountOverlay(overlay);
-        setTimeout(() => input.focus(), 50);
+        visible = true;
+        page.hidden = false;
+        page.replaceChildren(T.h("div", { class: "onb-wrap" }, [box]));
+        setTimeout(() => token.focus(), 50);
 
-        async function submit() {
-            if (submitting) return;
-            const v = input.value.trim();
+        let busy = false;
+        async function connect() {
+            if (busy) return;
+            const v = token.value.trim();
             if (!v) {
-                input.focus();
+                token.focus();
                 return;
             }
-            submitting = true;
+            busy = true;
             T.api.setToken(v);
             try {
-                await T.api.bootstrap(); // 토큰 검증
-                overlay.remove();
-                wizardEl = null;
+                await T.api.bootstrap(); // 토큰 검증 겸 부트
                 if (onSuccess) onSuccess();
             } catch (_) {
-                submitting = false;
-                err.textContent = t("tokenFailed");
+                busy = false;
+                errLine.textContent = t("onbTokenFailed");
             }
         }
     }
 
-    /* ── 마법사 ─────────────────────────────────────────────── */
-    function wizard() {
-        dismiss();
-        data = {
-            lang: T.i18n.getLang(),
-            providerId: null,
-            baseURL: "",
-            apiKey: "",
-            model: null,
-        };
-        step = 0;
-        models = null;
-        modelsState = "idle";
-        modelsReq++;
-        modelFilter = "";
-        finishing = false;
+    /* ── 공통 프레임: 진행바 + 제목 + 본문 + 버튼 ───────────── */
+    function reveal() {
+        visible = true;
+        page.hidden = false;
         render();
-    }
-
-    function dismiss() {
-        if (wizardEl) {
-            wizardEl.remove();
-            wizardEl = null;
-        }
-    }
-
-    function focusables() {
-        return [...(wizardEl?.querySelectorAll("button, input, textarea, select, a[href]") || [])].filter(
-            (el) => !el.disabled && el.getAttribute("aria-hidden") !== "true",
-        );
-    }
-
-    function trapFocus(e) {
-        if (e.key !== "Tab" || !wizardEl) return;
-        const items = focusables();
-        if (!items.length) return;
-        const first = items[0];
-        const last = items[items.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-        }
-    }
-
-    function mountOverlay(overlay) {
-        wizardEl = overlay;
-        overlay.addEventListener("keydown", trapFocus);
-        root.append(overlay);
-        setTimeout(() => focusables()[0]?.focus({ preventScroll: true }), 0);
-    }
-
-    function providers() {
-        return (state.state.settings && state.state.settings.providers) || [];
-    }
-    function providerMeta() {
-        return providers().find((p) => p.id === data.providerId) || null;
+        page.focus({ preventScroll: true });
     }
 
     function render() {
-        dismiss();
-        const body = T.h("div", { class: "ob-body" });
+        if (!visible || !draft) return;
+        const def = STEPS[idx];
+        const content = T.h("div", { class: "onb-content" });
+        def.build(content);
 
-        const dots = T.h("div", { class: "dots" });
-        for (let i = 0; i < STEP_COUNT; i++) {
-            dots.append(T.h("span", { class: "dot-i" + (i === step ? " on" : "") }));
-        }
-
-        const foot = T.h("div", { class: "ob-foot" }, [T.h("span", { class: "spacer" })]);
-        if (step > 0) {
-            foot.append(
+        const actions = T.h("div", { class: "onb-actions" });
+        if (idx > 0) {
+            actions.append(
                 T.h("button", {
                     class: "btn ghost",
-                    text: t("back"),
-                    onclick: () => {
-                        step--;
+                    text: t("onbPrev"),
+                    onclick() {
+                        idx--;
                         render();
                     },
                 }),
             );
         }
-
-        const card = T.h("div", { class: "card" }, [
-            T.h("div", { class: "ob-logo" }, [T.icon("logo", "logo-mark")]),
-            T.h("div", { class: "ob-title", text: t("setupTitle") }),
-            T.h("div", { class: "ob-sub", text: t("setupSubtitle") }),
-            dots,
-            body,
-            foot,
-        ]);
-
-        // 오프라인: 서버 연결 불가 안내 + 재시도
-        if (state.state.offline) {
-            card.prepend(
-                T.h("div", { class: "offline-note" }, [
-                    T.icon("warn", "icon-sm"),
-                    T.h("span", { text: t("offlineNote") }),
-                    T.h("button", {
-                        class: "btn ghost",
-                        text: t("retry"),
-                        onclick: () => {
-                            if (T.app) T.app.retryBoot();
-                        },
-                    }),
-                ]),
-            );
-        }
-
-        const overlay = T.h("div", { class: "overlay", role: "dialog", "aria-modal": "true" }, [card]);
-        mountOverlay(overlay);
-
-        // 구조(body/foot/wizardEl) 확정 후 단계 콘텐츠를 채운다.
-        // 단계 함수의 nextBtn→footAppend가 .ob-foot을 찾을 수 있어야 하므로 순서가 중요.
-        if (step === 0) stepLanguage(body);
-        else if (step === 1) stepProvider(body);
-        else if (step === 2) stepApiKey(body);
-        else if (step === 3) stepModel(body);
-        else stepDone(body);
-    }
-
-    function nextBtn(label, disabled, onclick) {
-        const b = T.h("button", { class: "btn primary", text: label || t("next"), onclick });
-        if (disabled) b.disabled = true;
-        footAppend(b);
-        return b;
-    }
-    function footAppend(btn) {
-        const foot = wizardEl && wizardEl.querySelector(".ob-foot");
-        if (foot) foot.append(btn);
-    }
-
-    /* 0. 언어 — 선택 즉시 UI 전환 + 다음 단계로 */
-    function stepLanguage(body) {
-        body.setAttribute("role", "radiogroup");
-        body.setAttribute("aria-label", t("language"));
-        body.append(T.h("div", { class: "step-label", text: t("setupLanguage") }));
-        [
-            ["en", "English", "Default"],
-            ["ko", "한국어", "Korean"],
-            ["ja", "日本語", "Japanese"],
-        ].forEach(([v, name, sub]) => {
-            body.append(
-                T.h(
-                    "button",
-                    {
-                        class: "opt" + (data.lang === v ? " selected" : ""),
-                        role: "radio",
-                        "aria-checked": String(data.lang === v),
-                        onclick() {
-                            data.lang = v;
-                            T.i18n.setLang(v, { persist: false });
-                            step++;
-                            render();
-                        },
-                    },
-                    [
-                        T.h("div", {}, [T.h("div", { class: "opt-name", text: name }), T.h("div", { class: "opt-sub", text: sub })]),
-                        data.lang === v ? T.icon("check") : null,
-                    ],
-                ),
-            );
+        actions.append(T.h("span", { class: "spacer" }));
+        const last = idx === STEP_TOTAL - 1;
+        const go = T.h("button", {
+            class: "btn primary",
+            text: last ? t("onbFinish") : t("onbNext"),
+            onclick() {
+                if (last) save();
+                else {
+                    idx++;
+                    render();
+                }
+            },
         });
-    }
+        if (!def.done()) go.disabled = true;
+        actions.append(go);
 
-    /* 1. 프로바이더 */
-    function stepProvider(body) {
-        body.setAttribute("role", "radiogroup");
-        body.setAttribute("aria-label", t("provider"));
-        body.append(T.h("div", { class: "step-label", text: t("setupProvider") }));
-        const list = providers();
-        if (!list.length) {
-            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
-            nextBtn(t("retry"), false, () => T.app?.retryBoot());
-            return;
-        }
-        for (const p of list) {
-            body.append(
-                T.h(
-                    "button",
-                    {
-                        class: "opt" + (data.providerId === p.id ? " selected" : ""),
-                        role: "radio",
-                        "aria-checked": String(data.providerId === p.id),
-                        onclick() {
-                            data.providerId = p.id;
-                            data.baseURL = "";
-                            data.apiKey = "";
-                            data.model = null;
-                            models = null;
-                            modelsState = "idle";
-                            modelsReq++;
-                            modelFilter = "";
-                            step++;
-                            render();
-                        },
-                    },
-                    [T.h("div", { class: "opt-name", text: p.label || p.id })],
-                ),
-            );
-        }
-    }
-
-    /* 2. API 키 (+Custom baseURL) */
-    function stepApiKey(body) {
-        const meta = providerMeta();
-        const isOauth = Boolean(meta && /-oauth$/.test(String(meta.type || "")));
-        body.append(T.h("div", { class: "step-label", text: t("setupApiKey") }));
-
-        if (isOauth) {
-            // OAuth 프로바이더(Codex/Grok): API 키 대신 디바이스 플로우 로그인
-            body.append(T.settingsUI.oauthSection(data.providerId, render));
-            const next = nextBtn(t("next"), true, () => {
-                step++;
-                render();
-            });
-            T.api
-                .authStatus()
-                .then((st) => {
-                    if (next && st && st[data.providerId]) next.disabled = false;
-                })
-                .catch(() => {});
-            return;
-        }
-
-        if (meta && meta.needsBaseURL) {
-            body.append(
-                T.h("div", { class: "field" }, [
-                    fieldLabel(t("baseURL")),
-                    mkInput(
-                        "text",
-                        data.baseURL,
-                        "https://api.example.com/v1",
-                        (v) => {
-                            if (data.baseURL !== v) {
-                                data.baseURL = v;
-                                models = null;
-                                modelsState = "idle";
-                                modelsReq++;
-                                modelFilter = "";
-                            }
-                        },
-                        t("baseURL"),
-                    ),
+        page.replaceChildren(
+            T.h("div", { class: "onb-wrap" }, [
+                T.h("div", { class: "onb-top" }, [
+                    T.h("div", { class: "onb-track" }, [T.h("span", { style: `width:${((idx + 1) / STEP_TOTAL) * 100}%` })]),
+                    T.h("span", { class: "onb-count", text: `${idx + 1} / ${STEP_TOTAL}` }),
                 ]),
-            );
-        }
-        if (!isOauth) {
-            body.append(
-                T.h("div", { class: "field" }, [
-                    fieldLabel(t("apiKey")),
-                    mkInput(
-                        "password",
-                        data.apiKey,
-                        "sk-…",
-                        (v) => {
-                            if (data.apiKey !== v) {
-                                data.apiKey = v;
-                                models = null;
-                                modelsState = "idle";
-                                modelsReq++;
-                                modelFilter = "";
-                            }
-                        },
-                        t("apiKey"),
-                    ),
-                ]),
-            );
-        }
-        body.append(T.h("div", { class: "set-desc", text: t("setupApiKeyHint") }));
-
-        const valid = () => {
-            const keyOk = !meta || meta.apiKeyOptional || data.apiKey.trim().length > 0;
-            const urlOk = !meta || !meta.needsBaseURL || /^https?:\/\/.+/.test(data.baseURL.trim());
-            return keyOk && urlOk;
-        };
-        nextBtn(t("next"), !valid(), () => {
-            step++;
-            render();
-        });
-        // 입력 변화 시 버튼 상태 갱신
-        body.addEventListener("input", () => {
-            const b = wizardEl.querySelector(".ob-foot .btn.primary");
-            if (b) b.disabled = !valid();
-        });
+                T.h("h1", { id: "onbTitle", class: "onb-title", text: t(def.title) }),
+                T.h("p", { class: "onb-desc", text: t(def.desc) }),
+                content,
+                actions,
+            ]),
+        );
     }
 
-    function mkInput(type, value, placeholder, onInput, label) {
+    // 다음 버튼 활성화 갱신(입력 변화 시 호출)
+    function refreshGo() {
+        if (!visible) return;
+        const b = page.querySelector(".onb-actions .btn.primary");
+        if (b) b.disabled = !STEPS[idx].done();
+    }
+
+    /* ── 공통 컨트롤 ────────────────────────────────────────── */
+    function labeled(label, control) {
+        return T.h("div", { class: "field" }, [T.h("div", { class: "field-label", text: label }), control]);
+    }
+    function pick(options, value, onChange, aria) {
+        const sel = T.h("select", { "aria-label": aria || "" });
+        for (const o of options) {
+            const el = T.h("option", { value: o.value, text: o.label });
+            if (o.value === value) el.selected = true;
+            sel.append(el);
+        }
+        sel.addEventListener("change", () => onChange(sel.value));
+        sel.addEventListener("keydown", (e) => e.stopPropagation());
+        return T.h("div", { class: "select-wrap" }, [sel, T.icon("chevron")]);
+    }
+    function typed(type, value, placeholder, onInput, aria) {
         const el = T.h("input", {
             class: "input",
             type,
             value,
             placeholder,
-            "aria-label": label || placeholder,
+            "aria-label": aria || placeholder,
             autocomplete: "off",
             spellcheck: "false",
         });
@@ -374,101 +198,206 @@
         el.addEventListener("keydown", (e) => e.stopPropagation());
         return el;
     }
-    function fieldLabel(text) {
-        return T.h("div", { class: "field-label", text });
+    function providerList() {
+        return (T.state.state.settings && T.state.state.settings.providers) || [];
+    }
+    function providerOf(id) {
+        return providerList().find((p) => p.id === id) || null;
+    }
+    function oauthKind(meta) {
+        return meta && /-oauth$/.test(String(meta.type || ""));
+    }
+    // 인증이 채워져 모델 목록을 요구할 수 있는 상태인지
+    function authReady(meta) {
+        if (!draft.providerId) return false;
+        if (oauthKind(meta)) return true;
+        const keyOk = !meta || meta.apiKeyOptional || draft.apiKey.trim().length > 0;
+        const urlOk = !meta || !meta.needsBaseURL || /^https?:\/\/.+/.test(draft.baseURL.trim());
+        return keyOk && urlOk;
+    }
+    function providerPicked() {
+        return Boolean(draft && draft.providerId && authReady(providerOf(draft.providerId)));
     }
 
-    /* 3. 모델 — 진입 시 자동 로드 */
-    function stepModel(body) {
-        body.append(T.h("div", { class: "step-label", text: t("setupModel") }));
+    /* ── 단계 1: 언어 ───────────────────────────────────────── */
+    function buildLangStep(box) {
+        box.append(
+            pick(
+                [
+                    { value: "en", label: "English" },
+                    { value: "ko", label: "한국어" },
+                    { value: "ja", label: "日本語" },
+                ],
+                draft.lang,
+                (v) => {
+                    draft.lang = v;
+                    T.i18n.setLang(v, { persist: false });
+                    render();
+                },
+                t("language"),
+            ),
+        );
+    }
 
-        if (modelsState === "idle") {
-            modelsState = "loading";
-            loadModels();
-        }
-        if (modelsState === "loading") {
-            body.append(T.h("div", { class: "gen-label" }, [T.h("span", { class: "shimmer", text: t("loadingModels") })]));
+    /* ── 단계 2: 프로바이더 + 인증 ──────────────────────────── */
+    function buildProviderStep(box) {
+        const list = providerList();
+        if (!list.length) {
+            box.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+            box.append(T.h("button", { class: "btn ghost", text: t("retry"), onclick: () => T.app?.retryBoot() }));
             return;
         }
-        if (modelsState === "error") {
-            const input = manualModelInput(body);
-            body.append(
-                T.h("button", {
-                    class: "btn ghost",
-                    text: t("retry"),
-                    onclick: () => {
-                        modelsState = "idle";
-                        render();
+
+        const cards = T.h("div", { class: "provider-list", role: "radiogroup", "aria-label": t("provider") });
+        for (const p of list) {
+            const on = draft.providerId === p.id;
+            cards.append(
+                T.h(
+                    "button",
+                    {
+                        class: "provider-card" + (on ? " selected" : ""),
+                        role: "radio",
+                        "aria-checked": String(on),
+                        onclick() {
+                            if (on) return;
+                            draft.providerId = p.id;
+                            draft.baseURL = "";
+                            draft.apiKey = "";
+                            draft.model = "";
+                            forgetModels();
+                            render();
+                        },
                     },
-                }),
+                    [T.h("div", { class: "provider-name", text: p.label || p.id }), on ? T.icon("check") : null],
+                ),
             );
-            const next = nextBtn(t("next"), !data.model, () => {
-                step++;
-                render();
-            });
-            input.addEventListener("input", () => {
-                next.disabled = !data.model;
-            });
-            return;
+        }
+        box.append(cards);
+
+        const meta = providerOf(draft.providerId);
+        if (!meta) return;
+        if (meta.needsBaseURL) {
+            box.append(
+                labeled(
+                    t("baseURL"),
+                    typed("text", draft.baseURL, "https://api.example.com/v1", (v) => {
+                        draft.baseURL = v;
+                        forgetModels();
+                        refreshGo();
+                    }),
+                ),
+            );
+        }
+        if (oauthKind(meta)) {
+            box.append(labeled(t("apiKey"), T.settingsUI.oauthSection(meta.id, render)));
+        } else {
+            box.append(
+                labeled(
+                    t("apiKey") + (meta.apiKeyOptional ? ` (${t("apiKeyOptional")})` : ""),
+                    typed("password", draft.apiKey, "sk-…", (v) => {
+                        draft.apiKey = v;
+                        forgetModels();
+                        refreshGo();
+                    }),
+                ),
+            );
+        }
+    }
+
+    /* ── 단계 3: 모델 ───────────────────────────────────────── */
+    function buildModelStep(box) {
+        box.append(modelArea());
+    }
+
+    function forgetModels() {
+        models = null;
+        modelsState = "idle";
+        modelsReq++;
+        clearTimeout(modelsTimer);
+        modelsTimer = 0;
+        modelQuery = "";
+    }
+
+    function modelArea() {
+        const wrap = T.h("div", { class: "onb-models" });
+
+        // 목록이 아직 없으면: 입력이 유효한 순간 자동으로 불러온다(디바운스).
+        if (modelsState === "idle") {
+            if (authReady(providerOf(draft.providerId))) {
+                modelsState = "loading";
+                fetchModels();
+            } else {
+                wrap.append(manualModel());
+                return wrap;
+            }
         }
 
-        if (!models.length) {
-            const input = manualModelInput(body);
-            const next = nextBtn(t("next"), !data.model, () => {
-                step++;
-                render();
-            });
-            input.addEventListener("input", () => {
-                next.disabled = !data.model;
-            });
-            return;
+        if (modelsState === "loading") {
+            wrap.append(T.h("div", { class: "empty-note", text: t("loadingModels") }));
+            return wrap;
         }
 
-        const search = T.h("input", {
+        if (modelsState === "failed" || (modelsState === "ready" && !models.length)) {
+            wrap.append(manualModel());
+            if (modelsState === "failed") {
+                wrap.append(
+                    T.h("button", {
+                        class: "btn ghost",
+                        text: t("retry"),
+                        onclick() {
+                            modelsState = "loading";
+                            render();
+                            fetchModels();
+                        },
+                    }),
+                );
+            }
+            return wrap;
+        }
+
+        // ready — 검색 + 라디오 목록
+        const filter = T.h("input", {
             class: "input",
             type: "text",
             placeholder: t("searchModels"),
             "aria-label": t("searchModels"),
-            value: modelFilter,
+            value: modelQuery,
         });
-        search.addEventListener("input", () => {
-            modelFilter = search.value.toLowerCase();
-            renderList();
+        filter.addEventListener("input", () => {
+            modelQuery = filter.value.toLowerCase();
+            paint();
         });
-        search.addEventListener("keydown", (e) => e.stopPropagation());
-        body.append(search);
+        filter.addEventListener("keydown", (e) => e.stopPropagation());
+        wrap.append(filter);
 
-        const list = T.h("div", {
-            class: "models-list",
-            role: "radiogroup",
-            "aria-label": t("model"),
-        });
-        body.append(list);
+        const rows = T.h("div", { class: "models-list", role: "radiogroup", "aria-label": t("model") });
+        wrap.append(rows);
 
-        function renderList() {
-            list.replaceChildren();
-            const filtered = (models || []).filter((m) => {
+        function paint() {
+            rows.replaceChildren();
+            const q = modelQuery;
+            const hits = models.filter((m) => {
                 const id = String(m.id || "").toLowerCase();
                 const label = String(m.label || "").toLowerCase();
-                return !modelFilter || id.includes(modelFilter) || label.includes(modelFilter);
+                return !q || id.includes(q) || label.includes(q);
             });
-            if (!filtered.length) {
-                list.append(T.h("div", { class: "empty-note", text: t("noModels") }));
+            if (!hits.length) {
+                rows.append(T.h("div", { class: "empty-note", text: t("noModels") }));
                 return;
             }
-            for (const m of filtered) {
-                list.append(
+            for (const m of hits) {
+                const on = draft.model === m.id;
+                rows.append(
                     T.h(
                         "button",
                         {
-                            class: "radio-row" + (data.model === m.id ? " selected" : ""),
+                            class: "radio-row" + (on ? " selected" : ""),
                             role: "radio",
-                            "aria-checked": String(data.model === m.id),
+                            "aria-checked": String(on),
                             onclick() {
-                                data.model = m.id;
-                                renderList();
-                                const b = wizardEl.querySelector(".ob-foot .btn.primary");
-                                if (b) b.disabled = false;
+                                draft.model = m.id;
+                                paint();
+                                refreshGo();
                             },
                         },
                         [
@@ -485,124 +414,114 @@
                 );
             }
         }
-        renderList();
-        nextBtn(t("next"), !data.model, () => {
-            step++;
-            render();
-        });
+        paint();
+        return wrap;
     }
 
-    function manualModelInput(body) {
-        const input = T.h("input", {
-            class: "input",
-            type: "text",
-            value: data.model || "",
-            placeholder: t("manualModelPlaceholder"),
-            "aria-label": t("manualModel"),
-            spellcheck: "false",
-        });
-        input.addEventListener("input", () => {
-            data.model = input.value.trim();
-        });
-        input.addEventListener("keydown", (e) => e.stopPropagation());
-        body.append(T.h("div", { class: "field" }, [fieldLabel(t("manualModel")), input]));
-        return input;
+    function manualModel() {
+        const el = typed(
+            "text",
+            draft.model,
+            t("manualModelPlaceholder"),
+            (v) => {
+                draft.model = v.trim();
+                refreshGo();
+            },
+            t("manualModel"),
+        );
+        return labeled(t("manualModel"), el);
     }
 
-    async function loadModels() {
+    async function fetchModels() {
         const req = ++modelsReq;
-        const payload = { providerId: data.providerId };
-        if (data.baseURL.trim()) payload.baseURL = data.baseURL.trim();
-        if (data.apiKey.trim()) payload.apiKey = data.apiKey.trim();
+        const q = { providerId: draft.providerId };
+        if (draft.baseURL.trim()) q.baseURL = draft.baseURL.trim();
+        if (draft.apiKey.trim()) q.apiKey = draft.apiKey.trim();
         try {
-            const r = await T.api.models(payload);
+            const r = await T.api.models(q);
             if (req !== modelsReq) return;
             models = Array.isArray(r?.models) ? r.models : [];
-            modelsState = "done";
+            modelsState = "ready";
         } catch (_) {
             if (req !== modelsReq) return;
-            modelsState = "error";
+            modelsState = "failed";
         }
-        if (req === modelsReq && wizardEl) render();
+        if (req === modelsReq && visible) render();
     }
 
-    /* 4. 완료 */
-    function stepDone(body) {
-        body.style.justifyContent = "center";
-        body.append(
-            T.h("div", { style: "text-align:center" }, [
-                T.h("svg", { class: "done-check", viewBox: "0 0 52 52" }, [
-                    (function () {
-                        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                        c.setAttribute("cx", "26");
-                        c.setAttribute("cy", "26");
-                        c.setAttribute("r", "25");
-                        c.setAttribute("fill", "none");
-                        c.setAttribute("stroke", "currentColor");
-                        c.setAttribute("stroke-width", "2");
-                        return c;
-                    })(),
-                    (function () {
-                        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                        p.setAttribute("d", "M14 27l8 8 16-16");
-                        p.setAttribute("fill", "none");
-                        p.setAttribute("stroke", "currentColor");
-                        p.setAttribute("stroke-width", "3");
-                        p.setAttribute("stroke-linecap", "round");
-                        p.setAttribute("stroke-linejoin", "round");
-                        return p;
-                    })(),
-                ]),
-                T.h("div", { class: "ob-title", text: t("setupDoneTitle") }),
-                T.h("div", { class: "ob-sub", text: t("setupDone") }),
+    /* ── 단계 4: NSFW / 영구 행위 승인 ──────────────────────── */
+    function buildPolicyStep(box) {
+        const s = T.state.state.settings || {};
+        const nsfwNames = { strict: t("nsfwStrict"), moderate: t("nsfwModerate"), explicit: t("nsfwExplicit") };
+        const approvalNames = { user: t("approvalUser"), model: t("approvalModel"), always: t("approvalAlways") };
+
+        box.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("nsfwLevel") }),
+                pick(
+                    (s.nsfwLevels || ["strict", "moderate", "explicit"]).map((v) => ({ value: v, label: nsfwNames[v] || v })),
+                    draft.nsfw,
+                    (v) => (draft.nsfw = v),
+                    t("nsfwLevel"),
+                ),
             ]),
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("approvalLevel") }),
+                pick(
+                    (s.approvalLevels || ["user", "model", "always"]).map((v) => ({ value: v, label: approvalNames[v] || v })),
+                    draft.approval,
+                    (v) => (draft.approval = v),
+                    t("approvalLevel"),
+                ),
+            ]),
+            T.h("p", { class: "set-desc", text: t("approvalDesc") }),
+            T.h("p", { class: "set-desc", text: t("onbPolicyNote") }),
         );
-
-        const btn = T.h("button", { class: "btn primary", text: t("start"), onclick: finish });
-        footAppend(btn);
     }
 
-    async function finish() {
-        if (finishing) return;
-        finishing = true;
-        const meta = providerMeta();
-        const provider = { id: data.providerId, model: data.model };
-        if (meta && meta.needsBaseURL) provider.baseURL = data.baseURL.trim();
-        if (data.apiKey.trim()) provider.apiKey = data.apiKey.trim();
+    /* ── 저장 ───────────────────────────────────────────────── */
+    async function save() {
+        if (saving || !STEPS[idx].done()) return;
+        saving = true;
+        const meta = providerOf(draft.providerId);
+        const provider = { id: draft.providerId, model: draft.model };
+        if (meta && meta.needsBaseURL) provider.baseURL = draft.baseURL.trim();
+        if (draft.apiKey.trim()) provider.apiKey = draft.apiKey.trim();
 
         try {
-            await T.api.putSettings({ language: data.lang, provider });
-            // 부트 데이터 재확인 후 마법사 해제
+            await T.api.putSettings({ language: draft.lang, provider, nsfwLevel: draft.nsfw, approvalLevel: draft.approval });
             const bs = await T.api.bootstrap();
-            state.state.bootstrap = bs;
-            state.emit("bootstrap");
+            T.state.state.bootstrap = bs;
+            T.state.emit("bootstrap");
             try {
                 const s = await T.api.getSettings();
-                if (s) state.setSettings(s);
+                if (s) T.state.setSettings(s);
             } catch (_) {}
-            state.state.offline = false;
             dismiss();
-            // 설정 저장 후 봇 목록을 새로 읽어 첫 봇 스레드를 연다
             try {
                 const r = await T.api.agents();
-                state.setBots(r.agents || []);
+                T.state.setBots(r.agents || []);
             } catch (_) {}
-            const bot = state.state.bots[0];
-            if (bot) T.chat.open(bot.threadId);
+            const first = T.state.state.bots[0];
+            if (first) T.chat.open(first.threadId);
             T.events.connect();
         } catch (_) {
-            finishing = false;
+            saving = false;
             T.toast.show("error", t("saveFailed"));
         }
     }
 
+    /* ── 외부 변화 반영 ─────────────────────────────────────── */
     T.i18n.onChange(() => {
-        if (wizardEl) render();
+        if (visible) render();
     });
-
-    // OAuth 로그인 완료/실패 시 마법사가 열려 있으면 다시 그린다.
-    state.on("oauth_done", () => {
-        if (wizardEl && data && data.providerId && /-oauth$/.test(String(providerMeta()?.type || ""))) render();
+    T.state.on("oauth_done", () => {
+        if (visible && draft && idx === 1) {
+            // 이 핸들러가 settings.js보다 먼저 등록되므로, pending이 비워지기 전에
+            // 다시 그리는 것을 막기 위해 직접 비운다.
+            T.settingsUI.resetOauth();
+            render();
+        }
     });
 
     T.onboarding = { wizard, showToken, dismiss };
