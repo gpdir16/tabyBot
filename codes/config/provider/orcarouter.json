@@ -1,0 +1,9 @@
+{
+    "id": "orcarouter",
+    "type": "openai-compatible",
+    "baseURL": "https://api.orcarouter.ai/v1",
+    "keysUrl": "https://www.orcarouter.ai/console",
+    "thinkingLevels": ["low", "medium", "high"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}

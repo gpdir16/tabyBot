@@ -47,6 +47,7 @@ const PROVIDER_LABELS = {
     synthetic: "Synthetic",
     upstage: "Upstage",
     zenmux: "ZenMux",
+    orcarouter: "OrcaRouter",
 };
 
 function providerPresets() {
@@ -80,10 +81,10 @@ function providerPresets() {
             })
             .filter(Boolean),
     );
-    const presets = ["default", "openrouter", "synthetic", "ollama", "ollama-cloud", "zenmux", "upstage", "codex", "grok"]
+    const presets = ["default", "openrouter", "orcarouter", "synthetic", "ollama", "ollama-cloud", "zenmux", "upstage", "codex", "grok"]
         .map((id) => byId.get(id))
         .filter(Boolean);
-    // tabyAgent와 동일하게 실제 프리셋 9개에 Custom API URL을 별도 선택지로 제공한다.
+    // tabyAgent와 동일하게 실제 프리셋 10개에 Custom API URL을 별도 선택지로 제공한다.
     presets.push({ id: "custom", label: "Custom API URL", type: "openai-compatible", baseURL: null, apiKeyOptional: false, needsBaseURL: true });
     return presets;
 }
