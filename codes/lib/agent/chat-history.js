@@ -7,10 +7,16 @@ import { STOP_BY_USER_HINT } from "./session.js";
 const HISTORY_VERSION = 3;
 const MANIFEST_VERSION = 1;
 
+export const RECOVERY_PROMPT =
+    "Internal continuation instruction: continue the same task naturally from the current conversation state. Treat the existing messages and tool results as completed work, do not restart completed work, and inspect the current state before retrying an incomplete tool. Do not mention this continuation or any internal recovery to the user.";
+
 const INTERNAL_USER_HINTS = new Set([
     "You have enough tool output. Stop calling tools. Reply to the user in plain text now using results you already have.",
     STOP_BY_USER_HINT,
+    RECOVERY_PROMPT,
 ]);
+
+const RECOVERABLE_TURN_STATUSES = new Set(["pending", "in_progress", "interrupted"]);
 
 function safeSessionKey(sessionKey) {
     return (
@@ -379,20 +385,109 @@ export function appendPendingUserTurn(chatId, userText, attachments = []) {
 
     turns.push({
         at: new Date().toISOString(),
+        status: "pending",
         messages: [{ role: "user", content: text, ...(attachments.length ? { attachments } : {}) }],
     });
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);
 }
 
+export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null } = {}) {
+    if (!chatId || !turnMessages?.length) return;
+
+    const turns = loadChatHistory(chatId);
+    let targetIndex = turns.length - 1;
+    while (targetIndex > 0 && RECOVERABLE_TURN_STATUSES.has(turns[targetIndex - 1]?.status)) targetIndex -= 1;
+    const target = turns[targetIndex];
+    const messages = Array.isArray(baseMessages) ? [...baseMessages, ...turnMessages.map(cloneStoredMessage)] : turnMessages.map(cloneStoredMessage);
+    const checkpoint = {
+        at: target?.at || new Date().toISOString(),
+        status: "in_progress",
+        checkpointAt: new Date().toISOString(),
+        messages,
+    };
+
+    if (target && RECOVERABLE_TURN_STATUSES.has(target.status)) turns[targetIndex] = checkpoint;
+    else turns.push(checkpoint);
+    replaceChatHistory(chatId, turns);
+    writePreview(chatId, turns);
+}
+
+export function markChatTurnInterrupted(chatId) {
+    if (!chatId) return false;
+    const turns = loadChatHistory(chatId);
+    let start = turns.length;
+    while (start > 0 && RECOVERABLE_TURN_STATUSES.has(turns[start - 1]?.status)) start -= 1;
+    if (start === turns.length) return false;
+    const interruptedAt = new Date().toISOString();
+    for (let i = start; i < turns.length; i += 1) {
+        turns[i].status = "interrupted";
+        turns[i].interruptedAt = interruptedAt;
+    }
+    replaceChatHistory(chatId, turns);
+    return true;
+}
+
+export function hasRecoverableChatTurn(chatId) {
+    const turns = loadChatHistory(chatId);
+    return RECOVERABLE_TURN_STATUSES.has(turns.at(-1)?.status);
+}
+
+export function prepareChatTurnRecovery(chatId) {
+    if (!chatId) return false;
+    const turns = loadChatHistory(chatId);
+    let start = turns.length;
+    while (start > 0 && RECOVERABLE_TURN_STATUSES.has(turns[start - 1]?.status)) start -= 1;
+    if (start === turns.length) return false;
+
+    const recoverable = turns.slice(start);
+    const messages = recoverable.flatMap((turn) => (turn.messages || []).map(cloneStoredMessage));
+    const completedToolCalls = new Set(messages.filter((message) => message?.role === "tool").map((message) => message.tool_call_id));
+    const repairedMessages = [];
+    for (const message of messages) {
+        repairedMessages.push(message);
+        if (message?.role !== "assistant" || !Array.isArray(message.tool_calls)) continue;
+        for (const toolCall of message.tool_calls) {
+            if (!toolCall?.id || completedToolCalls.has(toolCall.id)) continue;
+            repairedMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: "No durable result was recorded for this tool call. Inspect the current state before retrying it if needed.",
+            });
+        }
+    }
+
+    turns.splice(start, recoverable.length, {
+        at: recoverable[0]?.at || new Date().toISOString(),
+        status: "interrupted",
+        interruptedAt: new Date().toISOString(),
+        messages: repairedMessages,
+    });
+    replaceChatHistory(chatId, turns);
+    writePreview(chatId, turns);
+    return true;
+}
+
+export function lastChatTurnMessages(chatId) {
+    const last = loadChatHistory(chatId).at(-1);
+    return last?.messages?.map(cloneStoredMessage) || [];
+}
+
 export function appendChatTurn(chatId, turnMessages, extra = {}) {
     if (!chatId || !turnMessages?.length) return;
 
     const turns = loadChatHistory(chatId);
+    const stats = sanitizeTurnStats(extra.stats);
+    const storedMessages = turnMessages.map(cloneStoredMessage);
+    if (extra.attachments?.length) {
+        const userMessage = storedMessages.find((message) => message?.role === "user");
+        if (userMessage) userMessage.attachments = extra.attachments;
+    }
+
     const incomingUsers = userContentsFromTurnMessages(turnMessages);
     while (turns.length && incomingUsers.length) {
-        const last = turns[turns.length - 1];
-        const msgs = last?.messages || [];
+        const pending = turns[turns.length - 1];
+        const msgs = pending?.messages || [];
         if (msgs.length !== 1 || msgs[0]?.role !== "user") break;
         const idx = incomingUsers.lastIndexOf(msgs[0].content);
         if (idx < 0) break;
@@ -400,17 +495,24 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
         turns.pop();
     }
 
-    const stats = sanitizeTurnStats(extra.stats);
-    const storedMessages = turnMessages.map(cloneStoredMessage);
-    if (extra.attachments?.length) {
-        const userMessage = storedMessages.find((message) => message?.role === "user");
-        if (userMessage) userMessage.attachments = extra.attachments;
+    const last = turns[turns.length - 1];
+    // 복구 턴은 기존 체크포인트와 새 실행분을 하나의 완료 턴으로 확정한다.
+    if (last && (last.status === "in_progress" || last.status === "interrupted")) {
+        const completedMessages = Array.isArray(extra.baseMessages)
+            ? [...extra.baseMessages.map(cloneStoredMessage), ...storedMessages]
+            : storedMessages;
+        turns[turns.length - 1] = {
+            at: last.at || new Date().toISOString(),
+            messages: completedMessages,
+            ...(stats ? { stats } : {}),
+        };
+    } else {
+        turns.push({
+            at: new Date().toISOString(),
+            messages: storedMessages,
+            ...(stats ? { stats } : {}),
+        });
     }
-    turns.push({
-        at: new Date().toISOString(),
-        messages: storedMessages,
-        ...(stats ? { stats } : {}),
-    });
 
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);

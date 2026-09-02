@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { USER_DIR } from "../paths.js";
 import { firstAgentId } from "../agents-store.js";
-import { loadChatHistory, previewSnippetFromTurns, stripMarkdownForPreview } from "../agent/chat-history.js";
+import { RECOVERY_PROMPT, loadChatHistory, previewSnippetFromTurns, stripMarkdownForPreview } from "../agent/chat-history.js";
 
 const TEMP_ROOT = path.join(USER_DIR, "temp");
 
@@ -192,6 +192,7 @@ const ATTACHED_FILES_MARK = "[User attached files]";
 const INTERNAL_HINTS = [
     "You have enough tool output. Stop calling tools. Reply to the user in plain text now using results you already have.",
     "The user pressed Stop. Stop immediately. Do not call more tools. Reply briefly with progress and what remains.",
+    RECOVERY_PROMPT,
 ];
 function stripAttachedFilesPrompt(content) {
     const s = String(content || "");
