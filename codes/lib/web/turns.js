@@ -1,13 +1,22 @@
 // 턴 오케스트레이션: 사용자 메시지 1건을 에이전트 턴으로 실행하고 SSE 이벤트로 방송한다.
 import { runAgent } from "../agent/loop.js";
-import { appendChatTurn, appendPendingUserTurn } from "../agent/chat-history.js";
+import {
+    RECOVERY_PROMPT,
+    appendChatTurn,
+    appendPendingUserTurn,
+    checkpointChatTurn,
+    hasRecoverableChatTurn,
+    lastChatTurnMessages,
+    markChatTurnInterrupted,
+    prepareChatTurnRecovery,
+} from "../agent/chat-history.js";
 import { beginAgentSession, endAgentSession, enqueueAgentMessage, isAgentSessionRunning, requestAgentStop } from "../agent/session.js";
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
 import { setCronJobHandler as registerCronJobHandler } from "../cron/scheduler.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
-import { ensureTitleFromMessage, getConversationMeta } from "./conversations.js";
+import { ensureTitleFromMessage, getConversationMeta, listConversations } from "./conversations.js";
 import { firstAgentId } from "../agents-store.js";
 
 function isStoppedByUser(result) {
@@ -18,11 +27,15 @@ function isReplyFailure(result) {
     return (result?.error === "tool_rounds_exceeded" || result?.error === "empty_reply_exhausted") && !result.text?.trim();
 }
 
+function shouldRecover(result) {
+    return isReplyFailure(result) || result?.error === "agent_error" || result?.error === "agent_turn_failed";
+}
+
 function isSilentReply(result) {
     return Boolean(result?.silent) && !result?.text?.trim();
 }
 
-function saveChatTurn(sessionKey, result, attachments = [], displayText = null) {
+function saveChatTurn(sessionKey, result, attachments = [], displayText = null, baseMessages = null) {
     if (!result?.turnMessages?.length) return;
     try {
         const messages = result.turnMessages.map((message) => ({ ...message }));
@@ -35,15 +48,17 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null) 
                 userMessage.content = displayText;
             }
         }
-        appendChatTurn(sessionKey, messages, { stats: result.stats, attachments });
+        appendChatTurn(sessionKey, messages, { stats: result.stats, attachments, baseMessages });
     } catch (err) {
         console.error("Chat history save failed:", err?.stack || err);
     }
 }
 
-export async function runTurn({ sessionKey, agentId, userText, displayText = null, attachments = [] }) {
+export async function runTurn({ sessionKey, agentId, userText, displayText = null, attachments = [], recovery = false }) {
     const lang = loadUserConfig().language || "en";
     const session = beginAgentSession(sessionKey);
+    let recoveryBaseMessages = recovery ? lastChatTurnMessages(sessionKey) : null;
+    let resumed = recovery;
     const startedAt = Date.now();
     let lastPhase = null;
 
@@ -55,21 +70,39 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
     };
 
     try {
-        status("generating");
-        const result = await runAgent(userText, {
-            chatId: sessionKey,
-            sessionKey,
-            agentId,
-            session,
-            attachments,
-            onStatusPhase: (phase, detail) => status(phase, detail),
-            onTextDelta: (text, full) => emit({ type: "delta", conversationId: sessionKey, text, full }),
-        });
+        status("generating", recovery ? "resuming interrupted run" : null);
+        const run = (message, appendToRecovery = false) =>
+            runAgent(message, {
+                chatId: sessionKey,
+                sessionKey,
+                agentId,
+                session,
+                attachments: appendToRecovery ? [] : attachments,
+                onStatusPhase: (phase, detail) => status(phase, detail),
+                onTextDelta: (text, full) => emit({ type: "delta", conversationId: sessionKey, text, full }),
+                onCheckpoint: (turnMessages) => {
+                    if (!getConversationMeta(sessionKey)) return;
+                    checkpointChatTurn(sessionKey, turnMessages, {
+                        baseMessages: appendToRecovery ? recoveryBaseMessages : null,
+                    });
+                },
+            });
+
+        let result = await run(userText, recovery);
+        if (!recovery && shouldRecover(result)) {
+            markChatTurnInterrupted(sessionKey);
+            prepareChatTurnRecovery(sessionKey);
+            recoveryBaseMessages = lastChatTurnMessages(sessionKey);
+            resumed = true;
+            status("generating", "resuming interrupted run");
+            result = await run(RECOVERY_PROMPT, true);
+        }
 
         // 실행 중 대화가 삭제되었으면 디스크에 되살리지 않는다.
         if (getConversationMeta(sessionKey)) {
-            saveChatTurn(sessionKey, result, attachments, displayText);
-            ensureTitleFromMessage(sessionKey, displayText || attachments[0]?.name || userText);
+            saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
+            if (!result?.error) ensureTitleFromMessage(sessionKey, displayText || attachments[0]?.name || userText);
+            if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
         }
 
         if (isStoppedByUser(result)) {
@@ -147,6 +180,25 @@ export function dispatchMessage({ sessionKey, agentId, userText, displayText = n
         });
     });
     return { queued: false };
+}
+
+export function recoverInterruptedTurns() {
+    for (const conversation of listConversations()) {
+        const sessionKey = conversation.id;
+        if (!hasRecoverableChatTurn(sessionKey) || !prepareChatTurnRecovery(sessionKey)) continue;
+
+        void scheduleWork(
+            "user",
+            () =>
+                runTurn({
+                    sessionKey,
+                    agentId: conversation.agentId,
+                    userText: RECOVERY_PROMPT,
+                    recovery: true,
+                }),
+            { sessionKey, cancellable: true },
+        ).catch((err) => console.error("Interrupted turn recovery failed:", err?.stack || err));
+    }
 }
 
 export function stopConversation(sessionKey) {

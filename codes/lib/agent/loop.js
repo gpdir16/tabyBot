@@ -99,7 +99,15 @@ function shouldStop(session) {
     return Boolean(session?.isAborted?.());
 }
 
-async function completeTextReply(llm, messages, { onTextDelta, setStatus, maxRetries, modelCallCount, session, partialTextRef }) {
+function checkpointMessages(messages, contextBaseLength, onCheckpoint) {
+    onCheckpoint?.(extractTurnMessages(messages, contextBaseLength));
+}
+
+async function completeTextReply(
+    llm,
+    messages,
+    { onTextDelta, onCheckpoint, contextBaseLength, setStatus, maxRetries, modelCallCount, session, partialTextRef },
+) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         if (shouldStop(session)) return null;
 
@@ -142,6 +150,7 @@ async function completeTextReply(llm, messages, { onTextDelta, setStatus, maxRet
         const msg = assistantMessageToPlain(raw);
         if (msg.content?.trim()) {
             messages.push(msg);
+            checkpointMessages(messages, contextBaseLength, onCheckpoint);
             if (isSilentReply(msg.content)) {
                 return { text: null, usage: response.usage, silent: true };
             }
@@ -188,6 +197,7 @@ async function runAgentTurn(
         history = null,
         persistHistory = true,
         consultDepth = 0,
+        onCheckpoint,
     } = {},
 ) {
     clearFileReadCache();
@@ -288,6 +298,7 @@ async function runAgentTurn(
         if (!toolCalls?.length) {
             if (choice.content?.trim()) {
                 messages.push(choice);
+                checkpointMessages(messages, contextBaseLength, onCheckpoint);
                 if (injectPendingUserMessages(messages, session)) {
                     continue;
                 }
@@ -312,6 +323,8 @@ async function runAgentTurn(
 
             const recovered = await completeTextReply(llm, messages, {
                 onTextDelta,
+                onCheckpoint,
+                contextBaseLength,
                 setStatus,
                 maxRetries: maxEmptyReplyRetries,
                 modelCallCount: modelCallCountRef,
@@ -341,11 +354,13 @@ async function runAgentTurn(
         }
 
         messages.push(choice);
+        checkpointMessages(messages, contextBaseLength, onCheckpoint);
 
         if (toolCallCount >= maxToolCalls) {
             pushSkippedToolResults(messages, toolCalls, 0, {
                 error: "Tool call budget exceeded for this turn.",
             });
+            checkpointMessages(messages, contextBaseLength, onCheckpoint);
             continue;
         }
 
@@ -357,6 +372,7 @@ async function runAgentTurn(
                 pushSkippedToolResults(messages, toolCalls, toolIndex, {
                     error: "Tool call budget exceeded for this turn.",
                 });
+                checkpointMessages(messages, contextBaseLength, onCheckpoint);
                 break;
             }
 
@@ -389,17 +405,20 @@ async function runAgentTurn(
             if (shouldStop(session)) {
                 pushToolResult(messages, tc.id, result);
                 pushSkippedToolResults(messages, toolCalls, toolIndex + 1);
+                checkpointMessages(messages, contextBaseLength, onCheckpoint);
                 return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
                     partialText: partialTextRef.value,
                 });
             }
             pushToolResult(messages, tc.id, result);
+            checkpointMessages(messages, contextBaseLength, onCheckpoint);
             const imageObservation = buildToolImageObservation(result, { visionEnabled: visionSupport });
             if (imageObservation) toolImageObservations.push(imageObservation);
         }
 
         if (toolImageObservations.length) {
             messages.push(...toolImageObservations);
+            checkpointMessages(messages, contextBaseLength, onCheckpoint);
         }
     }
 
@@ -411,6 +430,8 @@ async function runAgentTurn(
 
     const recovered = await completeTextReply(llm, messages, {
         onTextDelta,
+        onCheckpoint,
+        contextBaseLength,
         setStatus,
         maxRetries: maxEmptyReplyRetries,
         modelCallCount: modelCallCountRef,
@@ -435,6 +456,8 @@ async function runAgentTurn(
 
             const extra = await completeTextReply(llm, messages, {
                 onTextDelta,
+                onCheckpoint,
+                contextBaseLength,
                 setStatus,
                 maxRetries: maxEmptyReplyRetries,
                 modelCallCount: modelCallCountRef,

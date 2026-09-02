@@ -28,7 +28,7 @@ import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLO
 import { subscribe, emit } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import { createRouter } from "./http.js";
-import { dispatchMessage, stopConversation } from "./turns.js";
+import { dispatchMessage, recoverInterruptedTurns, stopConversation } from "./turns.js";
 import { listRunningSessionKeys } from "../agent/session.js";
 import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
@@ -530,6 +530,7 @@ export function startWebServer() {
     const server = http.createServer((req, res) => router.handle(req, res));
     server.listen(PORT, HOST, () => {
         console.log(`tabyBot: web UI ready at http://${HOST}:${PORT}${WEB_TOKEN ? " (token required)" : ""}`);
+        if (isConfigReady()) recoverInterruptedTurns();
     });
     return server;
 }
