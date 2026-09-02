@@ -238,7 +238,6 @@
 
     function openBot(bot) {
         try {
-            localStorage.setItem("tabybot.lastAgent", bot.id);
             if (T.settingsUI.isOpen()) T.settingsUI.hide();
             history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid || bot.id)}`);
         } catch (_) {}

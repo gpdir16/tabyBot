@@ -23,6 +23,11 @@
     let modelsTimer = 0;
     let modelQuery = "";
 
+    // 온보딩 건너뛰기 상태는 브라우저가 아니라 서버 설정에서 읽는다.
+    function isSkipped() {
+        return T.state.state.settings?.onboardingDismissed === true;
+    }
+
     /* ── 단계 정의 ──────────────────────────────────────────── */
     const STEPS = [
         { title: "onbLangTitle", desc: "onbLangDesc", build: buildLangStep, done: () => true },
@@ -98,9 +103,9 @@
             try {
                 await T.api.bootstrap(); // 토큰 검증 겸 부트
                 if (onSuccess) onSuccess();
-            } catch (_) {
+            } catch (err) {
                 busy = false;
-                errLine.textContent = t("onbTokenFailed");
+                errLine.textContent = T.api.errorText(err, t("onbTokenFailed"));
             }
         }
     }
@@ -120,6 +125,24 @@
         def.build(content);
 
         const actions = T.h("div", { class: "onb-actions" });
+        actions.append(
+            T.h("button", {
+                class: "btn ghost",
+                text: t("onbSkip"),
+                async onclick() {
+                    const button = this;
+                    button.disabled = true;
+                    try {
+                        const s = await T.api.putSettings({ onboardingDismissed: true });
+                        if (s) T.state.setSettings(s);
+                        dismiss();
+                    } catch (err) {
+                        button.disabled = false;
+                        T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                    }
+                },
+            }),
+        );
         if (idx > 0) {
             actions.append(
                 T.h("button", {
@@ -289,18 +312,34 @@
             );
         }
         if (oauthKind(meta)) {
-            box.append(labeled(t("apiKey"), T.settingsUI.oauthSection(meta.id, render)));
+            box.append(labeled(t("oauthAccount"), T.settingsUI.oauthSection(meta.id, render)));
         } else {
             box.append(
                 labeled(
                     t("apiKey") + (meta.apiKeyOptional ? ` (${t("apiKeyOptional")})` : ""),
-                    typed("password", draft.apiKey, "sk-…", (v) => {
-                        draft.apiKey = v;
-                        forgetModels();
-                        refreshGo();
+                    T.settingsUI.secretInput({
+                        value: draft.apiKey,
+                        placeholder: "sk-…",
+                        aria: t("apiKey"),
+                        onInput(v) {
+                            draft.apiKey = v;
+                            forgetModels();
+                            refreshGo();
+                        },
                     }),
                 ),
             );
+            if (meta.keysUrl) {
+                box.append(
+                    T.h("a", {
+                        class: "key-hint",
+                        href: meta.keysUrl,
+                        target: "_blank",
+                        rel: "noopener noreferrer",
+                        text: t("getApiKey") + " ↗",
+                    }),
+                );
+            }
         }
     }
 
@@ -489,7 +528,13 @@
         if (draft.apiKey.trim()) provider.apiKey = draft.apiKey.trim();
 
         try {
-            await T.api.putSettings({ language: draft.lang, provider, nsfwLevel: draft.nsfw, approvalLevel: draft.approval });
+            await T.api.putSettings({
+                language: draft.lang,
+                provider,
+                onboardingDismissed: false,
+                nsfwLevel: draft.nsfw,
+                approvalLevel: draft.approval,
+            });
             const bs = await T.api.bootstrap();
             T.state.state.bootstrap = bs;
             T.state.emit("bootstrap");
@@ -505,9 +550,9 @@
             const first = T.state.state.bots[0];
             if (first) T.chat.open(first.threadId);
             T.events.connect();
-        } catch (_) {
+        } catch (err) {
             saving = false;
-            T.toast.show("error", t("saveFailed"));
+            T.toast.show("error", T.api.errorText(err, t("saveFailed")));
         }
     }
 
@@ -524,5 +569,5 @@
         }
     });
 
-    T.onboarding = { wizard, showToken, dismiss };
+    T.onboarding = { wizard, showToken, dismiss, isSkipped };
 })((window.Taby = window.Taby || {}));

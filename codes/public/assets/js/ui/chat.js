@@ -434,10 +434,10 @@
             requestSync();
             try {
                 await T.api.answerAsk(ask.askId, body);
-            } catch (_) {
+            } catch (err) {
                 ask.answer = prev; // 롤백
                 requestSync();
-                T.toast.show("error", t("errorPrefix"));
+                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
             }
         }
         function sendText() {
@@ -698,12 +698,12 @@
             await T.api.sendMessage(convId, text, atts.map((a) => a.id).filter(Boolean));
             el.classList.remove("optimistic");
             return true;
-        } catch (_) {
+        } catch (err) {
             // 롤백: 낙관적 항목 제거 + 입력 복원은 컴포저가 처리
             const i = c.pending.indexOf(pend);
             if (i > -1) c.pending.splice(i, 1);
             if (pend._el && pend._el.parentElement) pend._el.parentElement.remove();
-            T.toast.show("error", t("sendFailed"));
+            T.toast.show("error", T.api.errorText(err, t("sendFailed")));
             return false;
         }
     }
@@ -757,8 +757,8 @@
                         state.upsertMeta(Object.assign({}, c.meta, meta));
                     }
                     state.emit("conversations");
-                } catch (_) {
-                    T.toast.show("error", t("errorPrefix"));
+                } catch (err) {
+                    T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
                 }
             }
         }

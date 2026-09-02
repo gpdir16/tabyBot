@@ -39,14 +39,6 @@
             return null;
         }
     }
-    function storedLang() {
-        try {
-            return localStorage.getItem("tabybot.lang");
-        } catch (_) {
-            return null;
-        }
-    }
-
     // 모바일 키보드 대응:
     // 1) visual viewport 높이에 맞춰 --app-height를 다시 계산하고,
     // 2) iOS/Android가 키보드가 열리면 시각 뷰포트를 위로 밀어올리는데
@@ -144,12 +136,12 @@
         }
     });
 
-    function enterOffline() {
+    function enterOffline(err) {
         // 오프라인은 온보딩과 무관: 마법사를 띄우지 않고 안내만 표시한다.
         state.state.offline = true;
         state.setConn("disconnected");
-        T.i18n.init(storedLang(), null);
-        T.toast.show("error", t("offlineNote"));
+        T.i18n.init(null);
+        T.toast.show("error", err ? T.api.errorText(err, t("offlineNote")) : t("offlineNote"));
     }
 
     /* ── URL 라우팅: /a/<uuid>(채팅) · /s/<탭>(설정 페이지) ── */
@@ -164,18 +156,6 @@
             q: p.get("q") || "",
             m: p.get("m") != null && !Number.isNaN(Number(p.get("m"))) ? Number(p.get("m")) : null,
         };
-    }
-
-    function hasSavedProviderSetup(settings) {
-        const provider = settings?.provider || {};
-        const defaultPreset = settings?.providers?.find((p) => p.id === "default");
-        const customBaseURL = provider.id === "default" && provider.baseURL && provider.baseURL !== defaultPreset?.baseURL;
-        return (
-            Boolean(provider.id && provider.id !== "default") ||
-            Boolean(provider.model?.trim()) ||
-            Boolean(provider.apiKeySet) ||
-            Boolean(customBaseURL)
-        );
     }
 
     // 1회성 q/m만 제거한다.
@@ -206,38 +186,36 @@
             state.state.bootstrap = bs;
             state.emit("bootstrap");
 
-            T.i18n.init(storedLang(), bs.language);
+            T.i18n.init(bs.language);
 
             try {
                 const s = await T.api.getSettings();
                 if (s && typeof s === "object") state.setSettings(s);
-            } catch (_) {}
+            } catch (err) {
+                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+            }
             try {
                 const r = await T.api.agents();
                 state.setBots(Array.isArray(r?.agents) ? r.agents : []);
-            } catch (_) {}
+            } catch (err) {
+                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+            }
             try {
                 const r = await T.api.conversations();
                 if (token !== bootToken) return;
                 state.replaceConversations((r && r.conversations) || []);
-            } catch (_) {}
+            } catch (err) {
+                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+            }
             const bots = state.state.bots;
 
             state.state.offline = false;
             booted = true;
             if (T.sidebar.hydrate) await T.sidebar.hydrate();
 
-            // 봇 선택: URL uuid → 저장된 마지막 봇 → 첫 봇
+            // 봇 선택: URL uuid → 첫 봇
             const fromPath = botUuidFromPath();
-            let bot = (fromPath && bots.find((b) => b.uuid === fromPath)) || null;
-            if (!bot) {
-                try {
-                    const lastId = localStorage.getItem("tabybot.lastAgent");
-                    bot = (lastId && bots.find((b) => b.id === lastId)) || bots[0] || null;
-                } catch (_) {
-                    bot = bots[0] || null;
-                }
-            }
+            let bot = (fromPath && bots.find((b) => b.uuid === fromPath)) || bots[0] || null;
             if (token !== bootToken) return;
             // 설정 라우트 판별을 봇 복원보다 먼저 한다(showList의 경로 리셋과 충돌 방지).
             const sr = settingsRoute();
@@ -255,25 +233,16 @@
 
             T.events.connect();
 
-            // 온보딩은 서버가 "설정 안 됨"(configured=false)이라고 응답했을 때만 연다.
-            if (bs.configured === false) {
-                // 사용자가 설정 URL로 직접 들어온 경우에는 온보딩이 설정창을 가리지 않게 한다.
-                if (!T.settingsUI.isOpen()) {
-                    if (hasSavedProviderSetup(state.state.settings)) {
-                        history.pushState(null, "", "/s/provider");
-                        renderRoute();
-                    } else {
-                        T.onboarding.wizard();
-                    }
-                }
-            }
+            // 설정이 불완전하면 온보딩을 연다. 사용자가 /s/*로 직접 들어온 경우에는
+            // 위에서 복원한 설정 페이지를 유지한다.
+            if (bs.configured === false && !T.settingsUI.isOpen() && !T.onboarding.isSkipped()) T.onboarding.wizard();
         } catch (e) {
             if (token !== bootToken) return;
             if (e instanceof T.api.ApiError && e.status === 401) {
                 T.onboarding.showToken(() => boot());
                 return;
             }
-            enterOffline();
+            enterOffline(e);
         }
     }
 
@@ -317,7 +286,7 @@
     initComposerHeight();
     initTouchGuard();
     applyTheme(storedTheme() || "dark");
-    T.i18n.init(storedLang(), null);
+    T.i18n.init(null);
     T.i18n.applyStatic();
 
     T.sidebar.init();

@@ -145,6 +145,9 @@
             apiKey: "API key",
             apiKeyOptional: "Key optional",
             apiKeySaved: "Saved",
+            apiKeyReplace: "Replace",
+            getApiKey: "Get an API key",
+            oauthOpenPage: "Open page",
             loadModels: "Load models",
             loadingModels: "Loading models…",
             modelsFailed: "Failed to load models",
@@ -201,6 +204,7 @@
             onbPolicyDesc: "Content limits and who approves permanent actions.",
             onbPolicyNote: "You can change all of this anytime in Settings.",
             onbFinish: "Finish setup",
+            onbSkip: "Do this later",
             onbNext: "Next",
             onbPrev: "Back",
             onbTokenTitle: "Server access",
@@ -293,6 +297,9 @@
             apiKey: "API 키",
             apiKeyOptional: "키 선택사항",
             apiKeySaved: "저장됨",
+            apiKeyReplace: "교체",
+            getApiKey: "API 키 발급받기",
+            oauthOpenPage: "페이지 열기",
             loadModels: "모델 불러오기",
             loadingModels: "모델 불러오는 중…",
             modelsFailed: "모델을 불러오지 못했습니다",
@@ -349,6 +356,7 @@
             onbPolicyDesc: "콘텐츠 제한과 영구적인 행위의 승인 주체를 정합니다.",
             onbPolicyNote: "모든 항목은 설정에서 언제든 바꿀 수 있습니다.",
             onbFinish: "설정 완료",
+            onbSkip: "나중에 하기",
             onbNext: "다음",
             onbPrev: "이전",
             onbTokenTitle: "서버 접속",
@@ -441,6 +449,9 @@
             apiKey: "APIキー",
             apiKeyOptional: "キー任意",
             apiKeySaved: "保存済み",
+            apiKeyReplace: "変更",
+            getApiKey: "APIキーを取得",
+            oauthOpenPage: "ページを開く",
             loadModels: "モデルを取得",
             loadingModels: "モデルを取得中…",
             modelsFailed: "モデルの取得に失敗しました",
@@ -497,6 +508,7 @@
             onbPolicyDesc: "コンテンツ制限と恒久的な行為の承認者を決めます。",
             onbPolicyNote: "すべて設定からいつでも変更できます。",
             onbFinish: "設定を完了",
+            onbSkip: "後で設定する",
             onbNext: "次へ",
             onbPrev: "戻る",
             onbTokenTitle: "サーバー接続",
@@ -572,17 +584,11 @@
         });
     }
 
-    // 언어 변경. persist=false이면 localStorage에 기록하지 않음(서버 값 우선 노출).
-    function setLang(l, opts) {
-        const o = opts || {};
+    // 언어는 서버 설정이 기준이며, 초기 연결 전에는 브라우저 언어를 임시로 사용한다.
+    function setLang(l) {
         if (!DICT[l]) l = "en";
         lang = l;
         document.documentElement.lang = l;
-        if (o.persist !== false) {
-            try {
-                localStorage.setItem("tabybot.lang", l);
-            } catch (_) {}
-        }
         applyStatic();
         listeners.forEach((fn) => {
             try {
@@ -591,12 +597,11 @@
         });
     }
 
-    // 초기 언어 결정: 저장값 > 서버값 > 브라우저 언어
-    function init(stored, server) {
+    // 초기 언어 결정: 서버값 > 브라우저 언어
+    function init(server) {
         const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
-        const cand = stored || server || (["ko", "ja"].indexOf(nav) > -1 ? nav : "en");
-        setLang(cand, { persist: false });
-        // 저장값이 없고 서버값으로 확정된 경우에도 저장하지 않는다(서버가 소유).
+        const cand = server || (["ko", "ja"].indexOf(nav) > -1 ? nav : "en");
+        setLang(cand);
     }
 
     function onChange(fn) {
