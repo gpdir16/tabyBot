@@ -1931,6 +1931,85 @@ body.settings-route #composerWrap {
     gap: 5px;
     color: var(--success);
 }
+.key-state.off {
+    color: var(--text-tertiary);
+}
+.key-state .key-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+/* API 키 / OAuth 상태 카드 */
+.key-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+}
+.key-wrap .key-row {
+    width: 100%;
+}
+.key-saved-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+}
+.key-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    text-decoration: none;
+}
+.key-hint:hover {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}
+.oauth-pending {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    max-width: 380px;
+    padding: var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+}
+.oauth-code-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+.oauth-code {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+}
+.oauth-open {
+    text-decoration: none;
+}
+.oauth-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+.oauth-wait {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--fs-s);
+    color: var(--text-secondary);
+}
+.spin.quiet {
+    border-color: var(--border-strong);
+    border-top-color: var(--text-tertiary);
+}
 
 /* 에이전트 편집 */
 .agent-item {

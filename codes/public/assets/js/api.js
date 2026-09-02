@@ -29,6 +29,27 @@
         }
     }
 
+    // API 응답에서 사용자에게 보여줄 오류 원인을 추출한다.
+    function errorDetail(err) {
+        if (err?.network) return "Network request failed. Check the server connection.";
+        const payload = err?.payload;
+        const detail =
+            (typeof payload === "string" && payload) ||
+            (typeof payload?.error === "string" && payload.error) ||
+            payload?.error?.message ||
+            payload?.message ||
+            payload?.detail ||
+            (err?.status ? `HTTP ${err.status}` : "");
+        if (detail) return String(detail).replace(/\s+/g, " ").trim().slice(0, 500);
+        if (err?.message && !/^API error \d+$/.test(err.message)) return String(err.message).slice(0, 500);
+        return "Unknown error";
+    }
+
+    function errorText(err, fallback) {
+        const detail = errorDetail(err);
+        return detail ? `${fallback}: ${detail}` : fallback;
+    }
+
     function enc(s) {
         return encodeURIComponent(String(s));
     }
@@ -60,7 +81,7 @@
             try {
                 data = JSON.parse(txt);
             } catch (_) {
-                data = null;
+                data = txt;
             }
         }
         if (!res.ok) throw new ApiError(res.status, data);
@@ -69,6 +90,8 @@
 
     const api = {
         ApiError,
+        errorDetail,
+        errorText,
         getToken,
         setToken,
 

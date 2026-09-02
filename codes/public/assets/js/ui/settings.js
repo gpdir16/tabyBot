@@ -22,6 +22,7 @@
     let modelsReq = 0;
     let modelFilter = "";
     let providerChoice = null;
+    let keyEditing = false; // 저장된 API 키를 다시 입력하는 중인지
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
     let putChain = Promise.resolve();
 
@@ -75,6 +76,7 @@
         openTab = tab;
         editingAgent = agent;
         armDelete = null;
+        keyEditing = false;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
         const wasChatOpen = document.body.classList.contains("mobile-chat");
         T.sidebar?.showChat();
@@ -158,9 +160,9 @@
                 const s = await T.api.putSettings(patch);
                 if (s) state.setSettings(s);
                 return true;
-            } catch (_) {
+            } catch (err) {
                 if (prev) state.setSettings(prev);
-                T.toast.show("error", t("saveFailed"));
+                T.toast.show("error", T.api.errorText(err, t("saveFailed")));
                 return false;
             }
         };
@@ -479,6 +481,7 @@
                         onclick() {
                             if (selected) return;
                             providerChoice = p.id;
+                            keyEditing = false;
                             modelsReq++;
                             modelsLoading = false;
                             modelsCache = null;
@@ -550,6 +553,51 @@
         return Boolean(meta && /-oauth$/.test(String(meta.type || "")));
     }
 
+    // 모델 목록 캐시 무효화 — 키/URL 변경 후 공통으로 쓴다.
+    function resetModels() {
+        modelsReq++;
+        modelsLoading = false;
+        modelsCache = null;
+        modelsFailedKey = null;
+    }
+
+    /* 비밀 입력(API 키 등): 입력칸 + 보기 토글. 설정과 온보딩에서 공용으로 쓴다.
+       onCommit: blur/Enter 시 확정값, onInput: 입력마다 값 전달(온보딩 draft 동기화용). */
+    function secretInput({ value = "", placeholder = "", aria = "", onInput, onCommit }) {
+        const input = T.h("input", {
+            class: "input",
+            type: "password",
+            value,
+            placeholder,
+            "aria-label": aria,
+            autocomplete: "new-password",
+            spellcheck: "false",
+        });
+        const eye = T.h(
+            "button",
+            {
+                class: "btn-icon",
+                "aria-label": t("showApiKey"),
+                "aria-pressed": "false",
+                onclick() {
+                    const show = input.type === "password";
+                    input.type = show ? "text" : "password";
+                    eye.setAttribute("aria-label", t(show ? "hideApiKey" : "showApiKey"));
+                    eye.setAttribute("aria-pressed", String(show));
+                    eye.replaceChildren(T.icon(show ? "eye-off" : "eye"));
+                },
+            },
+            [T.icon("eye")],
+        );
+        input.addEventListener("input", () => onInput && onInput(input.value));
+        input.addEventListener("keydown", (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") input.blur();
+        });
+        if (onCommit) input.addEventListener("blur", () => onCommit(input.value));
+        return T.h("div", { class: "key-row" }, [input, eye]);
+    }
+
     // OAuth 디바이스 플로우 섹션: 상태 표시 + 로그인 버튼 + 대기 중 안내(코드/링크).
     // rerender: 로그인 시작 후 화면을 다시 그릴 콜백(설정 시트는 build, 온보딩은 render).
 
@@ -596,36 +644,46 @@
         if (oauthPending && oauthPending.kind === kind) {
             // 완료 감지: SSE 이벤트 + 상태 폴링 병행
             startOauthPoll(kind, refresh);
-            const codeBtn = T.h("button", {
-                class: "btn ghost",
-                text: oauthPending.userCode,
-                onclick() {
-                    T.copyText(oauthPending.userCode).then((ok) => {
-                        if (ok) T.toast.show("info", t("copied"));
-                    });
-                },
-            });
+            // 디바이스 코드 카드: 코드 크게 표시 + 복사 + 페이지 열기
             box.append(
-                T.h("div", { class: "set-section" }, [
+                T.h("div", { class: "oauth-pending" }, [
                     T.h("div", { class: "set-desc", text: t("oauthEnterCode") }),
+                    T.h("div", { class: "oauth-code-row" }, [
+                        T.h("span", { class: "oauth-code", text: oauthPending.userCode }),
+                        T.h(
+                            "button",
+                            {
+                                class: "btn-icon",
+                                "aria-label": t("copy"),
+                                onclick() {
+                                    T.copyText(oauthPending.userCode).then((ok) => {
+                                        if (ok) T.toast.show("info", t("copied"));
+                                    });
+                                },
+                            },
+                            [T.icon("copy")],
+                        ),
+                    ]),
                     T.h("a", {
+                        class: "btn primary oauth-open",
                         href: oauthPending.deviceUrl,
                         target: "_blank",
                         rel: "noopener noreferrer",
-                        text: oauthPending.deviceUrl,
+                        text: t("oauthOpenPage"),
                     }),
-                    codeBtn,
-                    T.h("div", { class: "empty-note", text: t("oauthPending") }),
-                    T.h("button", {
-                        class: "btn ghost",
-                        text: t("cancel"),
-                        onclick() {
-                            T.api.cancelOauth(kind).catch(() => {});
-                            oauthPending = null;
-                            stopOauthPoll();
-                            refresh();
-                        },
-                    }),
+                    T.h("div", { class: "oauth-foot" }, [
+                        T.h("div", { class: "oauth-wait" }, [T.h("span", { class: "spin quiet" }), T.h("span", { text: t("oauthPending") })]),
+                        T.h("button", {
+                            class: "btn ghost",
+                            text: t("cancel"),
+                            onclick() {
+                                T.api.cancelOauth(kind).catch(() => {});
+                                oauthPending = null;
+                                stopOauthPoll();
+                                refresh();
+                            },
+                        }),
+                    ]),
                 ]),
             );
             return box;
@@ -640,14 +698,14 @@
             .then((st) => {
                 const loggedIn = Boolean(st && st[kind]);
                 account.replaceChildren(
-                    T.h("div", { class: "key-state" }, [
-                        loggedIn ? T.icon("check", "icon-sm") : null,
+                    T.h("div", { class: "key-state" + (loggedIn ? "" : " off") }, [
+                        T.h("span", { class: "key-dot" }),
                         T.h("span", { text: loggedIn ? t("oauthLoggedIn") : t("oauthNotLoggedIn") }),
                     ]),
                     T.h(
                         "button",
                         {
-                            class: "btn ghost",
+                            class: "btn" + (loggedIn ? " ghost" : " primary"),
                             text: loggedIn ? t("oauthRelogin") : t("oauthLogin"),
                             onclick() {
                                 T.api
@@ -658,8 +716,7 @@
                                         refresh();
                                     })
                                     .catch((err) => {
-                                        const detail = (err && err.payload && err.payload.error) || (err && err.message) || t("oauthFailed");
-                                        T.toast.show("error", t("errorPrefix") + ": " + detail);
+                                        T.toast.show("error", T.api.errorText(err, t("oauthFailed")));
                                     });
                             },
                         },
@@ -701,59 +758,67 @@
     }
 
     function apiKeyRow(provider, meta) {
-        const input = T.h("input", {
-            class: "input",
-            type: "password",
-            value: "",
-            placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
-            "aria-label": t("apiKey"),
-            autocomplete: "new-password",
-        });
-        const stateEl = T.h("span", {});
-        if (provider.apiKeySet) {
-            stateEl.className = "key-state";
-            stateEl.append(T.icon("check", "icon-sm"), t("apiKeySaved"));
+        const wrap = T.h("div", { class: "key-wrap" });
+
+        if (provider.apiKeySet && !keyEditing) {
+            // 저장된 키가 있으면 마스킹 상태로 보여주고, "교체"를 눌렀을 때만 입력칸을 연다.
+            wrap.append(
+                T.h("div", { class: "key-saved-row" }, [
+                    T.h("div", { class: "key-state" }, [T.icon("check", "icon-sm"), t("apiKeySaved")]),
+                    T.h("button", {
+                        class: "btn ghost",
+                        text: t("apiKeyReplace"),
+                        onclick() {
+                            keyEditing = true;
+                            build();
+                        },
+                    }),
+                ]),
+            );
+        } else {
+            wrap.append(
+                secretInput({
+                    placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
+                    aria: t("apiKey"),
+                    onCommit(v) {
+                        v = v.trim();
+                        if (!v) return;
+                        put({ provider: { apiKey: v } }).then((ok) => {
+                            if (ok) {
+                                keyEditing = false;
+                                resetModels();
+                                build();
+                            }
+                        });
+                    },
+                }),
+            );
+            if (provider.apiKeySet) {
+                // 교체 취소 — 저장된 상태 표시로 되돌린다.
+                wrap.append(
+                    T.h("button", {
+                        class: "btn ghost",
+                        text: t("cancel"),
+                        onclick() {
+                            keyEditing = false;
+                            build();
+                        },
+                    }),
+                );
+            }
         }
-
-        const eye = T.h(
-            "button",
-            {
-                class: "btn-icon",
-                "aria-label": t("showApiKey"),
-                "aria-pressed": "false",
-                onclick() {
-                    const show = input.type === "password";
-                    input.type = show ? "text" : "password";
-                    eye.setAttribute("aria-label", t(show ? "hideApiKey" : "showApiKey"));
-                    eye.setAttribute("aria-pressed", String(show));
-                    eye.replaceChildren(T.icon(show ? "eye-off" : "eye"));
-                },
-            },
-            [T.icon("eye")],
-        );
-
-        const commit = () => {
-            const v = input.value.trim();
-            if (!v) return;
-            put({ provider: { apiKey: v } }).then((ok) => {
-                if (ok) {
-                    modelsReq++;
-                    modelsLoading = false;
-                    modelsCache = null;
-                    modelsFailedKey = null;
-                    input.value = "";
-                    stateEl.className = "key-state";
-                    stateEl.replaceChildren(T.icon("check", "icon-sm"), t("apiKeySaved"));
-                }
-            });
-        };
-        input.addEventListener("blur", commit);
-        input.addEventListener("keydown", (e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") input.blur();
-        });
-
-        return T.h("div", { class: "key-row" }, [input, eye, stateEl]);
+        if (meta.keysUrl) {
+            wrap.append(
+                T.h("a", {
+                    class: "key-hint",
+                    href: meta.keysUrl,
+                    target: "_blank",
+                    rel: "noopener noreferrer",
+                    text: t("getApiKey") + " ↗",
+                }),
+            );
+        }
+        return wrap;
     }
 
     function modelsKey(provider) {
@@ -773,12 +838,12 @@
             modelsLoading = false;
             modelsFailedKey = null;
             if (openTab === "model") build();
-        } catch (_) {
+        } catch (err) {
             if (req !== modelsReq) return;
             modelsLoading = false;
             modelsFailedKey = key;
             if (openTab === "model") {
-                T.toast.show("error", t("modelsFailed"));
+                T.toast.show("error", T.api.errorText(err, t("modelsFailed")));
                 build();
             }
         }
@@ -956,7 +1021,7 @@
                                   : reason === "too_many"
                                     ? t("lastBotTooltip")
                                     : "";
-                    T.toast.show("error", detail ? `${t("saveFailed")}: ${detail}` : t("saveFailed"));
+                    T.toast.show("error", detail ? `${t("saveFailed")}: ${detail}` : T.api.errorText(err, t("saveFailed")));
                 }
             },
         });
@@ -996,7 +1061,7 @@
                         })
                         .catch((err) => {
                             delBtn.disabled = false;
-                            T.toast.show("error", err?.status === 400 ? t("lastBotTooltip") : t("saveFailed"));
+                            T.toast.show("error", err?.status === 400 ? t("lastBotTooltip") : T.api.errorText(err, t("saveFailed")));
                         });
                 },
             });
@@ -1044,6 +1109,7 @@
         isOpen: () => !!openTab && !page.hidden,
         routeFromPath,
         oauthSection,
+        secretInput,
         resetOauth: () => (oauthPending = null),
     };
 })((window.Taby = window.Taby || {}));

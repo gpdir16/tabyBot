@@ -55,6 +55,7 @@ export function loadUserConfig() {
         thinkingLevel: "high",
         showReplyFooter: true,
         updateCheckEnabled: true,
+        onboardingDismissed: false,
         nsfwLevel: "moderate",
         approvalLevel: "model",
     });

@@ -144,7 +144,7 @@
                     renderChips();
                 })
                 .catch((err) => {
-                    T.toast.show("error", err && err.status === 413 ? t("fileTooLarge") : t("uploadFailed"));
+                    T.toast.show("error", err?.status === 413 ? t("fileTooLarge") : T.api.errorText(err, t("uploadFailed")));
                     removeAttachment(a);
                 });
         }

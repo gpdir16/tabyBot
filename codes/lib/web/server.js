@@ -71,6 +71,7 @@ function providerPresets() {
                             baseURL: p.baseURL || null,
                             apiKeyOptional: Boolean(p.apiKeyOptional),
                             needsBaseURL: Boolean(p.needsBaseURL),
+                            keysUrl: p.keysUrl || null,
                         },
                     ];
                 } catch {
@@ -182,6 +183,7 @@ function buildSettingsPayload() {
         thinkingLevels: levels.map((value) => ({ value, label: thinkingLevelLabel(config.language || "en", value) })),
         showReplyFooter: config.showReplyFooter !== false,
         updateCheckEnabled: config.updateCheckEnabled !== false,
+        onboardingDismissed: config.onboardingDismissed === true,
         nsfwLevel: normalizeNsfwLevel(config.nsfwLevel),
         nsfwLevels: NSFW_LEVELS,
         approvalLevel: normalizeApprovalLevel(config.approvalLevel),
@@ -413,6 +415,7 @@ export function startWebServer() {
         }
         if (patch.showReplyFooter !== undefined) config.showReplyFooter = Boolean(patch.showReplyFooter);
         if (patch.updateCheckEnabled !== undefined) config.updateCheckEnabled = Boolean(patch.updateCheckEnabled);
+        if (patch.onboardingDismissed !== undefined) config.onboardingDismissed = Boolean(patch.onboardingDismissed);
         if (patch.nsfwLevel !== undefined) config.nsfwLevel = normalizeNsfwLevel(patch.nsfwLevel);
         if (patch.approvalLevel !== undefined) config.approvalLevel = normalizeApprovalLevel(patch.approvalLevel);
 

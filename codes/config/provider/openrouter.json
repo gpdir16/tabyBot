@@ -2,6 +2,7 @@
     "id": "openrouter",
     "type": "openai-compatible",
     "baseURL": "https://openrouter.ai/api/v1",
+    "keysUrl": "https://openrouter.ai/settings/keys",
     "extraHeaders": {
         "HTTP-Referer": "https://github.com/gpdir16/tabybot",
         "X-Title": "tabyBot"

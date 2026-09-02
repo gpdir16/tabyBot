@@ -134,9 +134,6 @@
     function setCurrent(id) {
         if (state.currentId === id) return;
         state.currentId = id;
-        try {
-            localStorage.setItem("tabybot.lastConversation", id || "");
-        } catch (_) {}
         emit("current", id);
     }
 
