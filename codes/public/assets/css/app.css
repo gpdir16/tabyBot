@@ -3140,7 +3140,8 @@ body.sb-collapsed .btn-menu {
     .sp-head {
         min-height: 56px;
         height: auto;
-        padding: 6px 12px 6px 16px;
+        /* padding: 6px 12px 6px 16px; */
+        padding: 6px;
     }
     .sp-back {
         display: inline-flex;
