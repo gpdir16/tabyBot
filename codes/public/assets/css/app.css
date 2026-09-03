@@ -677,13 +677,15 @@ kbd {
 
 /* ── 점프 버튼 (새 메시지) ──────────────────────────────── */
 .jump-latest {
-    position: sticky;
+    /* 스크롤 콘텐츠의 마지막 요소가 아니라 뷰포트 기준으로 고정한다. */
+    position: absolute;
+    left: 50%;
     bottom: calc(var(--composer-h) + var(--sp-3));
     z-index: 5;
     display: flex;
     align-items: center;
     gap: 6px;
-    margin: 0 auto;
+    margin: 0;
     height: 30px;
     padding: 0 var(--sp-3);
     background: var(--glass);
@@ -696,7 +698,7 @@ kbd {
     font-size: var(--fs-s);
     color: var(--text);
     opacity: 0;
-    transform: translateY(6px);
+    transform: translate(-50%, 6px);
     pointer-events: none;
     transition:
         opacity var(--dur-2) var(--ease),
@@ -704,7 +706,7 @@ kbd {
 }
 .jump-latest.show {
     opacity: 1;
-    transform: none;
+    transform: translate(-50%, 0);
     pointer-events: auto;
 }
 
@@ -1588,7 +1590,8 @@ kbd {
 /* 설정 라우트에서는 채팅 뷰를 숨긴다 — 한 번에 한 페이지만 표시된다 */
 body.settings-route #header,
 body.settings-route #scroller,
-body.settings-route #composerWrap {
+body.settings-route #composerWrap,
+body.settings-route #jumpLatest {
     display: none;
 }
 .sp-head {
@@ -1653,7 +1656,15 @@ body.settings-route #composerWrap {
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-4);
-    height: 38px;
+    min-height: 38px;
+}
+/* API 키처럼 컨트롤이 여러 줄일 때 고정 높이가 겹침을 만든다 */
+.set-row:has(.key-wrap) {
+    align-items: flex-start;
+    padding: 4px 0;
+}
+.set-row:has(.key-wrap) .set-label {
+    line-height: 30px;
 }
 .set-label {
     font-size: 14px;
@@ -3187,10 +3198,17 @@ body.sb-collapsed .btn-menu {
         height: auto;
         gap: 12px;
     }
+    .set-row:has(.key-wrap) {
+        grid-template-columns: auto minmax(0, 1fr);
+        padding: 8px 0;
+    }
     .set-label {
         min-width: 0;
         line-height: 1.35;
         overflow-wrap: anywhere;
+    }
+    .set-row:has(.key-wrap) .set-label {
+        line-height: 44px;
     }
     .set-control {
         width: 100%;

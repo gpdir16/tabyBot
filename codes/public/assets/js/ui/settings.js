@@ -445,7 +445,7 @@
             return;
         }
 
-        const meta = providers.find((p) => p.id === (customActive ? "default" : provider.id) && !p.custom);
+        const meta = providers.find((p) => p.id === (customActive ? "custom" : provider.id));
         if (meta) {
             if (customActive || meta.needsBaseURL) {
                 sec.append(
@@ -776,26 +776,24 @@
                 ]),
             );
         } else {
-            wrap.append(
-                secretInput({
-                    placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
-                    aria: t("apiKey"),
-                    onCommit(v) {
-                        v = v.trim();
-                        if (!v) return;
-                        put({ provider: { apiKey: v } }).then((ok) => {
-                            if (ok) {
-                                keyEditing = false;
-                                resetModels();
-                                build();
-                            }
-                        });
-                    },
-                }),
-            );
+            const row = secretInput({
+                placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
+                aria: t("apiKey"),
+                onCommit(v) {
+                    v = v.trim();
+                    if (!v) return;
+                    put({ provider: { apiKey: v } }).then((ok) => {
+                        if (ok) {
+                            keyEditing = false;
+                            resetModels();
+                            build();
+                        }
+                    });
+                },
+            });
             if (provider.apiKeySet) {
-                // 교체 취소 — 저장된 상태 표시로 되돌린다.
-                wrap.append(
+                // 교체 취소 — 입력칸과 같은 줄에 둔다.
+                row.append(
                     T.h("button", {
                         class: "btn ghost",
                         text: t("cancel"),
@@ -806,6 +804,7 @@
                     }),
                 );
             }
+            wrap.append(row);
         }
         if (meta.keysUrl) {
             wrap.append(
