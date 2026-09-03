@@ -31,8 +31,10 @@
         updateJump();
     }
     function updateJump() {
-        const show = !pinnedBottom && !!liveEls;
+        // 응답 생성 중이 아니어도 현재 위치가 하단에서 벗어나면 표시한다.
+        const show = !pinnedBottom;
         jump.setAttribute("aria-hidden", String(!show));
+        jump.tabIndex = show ? 0 : -1;
         jump.classList.toggle("show", show);
     }
 
