@@ -109,6 +109,7 @@
             return request("/api/conversations/" + enc(id) + "/messages", { method: "POST", json: body });
         },
         stopConversation: (id) => request("/api/conversations/" + enc(id) + "/stop", { method: "POST", json: {} }),
+        eventsPoll: (since) => request("/api/events/poll?since=" + enc(since || 0)),
 
         upload: (file) =>
             request("/api/uploads", {
