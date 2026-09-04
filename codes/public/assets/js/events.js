@@ -15,6 +15,11 @@
     let backoff = 1000;
     let usingFetch = false;
     let refreshTimer = null;
+    let fallbackTimer = null;
+    let polling = false;
+    let pollCursor = 0;
+    let connectionStartedAt = 0;
+    let receivedEvent = false;
 
     function notifyIncoming(conversationId, body, tag) {
         if (!T.notifications) return;
@@ -24,6 +29,13 @@
 
     function handle(msg) {
         if (!msg || typeof msg !== "object" || !msg.type) return;
+        const seq = Number(msg.seq) || 0;
+        if (seq) {
+            if (seq <= pollCursor) return;
+            pollCursor = seq;
+        }
+        if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt) return;
+        receivedEvent = true;
         switch (msg.type) {
             case "hello":
                 backoff = 1000;
@@ -113,6 +125,49 @@
     let lastSeen = 0;
     let watchdog = null;
 
+    function startPolling() {
+        if (polling || stopped) return;
+        polling = true;
+        usingFetch = false;
+        if (es) {
+            try {
+                es.close();
+            } catch (_) {}
+            es = null;
+        }
+        if (ctrl) {
+            try {
+                ctrl.abort();
+            } catch (_) {}
+            ctrl = null;
+        }
+        state.setConn("connecting");
+        void pollLoop();
+    }
+
+    async function pollLoop() {
+        while (polling && !stopped) {
+            try {
+                const result = await api.eventsPoll(pollCursor);
+                for (const event of result?.events || []) handle(event);
+                if (result && Number.isFinite(Number(result.cursor)) && Number(result.cursor) > pollCursor) {
+                    pollCursor = Number(result.cursor);
+                }
+                state.setConn("connected");
+            } catch (_) {
+                state.setConn("disconnected");
+            }
+            if (polling && !stopped) await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+    }
+
+    function schedulePollingFallback() {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = setTimeout(() => {
+            if (!receivedEvent && !stopped) startPolling();
+        }, 3000);
+    }
+
     function startNative() {
         usingFetch = false;
         try {
@@ -138,10 +193,11 @@
             // 브라우저가 자동 재접속한다. 상태 점만 갱신.
             state.setConn("disconnected");
         };
+        schedulePollingFallback();
         // 죽은 연결 감지: 서버는 15초마다 ping을 보낸다. 40초 무응답이면 강제 재접속.
         clearInterval(watchdog);
         watchdog = setInterval(() => {
-            if (usingFetch || stopped) return;
+            if (usingFetch || polling || stopped) return;
             if (Date.now() - lastSeen > 40_000) {
                 lastSeen = Date.now(); // 재시작 연쇄 방지
                 state.setConn("disconnected");
@@ -155,7 +211,8 @@
 
     async function startFetch() {
         usingFetch = true;
-        while (!stopped) {
+        schedulePollingFallback();
+        while (!stopped && !polling) {
             ctrl = new AbortController();
             try {
                 const headers = { Accept: "text/event-stream" };
@@ -192,7 +249,7 @@
             } catch (_) {
                 if (stopped) break;
             }
-            if (stopped) break;
+            if (stopped || polling) break;
             state.setConn("disconnected");
             await new Promise((r) => {
                 timer = setTimeout(r, backoff);
@@ -205,6 +262,8 @@
         stopInternal();
         stopped = false;
         backoff = 1000;
+        connectionStartedAt = Date.now();
+        receivedEvent = false;
         if (state.state.offline) {
             state.setConn("disconnected");
             return;
@@ -216,6 +275,8 @@
 
     function stopInternal() {
         stopped = true;
+        polling = false;
+        clearTimeout(fallbackTimer);
         clearInterval(watchdog);
         watchdog = null;
         usingFetch = false;

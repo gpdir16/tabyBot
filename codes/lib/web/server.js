@@ -25,7 +25,7 @@ import {
 } from "../agents-store.js";
 import * as conversationsStore from "./conversations.js";
 import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLOAD_BYTES, UploadTooLargeError, EmptyUploadError } from "./files.js";
-import { subscribe, emit } from "./bus.js";
+import { subscribe, emit, eventsSince } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import { createRouter } from "./http.js";
 import { dispatchMessage, recoverInterruptedTurns, stopConversation } from "./turns.js";
@@ -226,6 +226,9 @@ export function startWebServer() {
         for (const conversationId of listRunningSessionKeys()) {
             emit({ type: "status", conversationId, phase: "generating" });
         }
+    });
+    router.add("GET", "/api/events/poll", (ctx) => {
+        ctx.json200(eventsSince(ctx.query.since));
     });
 
     // ---- 대화 ----
