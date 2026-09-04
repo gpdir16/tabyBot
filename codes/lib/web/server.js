@@ -35,7 +35,7 @@ import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 const PUBLIC_DIR = path.join(CODES_DIR, "public");
 const WEB_TOKEN = process.env.TABYBOT_WEB_TOKEN?.trim() || "";
 const PORT = Number(process.env.TABYBOT_PORT || 8999);
-const HOST = process.env.TABYBOT_HOST || "127.0.0.1";
+const HOST = "0.0.0.0";
 
 const PROVIDER_LABELS = {
     default: "OpenAI",

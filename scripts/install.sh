@@ -490,13 +490,12 @@ services:
     tabybot:
         image: ${image}
         container_name: tabybot
-        env_file:
-            - .env
         environment:
             TABYBOT_WEB_TOKEN: \${TABYBOT_WEB_TOKEN:-}
             TABYBOT_MODE: docker
             TABYBOT_HOME: "${install_dir_escaped}"
             TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
+            TABYBOT_PORT: \${TABYBOT_PORT:-8999}
         volumes:
             - tabybot-user:/app/user
         restart: unless-stopped

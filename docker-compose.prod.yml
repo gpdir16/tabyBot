@@ -3,12 +3,12 @@ services:
     tabybot:
         image: ghcr.io/gpdir16/tabybot:latest
         container_name: tabybot
-        env_file:
-            - .env
         environment:
             TABYBOT_MODE: docker
             TABYBOT_HOME: ${TABYBOT_HOME:-}
             TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
+            TABYBOT_WEB_TOKEN: ${TABYBOT_WEB_TOKEN:-}
+            TABYBOT_PORT: ${TABYBOT_PORT:-8999}
         volumes:
             - tabybot-user:/app/user
         ports:
