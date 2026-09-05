@@ -11,7 +11,7 @@ Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI apps wo
 ## What it can do
 
 - **Everyday chat**: Get answers in the browser. Text and images are both supported.
-- **Inference providers**: Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, or your own API endpoint.
+- **Inference providers**: Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, or your own API endpoint.
 - **Skills, MCP**: Add the capabilities and tools you want to the agent yourself.
 - **Scheduled tasks**: Recurring jobs run on a schedule, report when they finish, and skip when they are not needed.
 - **Multiple agents**: Create specialist agents for different roles and have them work together.

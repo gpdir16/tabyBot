@@ -2,10 +2,11 @@ import { getMergedProvider, loadUserConfig } from "../config-loader.js";
 import { chatCompletions, createOpenAIClient } from "./openai-compatible.js";
 import { codexComplete } from "./codex-client.js";
 import { grokComplete } from "./grok-client.js";
+import { githubCopilotComplete } from "./github-copilot-client.js";
 import { ensureModelMeta } from "./model-meta.js";
 import { getThinkingLevel, getCachedProviderThinkingMeta } from "../user-settings.js";
 
-const OAUTH_PROVIDER_TYPES = new Set(["codex-oauth", "grok-oauth"]);
+const OAUTH_PROVIDER_TYPES = new Set(["codex-oauth", "grok-oauth", "github-copilot-oauth"]);
 
 export async function createLlmClient() {
     const userConfig = loadUserConfig();
@@ -53,6 +54,28 @@ export async function createLlmClient() {
                     signal,
                     thinkingLevel: getThinkingLevel(userConfig),
                     thinkingParam: getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning",
+                });
+            },
+        };
+    }
+
+    if (provider.type === "github-copilot-oauth") {
+        const modelMeta = await ensureModelMeta(provider);
+        return {
+            provider,
+            modelMeta,
+            async complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+                return githubCopilotComplete({
+                    model: provider.autoMode ? "auto" : provider.model,
+                    messages,
+                    tools: tools?.length ? tools : undefined,
+                    tool_choice,
+                    stream,
+                    onTextDelta,
+                    signal,
+                    thinkingLevel: getThinkingLevel(userConfig),
+                    thinkingParam: getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort",
+                    autoModelCandidates: provider.autoModelCandidates,
                 });
             },
         };

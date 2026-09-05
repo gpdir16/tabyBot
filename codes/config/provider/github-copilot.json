@@ -1,0 +1,9 @@
+{
+    "id": "github-copilot",
+    "type": "github-copilot-oauth",
+    "baseURL": "https://api.individual.githubcopilot.com",
+    "apiKeyOptional": true,
+    "defaultContextWindow": 128000,
+    "thinkingLevels": ["off"],
+    "defaultThinkingLevel": "off"
+}

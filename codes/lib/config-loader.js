@@ -90,5 +90,9 @@ export function getMergedProvider(userConfig) {
         model: userConfig?.provider?.model || "",
         extraHeaders: providerFile.extraHeaders || {},
         apiKeyOptional: Boolean(providerFile.apiKeyOptional),
+        autoMode: id === "github-copilot" ? userConfig?.provider?.autoMode !== false : false,
+        autoModelCandidates: Array.isArray(userConfig?.provider?.autoModelCandidates)
+            ? userConfig.provider.autoModelCandidates.map(String).filter(Boolean)
+            : [],
     };
 }

@@ -5,12 +5,19 @@ import http from "node:http";
 import { CODES_DIR } from "../paths.js";
 import { isDockerRuntime } from "../runtime.js";
 import { loadUserConfig, saveUserConfig, getMergedProvider, loadProviderConfig } from "../config-loader.js";
-import { isConfigReady } from "../onboarding.js";
+import { getConfigIssue, isConfigReady } from "../onboarding.js";
 import { getRunningVersion } from "../update/store.js";
 import { fetchProviderModels } from "../llm/models.js";
+import { fetchGithubCopilotRoutingModels } from "../llm/github-copilot-client.js";
 import { normalizeThinkingLevel, thinkingLevelLabel, getProviderThinkingMeta } from "../thinking-levels.js";
 import { hasCodexAuth, clearCodexTokens, startDeviceFlow, pollDeviceFlow } from "../llm/codex-tokens.js";
 import { hasGrokAuth, clearGrokTokens, startGrokDeviceFlow, pollGrokDeviceFlow } from "../llm/grok-tokens.js";
+import {
+    hasGithubCopilotAuth,
+    clearGithubCopilotTokens,
+    startGithubCopilotDeviceFlow,
+    pollGithubCopilotDeviceFlow,
+} from "../llm/github-copilot-tokens.js";
 import { NSFW_LEVELS, normalizeNsfwLevel, APPROVAL_LEVELS, normalizeApprovalLevel } from "../user-settings.js";
 import {
     listAgents,
@@ -42,6 +49,7 @@ const PROVIDER_LABELS = {
     openrouter: "OpenRouter",
     grok: "Grok OAuth",
     codex: "Codex OAuth (ChatGPT Plus/Pro)",
+    "github-copilot": "GitHub Copilot OAuth",
     ollama: "Ollama (local)",
     "ollama-cloud": "Ollama Cloud",
     synthetic: "Synthetic",
@@ -81,15 +89,27 @@ function providerPresets() {
             })
             .filter(Boolean),
     );
-    const presets = ["default", "openrouter", "orcarouter", "synthetic", "ollama", "ollama-cloud", "zenmux", "upstage", "codex", "grok"]
+    const presets = [
+        "default",
+        "openrouter",
+        "orcarouter",
+        "synthetic",
+        "ollama",
+        "ollama-cloud",
+        "zenmux",
+        "upstage",
+        "codex",
+        "grok",
+        "github-copilot",
+    ]
         .map((id) => byId.get(id))
         .filter(Boolean);
-    // tabyAgent와 동일하게 실제 프리셋 10개에 Custom API URL을 별도 선택지로 제공한다.
+    // tabyAgent와 동일하게 실제 프리셋에 Custom API URL을 별도 선택지로 제공한다.
     presets.push({ id: "custom", label: "Custom API URL", type: "openai-compatible", baseURL: null, apiKeyOptional: false, needsBaseURL: true });
     return presets;
 }
 
-// 진행 중인 OAuth 디바이스 플로우. kind(codex|grok)별로 AbortController 1개만 유지한다.
+// 진행 중인 OAuth 디바이스 플로우. kind별로 AbortController 1개만 유지한다.
 const activeOauthLogins = new Map();
 
 async function startOauthLogin(kind) {
@@ -97,9 +117,10 @@ async function startOauthLogin(kind) {
     if (prev) prev.abort.abort();
     // 기존 토큰을 지운 뒤 새 로그인을 시작한다(원본 설정 마법사와 동일 동작).
     if (kind === "codex") clearCodexTokens();
-    else clearGrokTokens();
+    else if (kind === "grok") clearGrokTokens();
+    else clearGithubCopilotTokens();
 
-    const flow = kind === "codex" ? await startDeviceFlow() : await startGrokDeviceFlow();
+    const flow = kind === "codex" ? await startDeviceFlow() : kind === "grok" ? await startGrokDeviceFlow() : await startGithubCopilotDeviceFlow();
 
     const abort = new AbortController();
     activeOauthLogins.set(kind, { abort });
@@ -107,8 +128,14 @@ async function startOauthLogin(kind) {
     const poller =
         kind === "codex"
             ? pollDeviceFlow({ deviceAuthId: flow.deviceAuthId, userCode: flow.userCode, intervalMs: flow.intervalMs, signal: abort.signal })
-            : pollGrokDeviceFlow({ deviceCode: flow.deviceCode, intervalMs: flow.intervalMs, expiresAt: flow.expiresAt, signal: abort.signal });
-
+            : kind === "grok"
+              ? pollGrokDeviceFlow({ deviceCode: flow.deviceCode, intervalMs: flow.intervalMs, expiresAt: flow.expiresAt, signal: abort.signal })
+              : pollGithubCopilotDeviceFlow({
+                    deviceCode: flow.deviceCode,
+                    intervalMs: flow.intervalMs,
+                    expiresAt: flow.expiresAt,
+                    signal: abort.signal,
+                });
     poller
         .then(() => emit({ type: "oauth_done", kind, ok: true }))
         .catch((err) => {
@@ -196,6 +223,8 @@ function buildSettingsPayload() {
             baseURL: config.provider?.baseURL || currentPreset?.baseURL || "",
             model: config.provider?.model || "",
             apiKeySet: Boolean(merged?.apiKey),
+            autoMode: Boolean(merged?.autoMode),
+            autoModelCandidates: merged?.autoModelCandidates || [],
         },
         providers: presets,
         agents: listAgents().map(publicAgent),
@@ -264,7 +293,8 @@ export function startWebServer() {
         const id = ctx.params.id;
         const meta = resolveConversationMeta(id);
         if (!meta) return ctx.json404();
-        if (!isConfigReady()) return ctx.json409("not_configured");
+        const configIssue = getConfigIssue();
+        if (configIssue) return ctx.json409("not_configured", { reason: configIssue });
 
         const body = await ctx.json();
         const text = String(body.text ?? "").trim();
@@ -347,14 +377,14 @@ export function startWebServer() {
         fs.createReadStream(file.filePath).pipe(ctx.res);
     });
 
-    // ---- OAuth 디바이스 플로우(Codex/Grok) ----
+    // ---- OAuth 디바이스 플로우 ----
     router.add("GET", "/api/auth/status", (ctx) => {
-        ctx.json200({ codex: hasCodexAuth(), grok: hasGrokAuth() });
+        ctx.json200({ codex: hasCodexAuth(), grok: hasGrokAuth(), "github-copilot": hasGithubCopilotAuth() });
     });
 
     router.add("POST", "/api/auth/:kind/start", async (ctx) => {
         const kind = ctx.params.kind;
-        if (kind !== "codex" && kind !== "grok") return ctx.json404();
+        if (kind !== "codex" && kind !== "grok" && kind !== "github-copilot") return ctx.json404();
         try {
             ctx.json200(await startOauthLogin(kind));
         } catch (err) {
@@ -364,7 +394,7 @@ export function startWebServer() {
 
     router.add("POST", "/api/auth/:kind/cancel", (ctx) => {
         const kind = ctx.params.kind;
-        if (kind !== "codex" && kind !== "grok") return ctx.json404();
+        if (kind !== "codex" && kind !== "grok" && kind !== "github-copilot") return ctx.json404();
         const prev = activeOauthLogins.get(kind);
         if (prev) prev.abort.abort();
         activeOauthLogins.delete(kind);
@@ -454,13 +484,25 @@ export function startWebServer() {
                     config.provider.apiKey = key;
                 }
             }
+            if (patch.provider.autoMode !== undefined) config.provider.autoMode = Boolean(patch.provider.autoMode);
+            if (patch.provider.autoModelCandidates !== undefined) {
+                if (!Array.isArray(patch.provider.autoModelCandidates)) return ctx.json400("invalid_auto_model_candidates");
+                config.provider.autoModelCandidates = [
+                    ...new Set(
+                        patch.provider.autoModelCandidates
+                            .map(String)
+                            .map((id) => id.trim())
+                            .filter(Boolean),
+                    ),
+                ].slice(0, 30);
+            }
         }
 
         const newPid = config.provider?.id || "default";
         if (providerChanged) {
             // 프리셋이 바뀌면 사고수준을 새 프리셋 기준으로 재정규화하고, 이전 모델은 비운다.
             config.thinkingLevel = normalizeThinkingLevel(config.thinkingLevel, newPid);
-            if (patch.provider.model === undefined) config.provider.model = "";
+            if (patch.provider.model === undefined) config.provider.model = newPid === "github-copilot" ? "auto" : "";
         }
 
         saveUserConfig(config);
@@ -496,7 +538,15 @@ export function startWebServer() {
                 provider = getMergedProvider(config);
             }
             const models = await fetchProviderModels(provider, { useCache: false });
-            ctx.json200({ models });
+            let routingModels = [];
+            if (provider.type === "github-copilot-oauth") {
+                try {
+                    routingModels = await fetchGithubCopilotRoutingModels();
+                } catch {
+                    // Auto 모델 목록은 기본 모델 목록만으로도 표시한다.
+                }
+            }
+            ctx.json200({ models, routingModels });
         } catch (err) {
             ctx.json400(err?.message || String(err));
         }

@@ -33,6 +33,10 @@
     function errorDetail(err) {
         if (err?.network) return "Network request failed. Check the server connection.";
         const payload = err?.payload;
+        if (payload?.error === "not_configured") {
+            const key = payload.reason === "model_missing" ? "modelRequired" : "providerRequired";
+            return T.i18n?.t(key) || (key === "modelRequired" ? "Choose a model in Settings." : "Connect the selected provider in Settings.");
+        }
         const detail =
             (typeof payload === "string" && payload) ||
             (typeof payload?.error === "string" && payload.error) ||
