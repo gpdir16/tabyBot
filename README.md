@@ -95,6 +95,36 @@ cp .env.example .env
 docker compose up -d
 ```
 
+## Third-party licenses
+
+| Project                   | Version | License              | Source                                                               |
+| ------------------------- | ------- | -------------------- | -------------------------------------------------------------------- |
+| tabyAgent                 | —       | AGPL-3.0             | [Repository](https://github.com/gpdir16/tabyAgent)                   |
+| marked                    | 12.0.2  | MIT                  | [Repository](https://github.com/markedjs/marked)                     |
+| DOMPurify                 | 3.1.6   | Apache-2.0 / MPL-2.0 | [Repository](https://github.com/cure53/DOMPurify)                    |
+| Highlight.js              | 11.9.0  | BSD-3-Clause         | [Repository](https://github.com/highlightjs/highlight.js)            |
+| @modelcontextprotocol/sdk | 1.30.0  | MIT                  | [Repository](https://github.com/modelcontextprotocol/typescript-sdk) |
+| js-tiktoken               | 1.0.21  | MIT                  | [Repository](https://github.com/dqbd/tiktoken)                       |
+| node-cron                 | 3.0.3   | ISC                  | [Repository](https://github.com/node-cron/node-cron)                 |
+| openai                    | 4.104.0 | Apache-2.0           | [Repository](https://github.com/openai/openai-node)                  |
+| web-push                  | 3.6.7   | MPL-2.0              | [Repository](https://github.com/web-push-libs/web-push)              |
+| prettier                  | 3.8.3   | MIT                  | [Repository](https://github.com/prettier/prettier)                   |
+| camofox-browser           | 2.4.7   | MIT                  | [Repository](https://github.com/redf0x1/camofox-browser)             |
+| Camoufox                  | —       | MPL-2.0              | [Repository](https://github.com/daijro/camoufox)                     |
+| Playwright                | —       | Apache-2.0           | [Repository](https://github.com/microsoft/playwright)                |
+
+<details>
+<summary>Transitive npm dependencies</summary>
+
+- **Apache-2.0:** `ecdsa-sig-formatter`, `openai`
+- **BSD-2-Clause:** `json-schema-typed`, `webidl-conversions`
+- **BSD-3-Clause:** `buffer-equal-constant-time`, `fast-uri`, `qs`
+- **ISC:** `inherits`, `isexe`, `minimalistic-assert`, `node-cron`, `once`, `setprototypeof`, `which`, `wrappy`, `zod-to-json-schema`
+- **MIT:** `@hono/node-server`, `@modelcontextprotocol/sdk`, `@types/node`, `@types/node-fetch`, `abort-controller`, `accepts`, `agent-base`, `agentkeepalive`, `ajv`, `ajv-formats`, `asn1.js`, `asynckit`, `base64-js`, `bn.js`, `body-parser`, `bytes`, `call-bind-apply-helpers`, `call-bound`, `combined-stream`, `content-disposition`, `content-type`, `cookie`, `cookie-signature`, `cors`, `cross-spawn`, `debug`, `delayed-stream`, `depd`, `dunder-proto`, `ee-first`, `encodeurl`, `es-define-property`, `es-errors`, `es-object-atoms`, `es-set-tostringtag`, `escape-html`, `etag`, `event-target-shim`, `eventsource`, `eventsource-parser`, `express`, `express-rate-limit`, `fast-deep-equal`, `finalhandler`, `form-data`, `form-data-encoder`, `formdata-node`, `forwarded`, `fresh`, `function-bind`, `get-intrinsic`, `get-proto`, `gopd`, `has-symbols`, `has-tostringtag`, `hasown`, `hono`, `http-errors`, `http_ece`, `https-proxy-agent`, `humanize-ms`, `iconv-lite`, `ip-address`, `ipaddr.js`, `is-promise`, `jose`, `js-tiktoken`, `json-schema-traverse`, `jwa`, `jws`, `math-intrinsics`, `media-typer`, `merge-descriptors`, `mime-db`, `mime-types`, `minimist`, `ms`, `negotiator`, `node-domexception`, `node-fetch`, `object-assign`, `object-inspect`, `on-finished`, `parseurl`, `path-key`, `path-to-regexp`, `pkce-challenge`, `prettier`, `proxy-addr`, `range-parser`, `raw-body`, `require-from-string`, `router`, `safe-buffer`, `safer-buffer`, `send`, `serve-static`, `shebang-command`, `shebang-regex`, `side-channel`, `side-channel-list`, `side-channel-map`, `side-channel-weakmap`, `statuses`, `toidentifier`, `tr46`, `type-is`, `undici-types`, `unpipe`, `uuid`, `vary`, `web-streams-polyfill`, `whatwg-url`, `zod`
+- **MPL-2.0:** `web-push`
+
+</details>
+
 ## License
 
 AGPL-3.0
