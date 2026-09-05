@@ -6,10 +6,6 @@ export function memoryFilePath() {
     return path.join(USER_DIR, "memory.md");
 }
 
-export function memoryDirPath() {
-    return path.join(USER_DIR, "memory");
-}
-
 export function mcpConfigPath() {
     return path.join(USER_DIR, "mcp.json");
 }
@@ -62,7 +58,6 @@ export function buildSkillContentVars() {
         SKILLS_DIR: skillsDirPath(),
         SYSTEM_SKILLS_DIR: SKILLS_SYSTEM_DIR,
         MEMORY_PATH: memoryFilePath(),
-        MEMORY_DIR: memoryDirPath(),
         MCP_CONFIG_PATH: mcpConfigPath(),
         CRON_PATH: cronConfigPath(),
         BROWSER_USE_DIR: path.join(CODES_DIR, "skills", "browser-use"),

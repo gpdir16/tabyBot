@@ -1,5 +1,5 @@
 import { CODES_DIR, USER_DIR } from "../paths.js";
-import { memoryFilePath, memoryDirPath, mcpConfigPath, skillsDirPath } from "../path-labels.js";
+import { memoryFilePath, mcpConfigPath, skillsDirPath } from "../path-labels.js";
 import { isDockerRuntime } from "../runtime.js";
 
 const PLACEHOLDER_RE = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
@@ -28,7 +28,6 @@ export function buildEnvironmentPromptVars() {
     return {
         MCP_CONFIG_PATH: mcpConfigPath(),
         MEMORY_PATH: memoryFilePath(),
-        MEMORY_DIR: memoryDirPath(),
         SKILLS_DIR: skillsDirPath(),
         WORKSPACE_PATHS_HINT: pathHint,
         AUTONOMY_LINE: docker

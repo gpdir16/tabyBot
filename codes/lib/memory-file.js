@@ -4,7 +4,6 @@ import { TEMPLATES_USER_DIR, USER_DIR } from "./paths.js";
 import { agentMemoryDir, agentMemoryPath, ensureAgentMemory } from "./agents-store.js";
 
 const MEMORY_PATH = path.join(USER_DIR, "memory.md");
-const MEMORY_DIR = path.join(USER_DIR, "memory");
 const MEMORY_TEMPLATE_PATH = path.join(TEMPLATES_USER_DIR, "memory.md");
 
 function defaultMemoryContent() {
@@ -26,29 +25,10 @@ export function readMemoryFile() {
     return fs.readFileSync(MEMORY_PATH, "utf8");
 }
 
-function listMemoryFiles() {
-    if (!fs.existsSync(MEMORY_DIR)) return [];
-    return fs
-        .readdirSync(MEMORY_DIR)
-        .filter((f) => f.endsWith(".md"))
-        .sort();
-}
-
 function readMemoryFileSummary(filePath) {
     const text = fs.readFileSync(filePath, "utf8");
     const firstLine = text.split("\n").find((l) => l.trim()) || "";
     return firstLine.replace(/^#+\s*/, "").trim();
-}
-
-// 시스템 프롬프트에 주입되는 주제별 메모 파일 목록 (파일명 + 첫 줄 요약만).
-export function formatMemoryFilesListForPrompt() {
-    const items = listMemoryFiles().map((name) => {
-        const summary = readMemoryFileSummary(path.join(MEMORY_DIR, name));
-        const short = summary.length > 120 ? `${summary.slice(0, 120)}…` : summary;
-        return `- **${name.replace(/\.md$/, "")}** — ${short}`;
-    });
-    if (!items.length) return "- (none yet — create `memory/<topic>.md` when a topic needs durable notes)";
-    return items.join("\n");
 }
 
 export function readAgentMemoryFile(agentId) {
@@ -77,4 +57,9 @@ export function formatAgentMemoryFilesListForPrompt(agentId) {
 export function agentMemoryFilePath(agentId) {
     if (!agentId) return "";
     return agentMemoryPath(agentId);
+}
+
+export function agentMemoryDirPath(agentId) {
+    if (!agentId) return "";
+    return agentMemoryDir(agentId);
 }
