@@ -706,7 +706,12 @@
             const i = c.pending.indexOf(pend);
             if (i > -1) c.pending.splice(i, 1);
             if (pend._el && pend._el.parentElement) pend._el.parentElement.remove();
-            T.toast.show("error", T.api.errorText(err, t("sendFailed")));
+            const notConfigured = err?.status === 409 && err.payload?.error === "not_configured";
+            T.toast.show("error", notConfigured ? T.api.errorDetail(err) : T.api.errorText(err, t("sendFailed")));
+            if (notConfigured) {
+                const tab = err.payload.reason === "model_missing" ? "model" : "provider";
+                T.app?.openSettings?.(tab);
+            }
             return false;
         }
     }

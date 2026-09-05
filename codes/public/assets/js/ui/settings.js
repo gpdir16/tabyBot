@@ -486,7 +486,12 @@
                             modelsLoading = false;
                             modelsCache = null;
                             modelsFailedKey = null;
-                            const patch = p.id === "custom" || p.id === "default" ? { id: p.id, baseURL: "", model: "" } : { id: p.id, model: "" };
+                            const patch =
+                                p.id === "github-copilot"
+                                    ? { id: p.id, model: "auto", autoMode: true }
+                                    : p.id === "custom" || p.id === "default"
+                                      ? { id: p.id, baseURL: "", model: "" }
+                                      : { id: p.id, model: "" };
                             put({ provider: patch }).then(() => build());
                         },
                     },
@@ -499,6 +504,52 @@
         body.append(sec);
     }
 
+    function autoSessionSettings(provider) {
+        const box = T.h("div", { class: "set-section" });
+        const enabled = provider.autoMode === true;
+        const toggle = switchEl(
+            enabled,
+            (value) => {
+                put({ provider: { autoMode: value, model: value ? "auto" : "" } }).then(() => build());
+            },
+            t("autoModelUse"),
+        );
+        box.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("autoModelUse") }),
+                T.h("div", { class: "set-control" }, [toggle]),
+            ]),
+            T.h("div", { class: "set-desc", text: t("autoModelUseDesc") }),
+        );
+        if (!enabled) return box;
+
+        box.append(
+            T.h("div", { class: "set-label", text: t("autoModelRouting") }),
+            T.h("div", { class: "set-desc", text: t("autoModelRoutingDesc") }),
+        );
+        const key = modelsKey(provider);
+        const routingModels = modelsCache?.key === key ? modelsCache.routingModels || [] : [];
+        const selected = new Set(Array.isArray(provider.autoModelCandidates) ? provider.autoModelCandidates : []);
+        if (!routingModels.length) {
+            box.append(T.h("div", { class: "empty-note", text: modelsLoading ? t("loadingModels") : t("autoModelNoRouting") }));
+            return box;
+        }
+        const list = T.h("div", { class: "models-list" });
+        for (const model of routingModels) {
+            const input = T.h("input", { type: "checkbox", "aria-label": model.label || model.id });
+            input.checked = selected.has(model.id);
+            input.addEventListener("change", () => {
+                const next = new Set(selected);
+                if (input.checked) next.add(model.id);
+                else next.delete(model.id);
+                put({ provider: { autoModelCandidates: [...next] } }).then(() => build());
+            });
+            list.append(T.h("label", { class: "set-row" }, [T.h("span", { text: model.label || model.id }), input]));
+        }
+        box.append(list);
+        return box;
+    }
+
     /* ── 모델 페이지 ────────────────────────────────────────── */
     function buildModel(body) {
         const s = state.state.settings;
@@ -509,6 +560,9 @@
         const sec = T.h("div", { class: "set-section" });
         const provider = s.provider || {};
         const key = modelsKey(provider);
+        if (provider.id === "github-copilot") {
+            sec.append(autoSessionSettings(provider), T.h("hr", { class: "divider" }));
+        }
         const ready = modelsCache && modelsCache.key === key;
         if (!ready && !modelsLoading && modelsFailedKey !== key) void loadModels(provider);
 
@@ -833,7 +887,11 @@
         try {
             const r = await T.api.models(payload);
             if (req !== modelsReq) return;
-            modelsCache = { key, models: Array.isArray(r?.models) ? r.models : [] };
+            modelsCache = {
+                key,
+                models: Array.isArray(r?.models) ? r.models : [],
+                routingModels: Array.isArray(r?.routingModels) ? r.routingModels : [],
+            };
             modelsLoading = false;
             modelsFailedKey = null;
             if (openTab === "model") build();
@@ -892,6 +950,7 @@
                             class: "radio-row" + (selected ? " selected" : ""),
                             role: "radio",
                             "aria-checked": String(selected),
+                            disabled: provider.autoMode === true,
                             onclick() {
                                 put({ provider: { model: m.id } }).then(() => {
                                     modelFilter = "";

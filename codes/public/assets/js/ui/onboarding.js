@@ -286,7 +286,7 @@
                             draft.providerId = p.id;
                             draft.baseURL = "";
                             draft.apiKey = "";
-                            draft.model = "";
+                            draft.model = p.id === "github-copilot" ? "auto" : "";
                             forgetModels();
                             render();
                         },
@@ -524,6 +524,7 @@
         saving = true;
         const meta = providerOf(draft.providerId);
         const provider = { id: draft.providerId, model: draft.model };
+        if (draft.providerId === "github-copilot") provider.autoMode = true;
         if (meta && meta.needsBaseURL) provider.baseURL = draft.baseURL.trim();
         if (draft.apiKey.trim()) provider.apiKey = draft.apiKey.trim();
 

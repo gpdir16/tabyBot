@@ -216,7 +216,7 @@ export function createRouter({ publicDir, token = "" }) {
                 json200: (body) => sendJson(res, 200, body),
                 json400: (error) => sendJson(res, 400, { error }),
                 json404: () => sendJson(res, 404, { error: "not_found" }),
-                json409: (error) => sendJson(res, 409, { error }),
+                json409: (error, extra = {}) => sendJson(res, 409, { error, ...extra }),
                 json413: (error, extra = {}) => sendJson(res, 413, { error, ...extra }),
                 sse: () => openSse(req, res),
             };

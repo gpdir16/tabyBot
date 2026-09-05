@@ -172,6 +172,13 @@
     function settingsRoute() {
         return T.settingsUI.routeFromPath();
     }
+
+    function openSettings(tab) {
+        const returnPath = location.pathname + location.search + location.hash;
+        history.pushState(null, "", "/s/" + (tab || "model"));
+        T.settingsUI.open({ tab: tab || "model", fromUrl: true, returnPath });
+    }
+
     async function boot() {
         // file:// 직접 실행: 네트워크 오류 콘솔 출력 없이 오프라인 모드 진입
         if (location.protocol === "file:") {
@@ -298,5 +305,5 @@
 
     boot();
 
-    T.app = { applyTheme, retryBoot: boot, renderRoute };
+    T.app = { applyTheme, retryBoot: boot, renderRoute, openSettings };
 })((window.Taby = window.Taby || {}));

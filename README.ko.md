@@ -11,7 +11,7 @@ Grok Bot의 오픈소스 대안입니다. 텔레그램에서 동작하는 에이
 ## 할 수 있는 것
 
 - **일상적인 채팅**: 브라우저에서 바로 답변을 받습니다. 텍스트와 이미지 모두 지원합니다.
-- **추론 제공자 연결**: OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama(로컬 & Cloud), ZenMux, Codex OAuth, Grok OAuth 등 또는 직접 구축한 API 엔드포인트와 연동합니다.
+- **추론 제공자 연결**: OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama(로컬 & Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth 또는 직접 구축한 API 엔드포인트와 연동합니다.
 - **Skills, MCP**: 에이전트에게 원하는 다양한 기능과 도구를 직접 추가할 수 있습니다.
 - **예약 작업**: 정기적으로 실행이 필요한 작업이 있다면 반복해서 실행되며 완료 후에는 보고하거나, 필요하지 않다면 건너뜁니다.
 - **여러 에이전트**: 전문 역할별 에이전트를 만들고 협업시킬 수 있습니다.
