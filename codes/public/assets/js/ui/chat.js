@@ -11,6 +11,7 @@
     const scroller = document.getElementById("scroller");
     const thread = document.getElementById("thread");
     const jump = document.getElementById("jumpLatest");
+    jump.setAttribute("aria-label", t("newMessages"));
     const hdrAvatar = document.getElementById("hdrAvatar");
     const hdrName = document.getElementById("hdrName");
 
