@@ -149,13 +149,16 @@
         return link;
     }
 
+    function buildMessageAttachments(items) {
+        return items?.length ? T.h("div", { class: "msg-atts" }, items.map(buildAttachmentTile)) : null;
+    }
+
     function buildUserMessage(text, imageUrl, optimistic, attachments) {
         const items = attachments && attachments.length ? attachments : imageUrl ? [{ objUrl: imageUrl, mime: "image/*" }] : [];
         const visibleText = displayUserText(text);
         const stack = T.h("div", { class: "msg-user-stack" });
-        if (items.length) {
-            stack.append(T.h("div", { class: "msg-atts" }, items.map(buildAttachmentTile)));
-        }
+        const atts = buildMessageAttachments(items);
+        if (atts) stack.append(atts);
         if (visibleText) {
             const bubble = T.h("div", { class: "bubble" }, [T.h("div", { class: "bubble-text", text: visibleText })]);
             stack.append(bubble);
@@ -319,7 +322,7 @@
     function buildAssistant(text, opt) {
         const o = opt || {};
         const bubble = T.h("div", { class: "bubble" });
-        bubble.append(T.md.render(text));
+        if (text) bubble.append(T.md.render(text));
         bubble.querySelectorAll("img").forEach((img) => {
             img.addEventListener("load", () => fitBubbleRadius(bubble));
         });
@@ -330,6 +333,8 @@
         const actions = buildActions(text, { allowRegen: o.allowRegen });
         bubble.append(actions);
         const stack = T.h("div", { class: "msg-stack" }, [bubble]);
+        const atts = buildMessageAttachments(o.attachments);
+        if (atts) stack.append(atts);
         const row = T.h("div", { class: "msg-row assistant" }, [stack]);
         bindActionDock(row, actions, bubble);
         return row;
@@ -501,13 +506,18 @@
         return {
             at: turn.at,
             stats: turn.stats || null,
-            messages: (turn.messages || []).map((m) => ({
-                role: m.role,
-                content: Array.isArray(m.content) ? null : displayUserText(m.content), // parts 배열은 문자열 렌더 제외
-                isParts: Array.isArray(m.content),
-                imageUrl: m.imageUrl || null,
-                attachments: m.attachments || null,
-            })),
+            attachments: turn.attachments || [],
+            messages: (turn.messages || []).map((m) => {
+                const isParts = Array.isArray(m.content);
+                const textPart = isParts ? m.content.find((part) => part?.type === "text")?.text || "" : m.content;
+                return {
+                    role: m.role,
+                    content: displayUserText(textPart),
+                    isParts,
+                    imageUrl: m.imageUrl || null,
+                    attachments: m.attachments || null,
+                };
+            }),
         };
     }
 
@@ -527,7 +537,18 @@
 
         const flat = [];
         for (const turn of c.turns) {
-            for (const m of turn.messages) flat.push({ m, stats: turn.stats });
+            const messages = turn.messages || [];
+            let lastAssistant = -1;
+            messages.forEach((message, index) => {
+                if (message.role === "assistant") lastAssistant = index;
+            });
+            messages.forEach((m, index) => {
+                flat.push({
+                    m,
+                    stats: turn.stats,
+                    attachments: index === lastAssistant ? turn.attachments || [] : [],
+                });
+            });
         }
         // 서버 히스토리의 role:"tool" 메시지(JSON 원문)는 화면에 버블로 그리지 않는다.
         // 라이브에서는 툴 카드로 표시되므로 새로고침 화면과의 일관성을 위해 제외.
@@ -540,10 +561,12 @@
         visible.forEach((f, i) => {
             let el;
             if (f.m.role === "user") {
-                el = buildUserMessage(f.m.isParts ? t("imagePlaceholder") : f.m.content || "", f.m.imageUrl, false, f.m.attachments);
+                const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
+                el = buildUserMessage(text, f.m.imageUrl, false, f.m.attachments);
             } else {
-                el = buildAssistant(f.m.isParts ? t("imagePlaceholder") : f.m.content || "", {
+                el = buildAssistant(f.m.content || "", {
                     stats: f.stats,
+                    attachments: f.attachments,
                     allowRegen: i === lastA && !c.live,
                 });
             }

@@ -48,7 +48,12 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null, 
                 userMessage.content = displayText;
             }
         }
-        appendChatTurn(sessionKey, messages, { stats: result.stats, attachments, baseMessages });
+        appendChatTurn(sessionKey, messages, {
+            stats: result.stats,
+            attachments,
+            deliveredAttachments: result.deliveredAttachments,
+            baseMessages,
+        });
     } catch (err) {
         console.error("Chat history save failed:", err?.stack || err);
     }
@@ -111,6 +116,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
                 conversationId: sessionKey,
                 text: result.text?.trim() || t("stopped_by_user", lang),
                 stats: result.stats || null,
+                attachments: result.deliveredAttachments || [],
                 error: null,
                 stopped: true,
             });
@@ -124,6 +130,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
                 conversationId: sessionKey,
                 text: null,
                 stats: result.stats || null,
+                attachments: result.deliveredAttachments || [],
                 error: { code: result.error, detail },
             });
             return result;
@@ -134,6 +141,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
             conversationId: sessionKey,
             text: isSilentReply(result) ? null : result.text || "",
             stats: result.stats || null,
+            attachments: result.deliveredAttachments || [],
             error: null,
             silent: isSilentReply(result),
             elapsedMs: Date.now() - startedAt,

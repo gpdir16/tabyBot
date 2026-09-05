@@ -249,7 +249,7 @@
         emit("user_message", { id, confirmed });
     }
 
-    function applyTurnDone(id, text, stats, error) {
+    function applyTurnDone(id, text, stats, error, attachments = []) {
         const c = conv(id);
         const hadLive = !!c.live;
         const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
@@ -262,7 +262,7 @@
         // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
         // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
         const finalText = String(text || fallback || "");
-        if (finalText || inter.length) {
+        if (finalText || inter.length || attachments.length) {
             const last = c.turns[c.turns.length - 1];
             const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
             const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === finalText;
@@ -271,6 +271,7 @@
                     at: new Date().toISOString(),
                     messages: [...inter, ...(finalText ? [{ role: "assistant", content: finalText }] : [])],
                     stats: stats || null,
+                    attachments,
                 });
             }
             const snippet = finalText.replace(/\s+/g, " ").trim().slice(0, 120);

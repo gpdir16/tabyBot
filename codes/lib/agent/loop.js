@@ -1,4 +1,4 @@
-import { loadAgentConfig } from "../config-loader.js";
+import { getMergedProvider, loadAgentConfig, loadUserConfig } from "../config-loader.js";
 import { createLlmClient } from "../llm/client.js";
 import { assistantMessageToPlain } from "../llm/messages.js";
 import { executeTool, getAllToolDefinitions, toolResultContent } from "./tool-registry.js";
@@ -16,6 +16,10 @@ function parseToolArgs(raw) {
     }
 }
 
+function providerKey(provider) {
+    return [provider.id, provider.type, provider.baseURL, provider.model, provider.autoMode, ...(provider.autoModelCandidates || [])].join("\u0000");
+}
+
 function buildStats(llm, messages, contextBaseLength, toolCallCount, modelCallCount) {
     const model = llm.provider.model;
     const contextWindow = llm.modelMeta?.contextWindow ?? 128000;
@@ -29,11 +33,30 @@ function buildStats(llm, messages, contextBaseLength, toolCallCount, modelCallCo
     };
 }
 
+function deliveredAttachmentsFromMessages(messages) {
+    const seen = new Set();
+    const attachments = [];
+    for (const message of messages || []) {
+        if (message?.role !== "tool" || typeof message.content !== "string") continue;
+        try {
+            const attachment = JSON.parse(message.content)?.attachment;
+            if (!attachment?.id || seen.has(attachment.id)) continue;
+            seen.add(attachment.id);
+            attachments.push(attachment);
+        } catch {
+            // 도구 결과가 JSON이 아니면 첨부 메타데이터가 없는 결과로 처리한다.
+        }
+    }
+    return attachments;
+}
+
 function buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCount, extra = {}) {
+    const turnMessages = extractTurnMessages(messages, contextBaseLength);
     return {
         ...extra,
         stats: buildStats(llm, messages, contextBaseLength, toolCallCount, modelCallCount),
-        turnMessages: extractTurnMessages(messages, contextBaseLength),
+        turnMessages,
+        deliveredAttachments: deliveredAttachmentsFromMessages(turnMessages),
     };
 }
 
@@ -201,7 +224,8 @@ async function runAgentTurn(
     } = {},
 ) {
     clearFileReadCache();
-    const llm = await createLlmClient();
+    let llm = await createLlmClient();
+    let activeProviderKey = providerKey(llm.provider);
     const agentConfig = loadAgentConfig();
     const setStatus = (phase, detail = null) => onStatusPhase?.(phase, detail);
     const maxRounds = agentConfig.maxToolRoundsPerTurn ?? agentConfig.maxToolRounds ?? 16;
@@ -237,11 +261,18 @@ async function runAgentTurn(
 
     let toolCallCount = 0;
     const fileSnapshots = new Map();
-    const visionSupport = Boolean(llm.modelMeta?.supportsVision);
+    let visionSupport = Boolean(llm.modelMeta?.supportsVision);
 
     const partialTextRef = { value: null };
 
     for (let round = 0; round < maxRounds; round++) {
+        const configuredProvider = getMergedProvider(loadUserConfig());
+        const configuredProviderKey = providerKey(configuredProvider);
+        if (configuredProviderKey !== activeProviderKey) {
+            llm = await createLlmClient();
+            activeProviderKey = providerKey(llm.provider);
+            visionSupport = Boolean(llm.modelMeta?.supportsVision);
+        }
         injectPendingUserMessages(messages, session);
         if (shouldStop(session)) {
             return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {

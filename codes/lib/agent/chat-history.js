@@ -505,12 +505,14 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
             at: last.at || new Date().toISOString(),
             messages: completedMessages,
             ...(stats ? { stats } : {}),
+            ...(extra.deliveredAttachments?.length ? { attachments: extra.deliveredAttachments } : {}),
         };
     } else {
         turns.push({
             at: new Date().toISOString(),
             messages: storedMessages,
             ...(stats ? { stats } : {}),
+            ...(extra.deliveredAttachments?.length ? { attachments: extra.deliveredAttachments } : {}),
         });
     }
 
