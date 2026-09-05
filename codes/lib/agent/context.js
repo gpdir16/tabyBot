@@ -3,13 +3,7 @@ import path from "node:path";
 import { getEncoding } from "js-tiktoken";
 import { sanitizeTextForLlm } from "../llm/sanitize-messages.js";
 import { CODES_DIR } from "../paths.js";
-import {
-    readMemoryFile,
-    formatMemoryFilesListForPrompt,
-    readAgentMemoryFile,
-    formatAgentMemoryFilesListForPrompt,
-    agentMemoryFilePath,
-} from "../memory-file.js";
+import { readMemoryFile, readAgentMemoryFile, formatAgentMemoryFilesListForPrompt, agentMemoryFilePath, agentMemoryDirPath } from "../memory-file.js";
 import { firstAgent, formatPeerAgentsForPrompt, getAgent } from "../agents-store.js";
 import { loadAgentConfig, loadUserConfig } from "../config-loader.js";
 import {
@@ -99,8 +93,7 @@ function agentIdentityText(agentId) {
 function agentMemoryText(agentId, opts) {
     const id = agentId || firstAgent()?.id;
     if (!id) return "- (none — use shared memory.md)";
-    const body = loadScopedMemory(readAgentMemoryFile(id), opts).trim() || "(empty)";
-    return `${body}\n\n### Agent memory files\n${formatAgentMemoryFilesListForPrompt(id)}`;
+    return loadScopedMemory(readAgentMemoryFile(id), opts).trim() || "(empty)";
 }
 
 function peerAgentsText(agentId) {
@@ -116,9 +109,11 @@ export function buildSystemMessageContent(lang, { truncateMemory = false, maxMem
         ...buildEnvironmentPromptVars(),
         FILESYSTEM_BLOCK: buildFilesystemPromptBlock(),
         SKILLS_LIST: formatSkillsListForPrompt(),
-        MEMORY_FILES_LIST: formatMemoryFilesListForPrompt(),
         RUNTIME_INFO: buildRuntimeInfoLine(rt),
         MEMORY: loadMemoryForPrompt({ truncateMemory, maxMemoryChars }),
+        AGENT_MEMORY_PATH: agentMemoryFilePath(rt.agentId || firstAgent()?.id),
+        AGENT_MEMORY_DIR: agentMemoryDirPath(rt.agentId || firstAgent()?.id),
+        AGENT_MEMORY_FILES_LIST: formatAgentMemoryFilesListForPrompt(rt.agentId || firstAgent()?.id),
         AGENT_IDENTITY: agentIdentityText(rt.agentId),
         AGENT_MEMORY: agentMemoryText(rt.agentId, { truncateMemory, maxMemoryChars }),
         PEER_AGENTS: peerAgentsText(rt.agentId),
