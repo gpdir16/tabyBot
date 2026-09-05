@@ -9,7 +9,7 @@ const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
 const DEFAULT_GEOMETRY = "1280x800x24";
 const DISPLAY = 99;
 
-const XVFB_GUI_DESCRIPTION = `Linux GUI app automation on a virtual X display (Xvfb). Use this for non-browser Linux GUI programs in Docker. For web browsing, use browser-use.
+const XVFB_GUI_DESCRIPTION = `Linux GUI app automation on a virtual X display (Xvfb). Use this for non-browser Linux GUI programs in Docker. For web browsing, use camofox.
 
 Actions: launch, kill_app, screenshot, click (button 1/2/3, optional double), drag, type, key, scroll, close.
 

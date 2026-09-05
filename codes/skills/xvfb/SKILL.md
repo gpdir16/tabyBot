@@ -9,7 +9,7 @@ description: Linux GUI app automation on a virtual X display. Launch non-browser
 
 Use `xvfb_gui` for non-browser Linux GUI programs inside Docker: small desktop utilities, installers, dialogs, editors, or test apps that need an X display.
 
-For web browsing, use `browser-use`. Do not route normal browser work through Xvfb.
+For web browsing, use `camofox`. Do not route normal browser work through Xvfb.
 
 ## Prerequisites
 

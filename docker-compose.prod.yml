@@ -9,6 +9,15 @@ services:
             TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
             TABYBOT_WEB_TOKEN: ${TABYBOT_WEB_TOKEN:-}
             TABYBOT_PORT: ${TABYBOT_PORT:-8999}
+            CAMOFOX_HOST: 127.0.0.1
+            CAMOFOX_PORT: 9377
+            CAMOFOX_AUTH_MODE: disabled
+            CAMOFOX_HEADLESS: "true"
+            CAMOFOX_HUMANIZE: "true"
+            CAMOFOX_PROFILES_DIR: /app/user/camofox/profiles
+            CAMOFOX_COOKIES_DIR: /app/user/camofox/cookies
+            CAMOFOX_DOWNLOADS_DIR: /app/user/camofox/downloads
+            CAMOFOX_TRACES_DIR: /app/user/camofox/traces
         volumes:
             - tabybot-user:/app/user
         ports:
