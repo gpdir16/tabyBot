@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { registerProducedFile } from "../web/files.js";
+import { registerProducedFile, publicAttachment } from "../web/files.js";
 import { resolveAgentPath } from "../paths.js";
 import { sendFileDescription } from "../path-labels.js";
 
@@ -36,6 +36,7 @@ export async function executeSendFileTool(_name, args, _ctx) {
             name: entry.name,
             size: entry.size,
             url: `/api/files/${entry.id}`,
+            attachment: publicAttachment(entry),
             note: "File is delivered to the web client as a downloadable attachment. Do not paste the URL as text — the client renders it automatically.",
         };
     } catch (err) {

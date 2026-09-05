@@ -794,6 +794,9 @@ kbd {
     justify-content: flex-end;
     gap: var(--sp-2);
 }
+.msg-row.assistant .msg-atts {
+    justify-content: flex-start;
+}
 .file-attachment {
     display: flex;
     flex-direction: column;
@@ -822,8 +825,9 @@ kbd {
     font-size: var(--fs-xs);
     font-weight: 600;
     line-height: 1.25;
+    overflow-wrap: anywhere;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
 }
 .file-meta {
     overflow: hidden;
@@ -3050,8 +3054,11 @@ body.sb-collapsed .btn-menu {
     .msg-atts {
         gap: 8px;
     }
-    .msg-atts .thumb,
-    .file-attachment {
+    .msg-atts .thumb {
+        width: 104px;
+        height: 104px;
+    }
+    .msg-atts .file-attachment {
         width: 104px;
         height: 104px;
     }

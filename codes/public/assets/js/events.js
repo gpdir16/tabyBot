@@ -61,7 +61,13 @@
                 break;
             }
             case "turn_done": {
-                state.applyTurnDone(msg.conversationId, msg.text || "", msg.stats || null, msg.error != null ? msg.error : null);
+                state.applyTurnDone(
+                    msg.conversationId,
+                    msg.text || "",
+                    msg.stats || null,
+                    msg.error != null ? msg.error : null,
+                    msg.attachments || [],
+                );
                 // stopped_by_user는 조용히 종료. 그 외 오류는 토스트.
                 if (msg.error && msg.error !== "stopped_by_user") {
                     const detail = typeof msg.error === "string" ? msg.error : (msg.error && (msg.error.detail || msg.error.code)) || "";
