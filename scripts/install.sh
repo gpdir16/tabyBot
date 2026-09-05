@@ -39,7 +39,7 @@ USER_DATA_DIR="${INSTALL_DIR}/user"
 COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
 ENV_FILE="${INSTALL_DIR}/.env"
 LAUNCHD_LABEL="io.tabybot"
-BROWSER_USE_PIP_SPEC="${BROWSER_USE_PIP_SPEC:-browser-use==0.13.3}"
+CAMOFOX_VERSION="${CAMOFOX_VERSION:-2.4.7}"
 
 DOCKER_SHELL="docker"
 TABYBOT_LANG_RESOLVED=""
@@ -496,6 +496,15 @@ services:
             TABYBOT_HOME: "${install_dir_escaped}"
             TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
             TABYBOT_PORT: \${TABYBOT_PORT:-8999}
+            CAMOFOX_HOST: 127.0.0.1
+            CAMOFOX_PORT: 9377
+            CAMOFOX_AUTH_MODE: disabled
+            CAMOFOX_HEADLESS: "true"
+            CAMOFOX_HUMANIZE: "true"
+            CAMOFOX_PROFILES_DIR: /app/user/camofox/profiles
+            CAMOFOX_COOKIES_DIR: /app/user/camofox/cookies
+            CAMOFOX_DOWNLOADS_DIR: /app/user/camofox/downloads
+            CAMOFOX_TRACES_DIR: /app/user/camofox/traces
         volumes:
             - tabybot-user:/app/user
         restart: unless-stopped
@@ -566,6 +575,16 @@ write_env() {
             write_env_quoted CODES_DIR "${APP_DIR}/codes"
             write_env_quoted CONFIG_DIR "${APP_DIR}/codes/config"
             write_env_quoted TABYBOT_NODE "$(resolve_node_bin)"
+            write_env_quoted CAMOFOX_HOST "127.0.0.1"
+            write_env_quoted CAMOFOX_PORT "9377"
+            write_env_quoted CAMOFOX_AUTH_MODE "disabled"
+            write_env_quoted CAMOFOX_HEADLESS "true"
+            write_env_quoted CAMOFOX_HUMANIZE "true"
+            write_env_quoted CAMOFOX_PROFILES_DIR "${USER_DATA_DIR}/camofox/profiles"
+            write_env_quoted CAMOFOX_COOKIES_DIR "${USER_DATA_DIR}/camofox/cookies"
+            write_env_quoted CAMOFOX_DOWNLOADS_DIR "${USER_DATA_DIR}/camofox/downloads"
+            write_env_quoted CAMOFOX_TRACES_DIR "${USER_DATA_DIR}/camofox/traces"
+            write_env_quoted PATH "$(npm prefix -g)/bin:${PATH}"
             if [ -n "${version}" ]; then
                 printf 'TABYBOT_VERSION=%s\n' "${version}"
             fi
@@ -688,27 +707,11 @@ update_local_source() {
 }
 
 install_local_deps() {
-    local stealth_script
     if is_ko; then echo "==> Node.js 패키지 설치 중..."; else echo "==> Installing Node.js packages..."; fi
     (cd "${APP_DIR}" && npm install --omit=dev)
 
-    if command -v python3 >/dev/null 2>&1; then
-        if is_ko; then echo "==> browser-use 설치 중 (선택)..."; else echo "==> Installing browser-use (optional)..."; fi
-        if python3 -m pip install --upgrade --user "${BROWSER_USE_PIP_SPEC}" 'uv' >/dev/null 2>&1 \
-            || python3 -m pip install --upgrade --break-system-packages "${BROWSER_USE_PIP_SPEC}" 'uv' >/dev/null 2>&1; then
-            if command -v browser-use >/dev/null 2>&1; then
-                browser-use install >/dev/null 2>&1 || true
-            fi
-            stealth_script="${APP_DIR}/codes/skills/browser-use/install-stealth.sh"
-            if [ -f "${stealth_script}" ]; then
-                STEALTH_DIR="${APP_DIR}/codes/skills/browser-use" bash "${stealth_script}" || true
-            fi
-        elif is_ko; then
-            echo "    (browser-use 스킵: Python/pip 없음 — 웹 브라우징 skill 제한될 수 있음)"
-        else
-            echo "    (browser-use skipped: no Python/pip — web browsing skill may be limited)"
-        fi
-    fi
+    if is_ko; then echo "==> CamoFox 스텔스 브라우저 설치 중..."; else echo "==> Installing CamoFox stealth browser..."; fi
+    npm install --global "camofox-browser@${CAMOFOX_VERSION}"
 }
 
 install_launchd_service() {
