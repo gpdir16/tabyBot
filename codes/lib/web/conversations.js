@@ -30,8 +30,13 @@ function writeJson(file, data) {
     fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
-function isValidId(id) {
-    return /^(web|cron)-[0-9a-zA-Z_-]{1,64}$/.test(String(id || ""));
+export function isValidId(id) {
+    return /^web-[0-9a-zA-Z_-]{1,64}$/.test(String(id || ""));
+}
+
+export function ensureConversation(id, agentId = firstAgentId()) {
+    if (!isValidId(id)) return null;
+    return getConversationMeta(id) || writeFreshManifest(id, agentId);
 }
 
 function dirToId(dirName) {
@@ -213,6 +218,8 @@ function toDisplayTurns(rawTurns) {
         for (const m of turn?.messages || []) {
             // 도구 호출/결과 프레임은 라이브 카드로만 보여준다. 히스토리에는 최종 텍스트만.
             if (m?.role === "tool") continue;
+            if (m?.role === "assistant" && String(m.content || "").trim() === "__SILENT__") continue;
+            if (m?.role === "user" && typeof m.content === "string" && m.content.includes("[tabybot-scheduled]")) continue;
             if (m?.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length && !String(m.content || "").trim()) continue;
             if (m?.role !== "user" || typeof m.content !== "string") {
                 messages.push(m?.attachments ? publicUserMessage(m) : m);

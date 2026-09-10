@@ -13,10 +13,11 @@ import {
 import { beginAgentSession, endAgentSession, enqueueAgentMessage, isAgentSessionRunning, requestAgentStop } from "../agent/session.js";
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
-import { setCronJobHandler as registerCronJobHandler } from "../cron/scheduler.js";
+import { setScheduleJobHandler as registerScheduleJobHandler } from "../scheduling/scheduler.js";
+import { SCHEDULED_TURN_MARKER } from "../tools/schedule-tool.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
-import { ensureTitleFromMessage, getConversationMeta, listConversations } from "./conversations.js";
+import { ensureConversation, ensureTitleFromMessage, getConversationMeta, isValidId, listConversations } from "./conversations.js";
 import { firstAgentId } from "../agents-store.js";
 
 function isStoppedByUser(result) {
@@ -59,7 +60,7 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null, 
     }
 }
 
-export async function runTurn({ sessionKey, agentId, userText, displayText = null, attachments = [], recovery = false }) {
+export async function runTurn({ sessionKey, agentId, userText, displayText = null, attachments = [], recovery = false, quietEmpty = false }) {
     const lang = loadUserConfig().language || "en";
     const session = beginAgentSession(sessionKey);
     let recoveryBaseMessages = recovery ? lastChatTurnMessages(sessionKey) : null;
@@ -82,9 +83,19 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
                 sessionKey,
                 agentId,
                 session,
+                quietEmpty,
                 attachments: appendToRecovery ? [] : attachments,
                 onStatusPhase: (phase, detail) => status(phase, detail),
-                onTextDelta: (text, full) => emit({ type: "delta", conversationId: sessionKey, text, full }),
+                onTextDelta: (text, full) => {
+                    if (
+                        quietEmpty &&
+                        String(full || "")
+                            .trim()
+                            .startsWith("__SILENT__")
+                    )
+                        return;
+                    emit({ type: "delta", conversationId: sessionKey, text, full });
+                },
                 onCheckpoint: (turnMessages) => {
                     if (!getConversationMeta(sessionKey)) return;
                     checkpointChatTurn(sessionKey, turnMessages, {
@@ -94,7 +105,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
             });
 
         let result = await run(userText, recovery);
-        if (!recovery && shouldRecover(result)) {
+        if (!recovery && !quietEmpty && shouldRecover(result)) {
             markChatTurnInterrupted(sessionKey);
             prepareChatTurnRecovery(sessionKey);
             recoveryBaseMessages = lastChatTurnMessages(sessionKey);
@@ -106,7 +117,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
         // 실행 중 대화가 삭제되었으면 디스크에 되살리지 않는다.
         if (getConversationMeta(sessionKey)) {
             saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
-            if (!result?.error) ensureTitleFromMessage(sessionKey, displayText || attachments[0]?.name || userText);
+            if (!result?.error && !quietEmpty) ensureTitleFromMessage(sessionKey, displayText || attachments[0]?.name || userText);
             if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
         }
 
@@ -225,24 +236,59 @@ export function stopConversation(sessionKey) {
     return stoppedActive || stoppedQueued;
 }
 
-// 크론 잡 결과는 잡별 대화에 기록되고 알림으로 방송된다.
-export function setCronJobHandler() {
-    registerCronJobHandler(async (job) => {
+function scheduleConversationId(job) {
+    const id = String(job.conversationId || "").trim();
+    if (isValidId(id)) return id;
+    return `web-sched-${job.id}`;
+}
+
+function buildScheduleFirePrompt(job) {
+    return `${SCHEDULED_TURN_MARKER}
+Scheduled task "${job.name}"${job.schedule ? ` (${job.schedule})` : ""}. This is an automatic run, not a user message.
+
+Task:
+${job.prompt}
+
+Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"). If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
+}
+
+// 스케줄 결과는 지정한 대화에 올라간다. 빈 확인은 알림하지 않는다.
+export function setScheduleJobHandler() {
+    registerScheduleJobHandler(async (job) => {
         const lang = loadUserConfig().language || "en";
-        const conversationId = job.chatId?.startsWith("web-") ? job.chatId : `cron-${job.id}`;
-        const header = t("cron_auto_header", lang);
+        const conversationId = scheduleConversationId(job);
+        const agentId = job.agentId || firstAgentId();
+        ensureConversation(conversationId, agentId);
         try {
             const result = await runTurn({
                 sessionKey: conversationId,
-                agentId: job.agentId || firstAgentId(),
-                userText: `${header}\n\n${job.prompt}`,
+                agentId,
+                userText: buildScheduleFirePrompt(job),
+                quietEmpty: true,
             });
-            if (!result || isSilentReply(result)) return;
-            const body = result?.text?.trim() || t("cron_no_output", lang);
+            if (!result || isSilentReply(result)) return result;
+            if (result.error) {
+                emit({
+                    type: "notice",
+                    level: "error",
+                    text: `⏰ ${job.name}: ${result.errorDetail || result.error}`,
+                    conversationId,
+                });
+                return result;
+            }
+            const body = result.text?.trim() || t("schedule_no_output", lang);
             emit({ type: "notice", level: "info", text: `⏰ ${job.name}: ${body.slice(0, 400)}`, conversationId });
             emit({ type: "conversations_changed" });
+            return result;
         } catch (err) {
-            console.error("Cron job error:", err?.stack || err);
+            console.error("Schedule job error:", err?.stack || err);
+            emit({
+                type: "notice",
+                level: "error",
+                text: `⏰ ${job.name}: ${err?.message || String(err)}`,
+                conversationId,
+            });
+            return { error: err?.message || String(err), silent: true };
         }
     });
 }

@@ -14,8 +14,8 @@ export function skillsDirPath() {
     return path.join(USER_DIR, "skills");
 }
 
-export function cronConfigPath() {
-    return path.join(USER_DIR, "cron.json");
+export function schedulingConfigPath() {
+    return path.join(USER_DIR, "scheduling.json");
 }
 
 export function terminalRunDescription() {
@@ -43,8 +43,8 @@ export function sendFileDescription() {
     return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`. Optional caption is shown with the attachment.`;
 }
 
-export function cronListDescription() {
-    return `List scheduled cron jobs from \`${cronConfigPath()}\`.`;
+export function schedulingListDescription() {
+    return `List scheduling jobs from \`${schedulingConfigPath()}\`.`;
 }
 
 export function mcpConfigEditHint(serverName) {
@@ -59,7 +59,7 @@ export function buildSkillContentVars() {
         SYSTEM_SKILLS_DIR: SKILLS_SYSTEM_DIR,
         MEMORY_PATH: memoryFilePath(),
         MCP_CONFIG_PATH: mcpConfigPath(),
-        CRON_PATH: cronConfigPath(),
+        SCHEDULING_PATH: schedulingConfigPath(),
         CAMOFOX_DIR: path.join(CODES_DIR, "skills", "camofox"),
         CAMOFOX_DATA_DIR: path.join(USER_DIR, "camofox"),
     };
@@ -75,7 +75,7 @@ function skillContentVars() {
 const LEGACY_SKILL_PATHS = [
     ["/app/user/memory.md", (v) => v.MEMORY_PATH],
     ["/app/user/mcp.json", (v) => v.MCP_CONFIG_PATH],
-    ["/app/user/cron.json", (v) => v.CRON_PATH],
+    ["/app/user/scheduling.json", (v) => v.SCHEDULING_PATH],
     ["/app/user/skills", (v) => v.SKILLS_DIR],
     ["/app/codes/skills", (v) => path.join(v.CODES_DIR, "skills")],
     ["/app/user", (v) => v.USER_DIR],
