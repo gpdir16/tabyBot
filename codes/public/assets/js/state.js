@@ -9,7 +9,7 @@
         settings: null, // GET /api/settings 응답
         bots: [], // GET /api/agents 응답(메신저 라스터)
         botQuery: "", // 봇 검색 필터
-        conversations: [], // 스레드 메타(봇 threadId + cron 결과 등)
+        conversations: [], // 스레드 메타(봇 threadId + 스케줄 결과 등)
         convs: new Map(), // threadId → { meta, loaded, turns, pending, live }
         currentId: null,
         conn: "disconnected",
@@ -249,7 +249,7 @@
         emit("user_message", { id, confirmed });
     }
 
-    function applyTurnDone(id, text, stats, error, attachments = []) {
+    function applyTurnDone(id, text, stats, error, attachments = [], silent = false) {
         const c = conv(id);
         const hadLive = !!c.live;
         const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
@@ -259,6 +259,11 @@
             .map((t) => ({ role: "assistant", content: t }))
             .filter((m) => m.content && m.content.trim());
         c.live = null;
+        if (silent) {
+            emit("live", { id });
+            emit("turn_done", { id, hadLive });
+            return;
+        }
         // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
         // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
         const finalText = String(text || fallback || "");

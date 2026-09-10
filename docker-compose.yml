@@ -20,7 +20,7 @@ services:
             CAMOFOX_COOKIES_DIR: /app/user/camofox/cookies
             CAMOFOX_DOWNLOADS_DIR: /app/user/camofox/downloads
             CAMOFOX_TRACES_DIR: /app/user/camofox/traces
-        # Persistent state (config, memory, MCP, cron). Defaults: codes/templates/user
+        # Persistent state (config, memory, MCP, scheduling). Defaults: codes/templates/user
         volumes:
             - tabybot-user:/app/user
         ports:

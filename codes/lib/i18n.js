@@ -24,12 +24,7 @@ const MESSAGES = {
         ko: "중지했습니다.",
         ja: "停止しました。",
     },
-    cron_auto_header: {
-        en: "ℹ️ Automatically executed scheduled task",
-        ko: "ℹ️ 반복 작업으로 자동 실행된 작업",
-        ja: "ℹ️ 定期タスクにより自動実行された作業",
-    },
-    cron_no_output: {
+    schedule_no_output: {
         en: "(no output)",
         ko: "(출력 없음)",
         ja: "(出力なし)",

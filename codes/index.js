@@ -1,7 +1,8 @@
 import { ensureUserDir } from "./lib/bootstrap.js";
 import { initTools, shutdownTools } from "./lib/agent/tool-registry.js";
 import { startWebServer } from "./lib/web/server.js";
-import { setCronJobHandler, startCronScheduler } from "./lib/cron/scheduler.js";
+import { setScheduleJobHandler } from "./lib/web/turns.js";
+import { startScheduleScheduler } from "./lib/scheduling/scheduler.js";
 import { startUpdateScheduler } from "./lib/update/scheduler.js";
 
 async function shutdown() {
@@ -17,8 +18,8 @@ async function main() {
     process.on("SIGTERM", shutdown);
 
     startWebServer();
-    setCronJobHandler();
-    startCronScheduler();
+    setScheduleJobHandler();
+    startScheduleScheduler();
     startUpdateScheduler();
 }
 

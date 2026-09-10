@@ -63,6 +63,8 @@ function buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallC
 const EMPTY_REPLY_HINT =
     "Your previous assistant reply was empty. Reply to the user in plain text now. Summarize what you accomplished and answer their request.";
 
+const QUIET_EMPTY_HINT = "If the user does not need a message, reply with ONLY __SILENT__. Do not narrate an empty check.";
+
 const SILENT_REPLY_TOKEN = "__SILENT__";
 
 function isSilentReply(content) {
@@ -129,13 +131,13 @@ function checkpointMessages(messages, contextBaseLength, onCheckpoint) {
 async function completeTextReply(
     llm,
     messages,
-    { onTextDelta, onCheckpoint, contextBaseLength, setStatus, maxRetries, modelCallCount, session, partialTextRef },
+    { onTextDelta, onCheckpoint, contextBaseLength, setStatus, maxRetries, modelCallCount, session, partialTextRef, quietEmpty = false },
 ) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         if (shouldStop(session)) return null;
 
         if (attempt > 0) {
-            messages.push({ role: "user", content: EMPTY_REPLY_HINT });
+            messages.push({ role: "user", content: quietEmpty ? QUIET_EMPTY_HINT : EMPTY_REPLY_HINT });
         }
 
         setStatus("thinking");
@@ -221,6 +223,7 @@ async function runAgentTurn(
         persistHistory = true,
         consultDepth = 0,
         onCheckpoint,
+        quietEmpty = false,
     } = {},
 ) {
     clearFileReadCache();
@@ -361,6 +364,7 @@ async function runAgentTurn(
                 modelCallCount: modelCallCountRef,
                 session,
                 partialTextRef,
+                quietEmpty,
             });
             if (shouldStop(session)) {
                 return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
@@ -375,6 +379,13 @@ async function runAgentTurn(
                     text: recovered.silent ? null : recovered.text,
                     usage: recovered.usage,
                     silent: recovered.silent || false,
+                });
+            }
+
+            if (quietEmpty) {
+                return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
+                    text: null,
+                    silent: true,
                 });
             }
 
@@ -468,6 +479,7 @@ async function runAgentTurn(
         modelCallCount: modelCallCountRef,
         session,
         partialTextRef,
+        quietEmpty,
     });
     if (shouldStop(session)) {
         return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
@@ -494,6 +506,7 @@ async function runAgentTurn(
                 modelCallCount: modelCallCountRef,
                 session,
                 partialTextRef,
+                quietEmpty,
             });
             if (shouldStop(session)) {
                 return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
@@ -507,6 +520,13 @@ async function runAgentTurn(
             text: latest.silent ? null : latest.text,
             usage: latest.usage,
             silent: latest.silent || false,
+        });
+    }
+
+    if (quietEmpty) {
+        return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
+            text: null,
+            silent: true,
         });
     }
 

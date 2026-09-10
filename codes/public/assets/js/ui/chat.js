@@ -552,7 +552,13 @@
         }
         // 서버 히스토리의 role:"tool" 메시지(JSON 원문)는 화면에 버블로 그리지 않는다.
         // 라이브에서는 툴 카드로 표시되므로 새로고침 화면과의 일관성을 위해 제외.
-        const visible = flat.filter((f) => f.m.role !== "tool");
+        const visible = flat.filter((f) => {
+            if (f.m.role === "tool") return false;
+            const text = typeof f.m.content === "string" ? f.m.content : "";
+            if (f.m.role === "assistant" && text.trim() === "__SILENT__") return false;
+            if (f.m.role === "user" && text.includes("[tabybot-scheduled]")) return false;
+            return true;
+        });
         let lastA = -1;
         visible.forEach((f, i) => {
             if (f.m.role === "assistant") lastA = i;

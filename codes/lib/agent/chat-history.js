@@ -192,6 +192,8 @@ function previewTextFromMessage(message) {
     if (!message || (message.role !== "user" && message.role !== "assistant")) return "";
     if (isInternalStoredMessage(message)) return "";
     if (typeof message.content !== "string") return "";
+    if (message.role === "assistant" && message.content.trim() === "__SILENT__") return "";
+    if (message.role === "user" && message.content.includes("[tabybot-scheduled]")) return "";
     const cut = message.content.indexOf("[User attached files]");
     const text = cut === -1 ? message.content : message.content.slice(0, cut).trim();
     if (text) return stripMarkdownForPreview(text);

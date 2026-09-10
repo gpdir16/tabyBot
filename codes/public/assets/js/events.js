@@ -67,6 +67,7 @@
                     msg.stats || null,
                     msg.error != null ? msg.error : null,
                     msg.attachments || [],
+                    Boolean(msg.silent),
                 );
                 // stopped_by_user는 조용히 종료. 그 외 오류는 토스트.
                 if (msg.error && msg.error !== "stopped_by_user") {
@@ -96,7 +97,7 @@
                 break;
             case "notice":
                 T.toast.show(msg.level === "warn" || msg.level === "error" ? msg.level : "info", msg.text || "");
-                // 대화 턴이 있는 알림(크론 등)은 turn_done이 담당한다.
+                // 대화 턴이 있는 알림(스케줄 등)은 turn_done이 담당한다.
                 if (!msg.conversationId) notifyIncoming(null, msg.text || "", "notice");
                 break;
             case "oauth_done":
