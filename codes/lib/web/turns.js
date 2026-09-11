@@ -17,8 +17,8 @@ import { setScheduleJobHandler as registerScheduleJobHandler } from "../scheduli
 import { SCHEDULED_TURN_MARKER } from "../tools/schedule-tool.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
-import { ensureConversation, ensureTitleFromMessage, getConversationMeta, isValidId, listConversations } from "./conversations.js";
-import { firstAgentId } from "../agents-store.js";
+import { ensureConversation, getConversationMeta, isValidId, listConversations } from "./conversations.js";
+import { firstAgent, firstAgentId, getAgent } from "../agents-store.js";
 
 function isStoppedByUser(result) {
     return result?.error === "stopped_by_user";
@@ -117,7 +117,6 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
         // 실행 중 대화가 삭제되었으면 디스크에 되살리지 않는다.
         if (getConversationMeta(sessionKey)) {
             saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
-            if (!result?.error && !quietEmpty) ensureTitleFromMessage(sessionKey, displayText || attachments[0]?.name || userText);
             if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
         }
 
@@ -177,7 +176,6 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
 export function dispatchMessage({ sessionKey, agentId, userText, displayText = null, attachments = [] }) {
     try {
         appendPendingUserTurn(sessionKey, displayText ?? userText, attachments);
-        ensureTitleFromMessage(sessionKey, displayText || attachments[0]?.name || userText);
     } catch (err) {
         console.error("Pending user turn save failed:", err?.stack || err);
     }
@@ -239,7 +237,7 @@ export function stopConversation(sessionKey) {
 function scheduleConversationId(job) {
     const id = String(job.conversationId || "").trim();
     if (isValidId(id)) return id;
-    return `web-sched-${job.id}`;
+    return getAgent(job.agentId)?.uuid || firstAgent()?.uuid || "";
 }
 
 function buildScheduleFirePrompt(job) {
@@ -258,7 +256,7 @@ export function setScheduleJobHandler() {
         const lang = loadUserConfig().language || "en";
         const conversationId = scheduleConversationId(job);
         const agentId = job.agentId || firstAgentId();
-        ensureConversation(conversationId, agentId);
+        ensureConversation(conversationId);
         try {
             const result = await runTurn({
                 sessionKey: conversationId,

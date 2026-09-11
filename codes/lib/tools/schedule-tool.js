@@ -20,7 +20,7 @@ export const scheduleToolDefinitions = [
         function: {
             name: "schedule_create",
             description:
-                "Create a scheduling job. Provide exactly one of: cron (5-field, e.g. 30 8 * * 1-5), every (interval, e.g. 5m/2h/1d, min 60s), or at (one-shot ISO datetime). Uses IANA timezone (default server TZ). Runs when idle; waits if that conversation is mid-turn. Results post into conversationId (defaults to this conversation).",
+                "Create a scheduling job. Provide exactly one of: cron (5-field, e.g. 30 8 * * 1-5), every (interval, e.g. 5m/2h/1d, min 60s), or at (one-shot ISO datetime). Uses IANA timezone (default server TZ). Runs when idle; waits if that bot thread is mid-turn. Results post into conversationId (defaults to this bot thread).",
             parameters: {
                 type: "object",
                 properties: {
@@ -39,7 +39,7 @@ export const scheduleToolDefinitions = [
                     },
                     conversationId: {
                         type: "string",
-                        description: "Conversation to post into. Defaults to the current conversation.",
+                        description: "Bot thread id (agent uuid) to post into. Defaults to the current bot thread.",
                     },
                     fireImmediately: {
                         type: "boolean",
@@ -55,7 +55,7 @@ export const scheduleToolDefinitions = [
         type: "function",
         function: {
             name: "schedule_update",
-            description: "Update a scheduling job in place (name, prompt, schedule, timezone, enabled, conversation).",
+            description: "Update a scheduling job in place (name, prompt, schedule, timezone, enabled, bot thread).",
             parameters: {
                 type: "object",
                 properties: {

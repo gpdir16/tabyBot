@@ -25,7 +25,7 @@
     let attachments = [];
     let dragDepth = 0;
     let draftId = null;
-    const drafts = new Map(); // threadId → { text, attachments }
+    const drafts = new Map(); // uuid → { text, attachments }
 
     /* ── 자동성장 ───────────────────────────────────────────── */
     function grow() {

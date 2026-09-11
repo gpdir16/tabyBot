@@ -771,7 +771,7 @@
 
         // URL 동기화: /a/<uuid>?m=&q= — 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
         try {
-            const bot = id ? state.botByThreadId(String(id)) : null;
+            const bot = id ? state.botByUuid(String(id)) : null;
             if (!/^\/s\//.test(location.pathname)) {
                 const qs = new URLSearchParams();
                 if (o.params?.q) qs.set("q", o.params.q);

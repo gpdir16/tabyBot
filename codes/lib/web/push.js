@@ -5,7 +5,7 @@ import path from "node:path";
 import webpush from "web-push";
 import { USER_DIR } from "../paths.js";
 import { getConversationMeta } from "./conversations.js";
-import { getAgent } from "../agents-store.js";
+import { getAgent, getAgentByUuid } from "../agents-store.js";
 
 const DIR = path.join(USER_DIR, "web-push");
 const KEYS_FILE = path.join(DIR, "vapid.json");
@@ -81,7 +81,7 @@ function eventTitle(event) {
     const id = event.conversationId;
     if (!id) return "tabyBot";
     const meta = getConversationMeta(id);
-    const agent = getAgent(meta?.agentId) || (id.startsWith("web-agent-") ? getAgent(id.slice("web-agent-".length)) : null);
+    const agent = getAgent(meta?.agentId) || getAgentByUuid(id);
     return agent?.name || "tabyBot";
 }
 

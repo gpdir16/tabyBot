@@ -33,7 +33,7 @@ Set `timezone` (IANA, e.g. `Asia/Seoul`) when the clock time matters. Default is
 - `schedule_delete` — by id
 - `schedule_run` — test run now (does not consume a one-shot)
 
-Default `conversationId` is the current conversation. Results post there.
+Default `conversationId` is the current bot thread (agent uuid). Results post there.
 
 ## Silence (mandatory)
 

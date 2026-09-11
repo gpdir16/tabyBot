@@ -387,149 +387,9 @@ kbd {
     padding: 0 var(--sp-2) var(--sp-2);
 }
 
-/* 대화 그룹 라벨 */
-.sb-group-label {
-    font-size: var(--fs-xs);
-    font-weight: 500;
-    color: var(--text-tertiary);
-    padding: var(--sp-4) var(--sp-2) var(--sp-1);
-}
-.sb-group-label:first-child {
-    padding-top: var(--sp-2);
-}
-
-/* 대화 항목 */
-.conv-item {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    height: 34px;
-    padding: 0 var(--sp-1) 0 var(--sp-2);
-    border-radius: var(--radius-s);
-    cursor: pointer;
-    color: var(--text-secondary);
-    transition:
-        background var(--dur-1) var(--ease),
-        color var(--dur-1) var(--ease);
-    position: relative;
-}
-.conv-item:hover {
-    background: var(--hover);
-}
-.conv-item.active {
-    background: var(--surface-2);
-    color: var(--text);
-    box-shadow: inset 0 0 0 1px var(--border);
-}
-.ci-title {
-    flex: 1;
-    min-width: 0;
-    font-size: var(--fs-m);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.conv-item.active .ci-title {
-    font-weight: 500;
-}
-
-/* 실행 중 펄스 점 */
-.run-dot {
-    width: 6px;
-    height: 6px;
-    flex: none;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: pulseDot 1.6s var(--ease) infinite;
-}
-@keyframes pulseDot {
-    0%,
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.35;
-        transform: scale(0.7);
-    }
-}
-
-.ci-menu {
-    opacity: 0;
-    width: 26px;
-    height: 26px;
-}
-.conv-item:hover .ci-menu,
-.conv-item.menu-open .ci-menu {
-    opacity: 1;
-}
-
-/* 인라인 이름 변경 */
-.ci-input {
-    flex: 1;
-    min-width: 0;
-    height: 24px;
-    background: var(--bg);
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    padding: 0 6px;
-    font-size: var(--fs-m);
-}
-
-/* 인라인 삭제 확인 */
-.ci-confirm {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-1);
-    flex: 1;
-    min-width: 0;
-}
-.ci-confirm .q {
-    flex: 1;
-    min-width: 0;
-    font-size: var(--fs-m);
-    color: var(--danger);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.mini-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 22px;
-    padding: 0 8px;
-    border-radius: 6px;
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    background: var(--danger);
-    color: #fff;
-    transition:
-        filter var(--dur-1) var(--ease),
-        background var(--dur-1) var(--ease);
-}
-.mini-btn:hover {
-    filter: brightness(1.1);
-}
-.mini-btn.cancel {
-    background: none;
-    color: var(--text-secondary);
-    width: 22px;
-    padding: 0;
-}
-.mini-btn.cancel:hover {
-    background: var(--hover);
-}
-
 /* 하단: 설정 (끊김 표시는 설정 행 안 빨간 점) */
 .sb-bottom {
     padding: var(--sp-2);
-}
-.sb-section-label {
-    font-size: var(--fs-xs);
-    font-weight: 500;
-    color: var(--text-tertiary);
-    padding: var(--sp-1) var(--sp-2) var(--sp-1);
 }
 .sb-row {
     display: flex;
@@ -614,6 +474,17 @@ kbd {
     background: var(--danger);
     animation: pulseDot 1.6s var(--ease) infinite;
 }
+@keyframes pulseDot {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.35;
+        transform: scale(0.7);
+    }
+}
 
 /* ── 5. 헤더 ───────────────────────────────────────────── */
 #header {
@@ -623,56 +494,6 @@ kbd {
     gap: var(--sp-3);
     padding: 0 var(--sp-4);
     border-bottom: 1px solid var(--border);
-}
-.title-btn {
-    max-width: 46%;
-    padding: var(--sp-1) var(--sp-2);
-    border-radius: var(--radius-s);
-    font-size: var(--fs-t);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--text);
-    transition: background var(--dur-1) var(--ease);
-}
-.title-btn:hover {
-    background: var(--hover);
-}
-.title-input {
-    max-width: 46%;
-    height: 30px;
-    background: var(--surface-2);
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-s);
-    padding: 0 var(--sp-2);
-    font-size: var(--fs-t);
-    font-weight: 600;
-}
-
-.hd-right {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-}
-.agent-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    height: 26px;
-    padding: 0 var(--sp-3);
-    background: var(--surface-2);
-    border-radius: var(--radius-pill);
-    font-size: var(--fs-s);
-    color: var(--text-secondary);
-}
-.agent-badge .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
 }
 
 /* ── 점프 버튼 (새 메시지) ──────────────────────────────── */
@@ -3318,10 +3139,8 @@ body.sb-collapsed .btn-menu {
     .btn.ghost:hover:not(:disabled),
     .sb-row:hover,
     .agent-row:hover,
-    .title-btn:hover,
     .tool-head:hover,
     .menu button:hover,
-    .conv-item:hover,
     .radio-row:hover,
     .agent-head:hover {
         background: transparent;
@@ -3338,12 +3157,8 @@ body.sb-collapsed .btn-menu {
     .btn.danger:hover:not(:disabled) {
         filter: none;
     }
-    .mini-btn:hover,
     .btn-send.stop:hover {
         filter: none;
-    }
-    .mini-btn.cancel:hover {
-        background: transparent;
     }
     .sb-row-action:hover {
         color: var(--text-tertiary);
@@ -3373,10 +3188,6 @@ body.sb-collapsed .btn-menu {
         background: transparent;
         color: var(--danger);
     }
-    .conv-item:not(.menu-open):hover .ci-menu {
-        opacity: 0;
-    }
-
     .toast {
         width: 100%;
         max-width: none;

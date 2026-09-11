@@ -19,17 +19,7 @@ import {
     pollGithubCopilotDeviceFlow,
 } from "../llm/github-copilot-tokens.js";
 import { NSFW_LEVELS, normalizeNsfwLevel, APPROVAL_LEVELS, normalizeApprovalLevel } from "../user-settings.js";
-import {
-    listAgents,
-    addAgent,
-    updateAgent as storeUpdateAgent,
-    removeAgent,
-    agentColor,
-    agentThreadId,
-    firstAgent,
-    firstAgentId,
-    DEFAULT_AGENT_NAME,
-} from "../agents-store.js";
+import { listAgents, addAgent, updateAgent as storeUpdateAgent, removeAgent, agentColor, firstAgent, DEFAULT_AGENT_NAME } from "../agents-store.js";
 import * as conversationsStore from "./conversations.js";
 import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLOAD_BYTES, UploadTooLargeError, EmptyUploadError } from "./files.js";
 import { subscribe, emit, eventsSince } from "./bus.js";
@@ -149,8 +139,7 @@ async function startOauthLogin(kind) {
 }
 
 function publicAgent(a) {
-    const threadId = agentThreadId(a.id);
-    const meta = conversationsStore.getConversationMeta(threadId);
+    const meta = conversationsStore.getConversationMeta(a.uuid);
     return {
         id: a.id,
         uuid: a.uuid,
@@ -158,17 +147,12 @@ function publicAgent(a) {
         persona: a.persona,
         color: agentColor(a.id),
         createdAt: a.createdAt ?? null,
-        threadId,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
     };
 }
 
-// 봇 스레드(web-agent-*)는 접근 시 자동 생성된다.
 function resolveConversationMeta(id) {
-    return (
-        conversationsStore.getConversationMeta(id) ||
-        (id.startsWith("web-agent-") ? conversationsStore.ensureAgentThread(id.slice("web-agent-".length)) : null)
-    );
+    return conversationsStore.getConversationMeta(id) || conversationsStore.ensureConversation(id);
 }
 
 function substituteEnvSafe(value) {
@@ -265,28 +249,12 @@ export function startWebServer() {
         ctx.json200({ conversations: conversationsStore.listConversations() });
     });
 
-    router.add("POST", "/api/conversations", (ctx) => {
-        ctx.json200({ conversation: conversationsStore.createConversation(firstAgentId()) });
-    });
-
     router.add("GET", "/api/conversations/:id", (ctx) => {
         const id = ctx.params.id;
         if (!conversationsStore.getConversationMeta(id)) resolveConversationMeta(id);
         const detail = conversationsStore.getConversationDetail(id);
         if (!detail) return ctx.json404();
         ctx.json200(detail);
-    });
-
-    router.add("PATCH", "/api/conversations/:id", async (ctx) => {
-        const body = await ctx.json();
-        const updated = conversationsStore.renameConversation(ctx.params.id, body.title);
-        if (!updated) return ctx.json404();
-        ctx.json200({ conversation: updated });
-    });
-
-    router.add("DELETE", "/api/conversations/:id", (ctx) => {
-        if (!conversationsStore.deleteConversation(ctx.params.id)) return ctx.json404();
-        ctx.json200({ ok: true });
     });
 
     router.add("POST", "/api/conversations/:id/messages", async (ctx) => {
@@ -576,7 +544,6 @@ export function startWebServer() {
         const result = removeAgent(ctx.params.id);
         if (result.error === "last_agent") return ctx.json400("last_agent");
         if (result.error) return ctx.json404();
-        conversationsStore.deleteConversation(agentThreadId(ctx.params.id));
         emit({ type: "conversations_changed" });
         ctx.json200({ agents: listAgents().map(publicAgent) });
     });

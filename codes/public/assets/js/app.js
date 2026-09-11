@@ -227,7 +227,7 @@
             // 설정 라우트 판별을 봇 복원보다 먼저 한다(showList의 경로 리셋과 충돌 방지).
             const sr = settingsRoute();
             if (bot) {
-                await T.chat.open(bot.threadId, { params: urlParams() });
+                await T.chat.open(bot.uuid, { params: urlParams() });
                 if (fromPath || sr) T.sidebar.showChat?.();
                 else T.sidebar.showList?.();
                 consumeParams(urlParams());
@@ -266,7 +266,7 @@
         T.settingsUI.hide();
         const uuid = botUuidFromPath();
         const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
-        if (bot && bot.threadId !== state.state.currentId) T.chat.open(bot.threadId, { replaceState: true });
+        if (bot && bot.uuid !== state.state.currentId) T.chat.open(bot.uuid, { replaceState: true });
         // 사이드바 선택 표시(설정 행/봇 행)를 라우트에 맞춘다.
         T.sidebar?.syncRoute?.();
     }
