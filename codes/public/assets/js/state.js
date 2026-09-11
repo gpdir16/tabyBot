@@ -124,13 +124,6 @@
         emit("conversations");
     }
 
-    function removeConversation(id) {
-        state.convs.delete(id);
-        state.conversations = state.conversations.filter((m) => m.id !== id);
-        emit("conversations");
-        if (state.currentId === id) setCurrent(null);
-    }
-
     function setCurrent(id) {
         if (state.currentId === id) return;
         state.currentId = id;
@@ -322,7 +315,6 @@
         currentConv,
         setCurrent,
         upsertMeta,
-        removeConversation,
         replaceConversations,
         setBots,
         botByUuid,

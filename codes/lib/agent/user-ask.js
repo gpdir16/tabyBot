@@ -3,14 +3,6 @@ import { emit } from "../web/bus.js";
 
 const pendingAsks = new Map();
 
-export function hasPendingAsk(sessionKey) {
-    return pendingAsks.has(String(sessionKey));
-}
-
-export function pendingAskIdFor(sessionKey) {
-    return pendingAsks.get(String(sessionKey))?.id ?? null;
-}
-
 function settle(entry, result) {
     if (entry.settled) return false;
     entry.settled = true;
@@ -24,12 +16,6 @@ function settleAndNotify(entry, result) {
     if (!settle(entry, result)) return false;
     emit({ type: "ask_resolved", conversationId: entry.key, askId: entry.id, answer: String(result ?? "") });
     return true;
-}
-
-export function resolvePendingAskById(sessionKey, askId, { choiceIndex = null, text = "" } = {}) {
-    const entry = pendingAsks.get(String(sessionKey));
-    if (!entry || entry.id !== askId) return null;
-    return settleAsk(entry, choiceIndex, text);
 }
 
 export function resolvePendingAskByAskId(askId, { choiceIndex = null, text = "" } = {}) {

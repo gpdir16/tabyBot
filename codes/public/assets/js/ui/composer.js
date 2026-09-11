@@ -304,5 +304,5 @@
         saveDraft();
     }
 
-    T.composer = { init, setValue, restore };
+    T.composer = { init, setValue };
 })((window.Taby = window.Taby || {}));

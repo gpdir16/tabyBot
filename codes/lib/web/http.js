@@ -75,17 +75,6 @@ export function createRouter({ publicDir, token = "" }) {
         return JSON.parse(raw);
     }
 
-    async function readRawBody(req, limitBytes = 12 * 1024 * 1024) {
-        const chunks = [];
-        let size = 0;
-        for await (const chunk of req) {
-            size += chunk.length;
-            if (size > limitBytes) throw new Error("payload too large");
-            chunks.push(chunk);
-        }
-        return Buffer.concat(chunks);
-    }
-
     function serveIndex(res) {
         const indexPath = path.join(publicDir, "index.html");
         const stat = fs.statSync(indexPath);
@@ -171,12 +160,8 @@ export function createRouter({ publicDir, token = "" }) {
         return close;
     }
 
-    // bus.subscribe를 http 모듈이 직접 알지 않게 콜백으로 주입받지 않고,
-    // server.js가 openSse에 구독 함수를 넣어준다. 여기서는 전역 참조만 둔다.
+    // server.js가 bus.subscribe를 setSseSubscribe로 주입한다.
     let sseSubscribe = null;
-    function subscribeSse(onPayload) {
-        return sseSubscribe ? sseSubscribe(onPayload) : () => {};
-    }
     function setSseSubscribe(fn) {
         sseSubscribe = fn;
     }
@@ -212,7 +197,6 @@ export function createRouter({ publicDir, token = "" }) {
                 params,
                 query: Object.fromEntries(url.searchParams),
                 json: () => readJsonBody(req),
-                raw: () => readRawBody(req),
                 json200: (body) => sendJson(res, 200, body),
                 json400: (error) => sendJson(res, 400, { error }),
                 json404: () => sendJson(res, 404, { error: "not_found" }),

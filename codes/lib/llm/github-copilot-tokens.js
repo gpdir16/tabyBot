@@ -91,14 +91,6 @@ async function fetchCopilotToken(githubAccessToken) {
     };
 }
 
-export function githubCopilotAuthFilePath() {
-    return AUTH_FILE;
-}
-
-export function loadGithubCopilotTokens() {
-    return loadStored();
-}
-
 export function hasGithubCopilotAuth() {
     return Boolean(loadStored()?.githubAccessToken);
 }

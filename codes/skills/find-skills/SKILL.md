@@ -78,7 +78,7 @@ After install, the skill appears in the system prompt skill list next turn — b
 
 ### Step 5: If nothing good is found
 
-If no reputable skill matches, proceed with the task using your general capabilities and built-in tools. Optionally suggest the user create a custom skill with `skill-author` under `{{SKILLS_DIR}}` if the workflow will recur.
+If no reputable skill matches, proceed with the task using your general capabilities and built-in tools. Optionally suggest the user create a custom skill under `{{SKILLS_DIR}}/<name>/SKILL.md` if the workflow will recur.
 
 ## When to ask the user
 

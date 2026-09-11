@@ -125,51 +125,6 @@ function convertToolChoice(tool_choice) {
     return "auto";
 }
 
-/**
- * Parse Responses API output items → Chat Completions format.
- * Returns { choices: [{ message, finish_reason }], usage }
- */
-function parseResponsesOutput(body) {
-    const outputItems = body.output || [];
-    let textContent = "";
-    const toolCalls = [];
-
-    for (const item of outputItems) {
-        if (item.type === "message" && item.role === "assistant") {
-            // content is an array of parts
-            if (Array.isArray(item.content)) {
-                for (const part of item.content) {
-                    if (part.type === "output_text" || part.type === "text") {
-                        textContent += part.text || "";
-                    }
-                }
-            } else if (typeof item.content === "string") {
-                textContent += item.content;
-            }
-        } else if (item.type === "function_call") {
-            toolCalls.push({
-                id: item.call_id,
-                type: "function",
-                function: {
-                    name: item.name,
-                    arguments: item.arguments || "{}",
-                },
-            });
-        }
-    }
-
-    const message = { role: "assistant" };
-    if (textContent) message.content = textContent;
-    if (toolCalls.length) message.tool_calls = toolCalls;
-
-    const finish_reason = toolCalls.length ? "tool_calls" : "stop";
-
-    return {
-        choices: [{ message, finish_reason }],
-        usage: body.usage ?? null,
-    };
-}
-
 function buildHeaders(accessToken, accountId) {
     const headers = {
         Authorization: `Bearer ${accessToken}`,

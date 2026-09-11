@@ -247,7 +247,6 @@
 
     function bindActionDock(row, actions, anchor) {
         const FADE_MS = 200;
-        let hovering = false;
 
         function place(el, c) {
             const { x, y } = dockOffset(el, anchor, c);
@@ -297,7 +296,6 @@
         function onPoint(e) {
             if (e.pointerType === "touch") return;
             if (actions.contains(e.target)) return;
-            hovering = true;
             go(hitCorner(anchor, e.clientX, e.clientY));
         }
 
@@ -305,16 +303,13 @@
         row.addEventListener("pointermove", onPoint);
         row.addEventListener("pointerleave", (e) => {
             if (e.relatedTarget && (row.contains(e.relatedTarget) || actions.contains(e.relatedTarget))) return;
-            hovering = false;
             hide();
         });
         actions.addEventListener("focusin", () => {
-            hovering = true;
             actions.classList.add("show");
         });
         actions.addEventListener("focusout", (e) => {
             if (row.contains(e.relatedTarget)) return;
-            hovering = false;
             actions.classList.remove("show");
         });
     }
@@ -905,5 +900,5 @@
         refreshHeader();
     }
 
-    T.chat = { init, open, refreshCurrent, submitMessage, regenerate, refreshHeader };
+    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader };
 })((window.Taby = window.Taby || {}));

@@ -170,10 +170,6 @@
         return row;
     }
 
-    function listLength() {
-        return state.state.bots.length;
-    }
-
     function isMobile() {
         return mobileMq.matches;
     }

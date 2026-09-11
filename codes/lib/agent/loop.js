@@ -71,11 +71,6 @@ function isSilentReply(content) {
     return typeof content === "string" && content.trim() === SILENT_REPLY_TOKEN;
 }
 
-function stripSilentReply(content) {
-    if (!content) return null;
-    if (isSilentReply(content)) return null;
-    return content;
-}
 function injectPendingUserMessages(messages, session) {
     if (!session) return false;
     const pending = session.drainPendingMessages();

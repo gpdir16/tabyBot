@@ -1,24 +1,7 @@
 import { loadUserConfig } from "./config-loader.js";
-import {
-    getThinkingLevelForUser,
-    normalizeThinkingLevel as normalizeThinkingForProvider,
-    thinkingLevelLabel,
-    getCachedProviderThinkingMeta,
-    getProviderThinkingMeta,
-} from "./thinking-levels.js";
+import { getThinkingLevelForUser, normalizeThinkingLevel as normalizeThinkingForProvider, getCachedProviderThinkingMeta } from "./thinking-levels.js";
 
-export {
-    getThinkingLevelForUser as getThinkingLevel,
-    normalizeThinkingForProvider as normalizeThinkingLevel,
-    thinkingLevelLabel,
-    getProviderThinkingMeta,
-    getCachedProviderThinkingMeta,
-};
-
-export function isReplyFooterEnabled(config = loadUserConfig()) {
-    if (config.showReplyFooter === false) return false;
-    return true;
-}
+export { getThinkingLevelForUser as getThinkingLevel, normalizeThinkingForProvider as normalizeThinkingLevel, getCachedProviderThinkingMeta };
 
 // null = follow agent.json updateCheck.enabled
 export function getUserUpdateCheckEnabled(config = loadUserConfig()) {
@@ -27,22 +10,8 @@ export function getUserUpdateCheckEnabled(config = loadUserConfig()) {
     return null;
 }
 
-export function providerKeyFromId(providerId, config = loadUserConfig()) {
-    if (providerId === "openrouter") return "openrouter";
-    if (providerId === "synthetic") return "synthetic";
-    if (providerId === "ollama") return "ollama";
-    if (providerId === "ollama-cloud") return "ollamaCloud";
-    if (providerId === "zenmux") return "zenmux";
-    if (providerId === "upstage") return "upstage";
-    if (providerId === "codex") return "codex";
-    if (providerId === "grok") return "grok";
-    // provider.id === "default" — distinguish OpenAI from a custom baseURL override
-    const override = (config?.provider?.baseURL || "").trim().replace(/\/$/, "");
-    if (override && override !== "https://api.openai.com/v1") return "custom";
-    return "openai";
-}
 export const NSFW_LEVELS = ["strict", "moderate", "explicit"];
-export const DEFAULT_NSFW_LEVEL = "moderate";
+const DEFAULT_NSFW_LEVEL = "moderate";
 
 export function normalizeNsfwLevel(value) {
     if (typeof value !== "string") return DEFAULT_NSFW_LEVEL;
@@ -59,7 +28,7 @@ export function getNsfwLevel(config = loadUserConfig()) {
 // 영구적/되돌릴 수 없는 행위(결제, 계정·데이터 삭제, 외부 발송)에 대한 승인 정책.
 // user = 항상 사용자에게 물어봄 / model = 모델이 판단 / always = 승인 없이 자율 실행
 export const APPROVAL_LEVELS = ["user", "model", "always"];
-export const DEFAULT_APPROVAL_LEVEL = "model";
+const DEFAULT_APPROVAL_LEVEL = "model";
 
 export function normalizeApprovalLevel(value) {
     if (typeof value !== "string") return DEFAULT_APPROVAL_LEVEL;
@@ -71,15 +40,6 @@ export function normalizeApprovalLevel(value) {
 
 export function getApprovalLevel(config = loadUserConfig()) {
     return normalizeApprovalLevel(config.approvalLevel);
-}
-
-export function approvalLevelLabel(lang, level) {
-    const labels = {
-        en: { user: "User decides & approves", model: "Model decides & approves", always: "Always allow" },
-        ko: { user: "사용자가 판단하여 승인", model: "모델이 판단하여 승인", always: "항상 허용" },
-        ja: { user: "ユーザーが判断して承認", model: "モデルが判断して承認", always: "常に許可" },
-    };
-    return (labels[lang] || labels.en)[normalizeApprovalLevel(level)] || labels.en[DEFAULT_APPROVAL_LEVEL];
 }
 
 export function approvalPolicyLabel(level) {
@@ -110,15 +70,6 @@ export function buildApprovalPolicyText(level) {
         "- If an action is your OWN initiative (the user did not ask for it; you only think it would be good) and it is permanent or has external side effects — email/messages to third parties, payments or purchases, deleting an account or remote data — call `user_ask`, wait for the answer, then proceed.",
         "- Local reversible work (files, browser, terminal, `send_file`) stays autonomous — do not ask for it.",
     ].join("\n");
-}
-
-export function nsfwLevelLabel(lang, level) {
-    const labels = {
-        en: { strict: "Not allowed", moderate: "Indirect mentions only", explicit: "Fully allowed" },
-        ko: { strict: "허용하지 않음", moderate: "간접 언급만 허용", explicit: "전체 허용" },
-        ja: { strict: "許可しない", moderate: "間接言及のみ許可", explicit: "全面許可" },
-    };
-    return (labels[lang] || labels.en)[normalizeNsfwLevel(level)] || labels.en[DEFAULT_NSFW_LEVEL];
 }
 
 export function nsfwPolicyLabel(level) {
@@ -156,21 +107,4 @@ export function buildNsfwPolicyText(level) {
         "- Do not add moralizing lectures for permitted indirect content. Stay within the non-explicit line.",
         "- Do not bring up or produce such content unless the user requests it. However, when the user mentions or requests it, you may use it indirectly and appropriately in context.",
     ].join("\n");
-}
-
-export function seedWizardDataFromConfig(config = loadUserConfig()) {
-    const providerId = config.provider?.id || "default";
-    return {
-        language: config.language || "en",
-        providerId,
-        providerKey: providerKeyFromId(providerId, config),
-        baseURL: config.provider?.baseURL || "",
-        apiKey: config.provider?.apiKey || "",
-        model: config.provider?.model || "",
-        thinkingLevel: getThinkingLevelForUser(config),
-        showReplyFooter: isReplyFooterEnabled(config),
-        updateCheckEnabled: config.updateCheckEnabled !== false,
-        nsfwLevel: getNsfwLevel(config),
-        approvalLevel: getApprovalLevel(config),
-    };
 }
