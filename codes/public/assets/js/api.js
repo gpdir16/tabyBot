@@ -146,34 +146,6 @@
             const tk = getToken();
             return tk ? path + "?token=" + encodeURIComponent(tk) : path;
         },
-
-        // 파일 URL에는 Authorization 헤더를 붙일 수 없으므로 blob URL로 연다.
-        fileObjectURL: async (id) => {
-            const headers = {};
-            const tk = getToken();
-            if (tk) headers.Authorization = "Bearer " + tk;
-            const res = await fetch("/api/files/" + enc(id), { headers });
-            if (!res.ok) throw new ApiError(res.status, null);
-            return URL.createObjectURL(await res.blob());
-        },
-
-        downloadFile: async (id, name) => {
-            const headers = {};
-            const tk = getToken();
-            if (tk) headers.Authorization = "Bearer " + tk;
-            const res = await fetch("/api/files/" + enc(id), { headers });
-            if (!res.ok) throw new ApiError(res.status, null);
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = name || "download";
-            link.rel = "noopener";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1500);
-        },
     };
 
     T.api = api;

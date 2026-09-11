@@ -11,10 +11,6 @@ export function subscribe(handler) {
     return () => subscribers.delete(handler);
 }
 
-export function liveClientCount() {
-    return subscribers.size;
-}
-
 export function eventsSince(since = 0) {
     const cursor = Number.isFinite(Number(since)) ? Number(since) : 0;
     return {

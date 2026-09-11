@@ -726,17 +726,6 @@ kbd {
     margin-bottom: 0;
     min-height: 16px;
 }
-.msg-row.assistant .bubble .gen-label:not(.is-idle) + .md:not(.empty) {
-    margin-top: var(--sp-2);
-}
-/* .hidden(display:none)을 쓰면 shimmer 애니메이션이 리셋되어 중간에 끊긴다 */
-.gen-label.is-idle {
-    visibility: hidden;
-    height: 0;
-    min-height: 0;
-    overflow: hidden;
-    margin: 0;
-}
 .shimmer {
     letter-spacing: 2px;
     font-weight: 500;
@@ -761,30 +750,6 @@ kbd {
     }
     to {
         background-position: 8em 0;
-    }
-}
-.gen-detail {
-    color: var(--text-tertiary);
-}
-.gen-elapsed {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    color: var(--text-tertiary);
-}
-
-/* 스트리밍 커서 */
-.cursor {
-    display: inline-block;
-    color: var(--accent);
-    animation: caretPulse 0.9s ease-in-out infinite;
-}
-@keyframes caretPulse {
-    0%,
-    100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.25;
     }
 }
 
@@ -1163,66 +1128,7 @@ kbd {
     opacity: 0.78;
 }
 
-/* ── 9. 빈 상태 (새 대화) ──────────────────────────────── */
-.empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-2);
-    padding: var(--sp-6) var(--sp-5);
-    text-align: center;
-    animation: fadeIn 260ms var(--ease);
-}
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-.empty-logo {
-    width: 52px;
-    height: 52px;
-    color: var(--accent);
-    margin-bottom: var(--sp-2);
-}
-.empty-title {
-    font-size: var(--fs-xl);
-    font-weight: 700;
-    letter-spacing: -0.02em;
-}
-.empty-hint {
-    font-size: var(--fs-m);
-    color: var(--text-tertiary);
-}
-.suggestions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--sp-2);
-    max-width: 520px;
-    margin-top: var(--sp-4);
-}
-.suggestion-chip {
-    padding: 7px var(--sp-3);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-    font-size: var(--fs-m);
-    color: var(--text-secondary);
-    transition:
-        border-color var(--dur-1) var(--ease),
-        color var(--dur-1) var(--ease);
-}
-.suggestion-chip:hover {
-    border-color: var(--accent);
-    color: var(--text);
-}
-
-/* ── 10. 컴포저 ────────────────────────────────────────── */
+/* ── 9. 컴포저 ────────────────────────────────────────── */
 /* 하단 유리 바: 전체 폭 오버레이, 뒤로 흐르는 메시지를 블러 */
 #composerWrap {
     position: absolute;
@@ -2135,10 +2041,6 @@ body.settings-route #jumpLatest {
         color: var(--text-secondary);
         background: none;
     }
-    .cursor {
-        animation: none;
-        opacity: 1;
-    }
     html {
         scroll-behavior: auto !important;
     }
@@ -2433,16 +2335,6 @@ body.resizing {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.hd-status {
-    font-size: var(--fs-s);
-    color: var(--text-tertiary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.hd-status.on {
-    color: var(--accent);
-}
 
 /* ── 스레드 인트로 ──────────────────────────────────────── */
 .thread-intro {
@@ -2450,22 +2342,6 @@ body.resizing {
     max-width: fit-content;
     color: var(--text-secondary);
     font-size: var(--fs-s);
-}
-
-/* ── 스트리밍 캐럿: 텍스트 흐름을 따라가는 인라인 바 ────── */
-.md .cursor {
-    display: inline-block;
-    width: 2px;
-    height: 1.05em;
-    margin-left: 1px;
-    vertical-align: text-bottom;
-    background: var(--accent);
-    animation: caret-blink 1s steps(2, start) infinite;
-}
-@keyframes caret-blink {
-    50% {
-        opacity: 0;
-    }
 }
 
 /* ── 툴팁 ───────────────────────────────────────────────── */
@@ -2510,37 +2386,9 @@ body.resizing {
 
 /* 추가 애니메이션도 모션 최소화 설정을 존중 */
 @media (prefers-reduced-motion: reduce) {
-    .live-dot,
-    .md .cursor {
+    .live-dot {
         animation: none;
     }
-}
-
-/* ── 삭제 확인 모달 ─────────────────────────────────────── */
-.confirm-scrim {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: grid;
-    place-items: center;
-    z-index: 80;
-    animation: tip-in var(--dur-1) var(--ease);
-}
-.confirm-modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-l);
-    box-shadow: var(--shadow-sheet);
-    width: min(360px, calc(100vw - 32px));
-    padding: 20px;
-}
-.confirm-title {
-    margin-bottom: 16px;
-}
-.confirm-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--sp-2);
 }
 
 /* 데스크톱: 헤더 메뉴/사이드바 스크림 숨김. 사이드바가 완전히 접히면 메뉴로 다시 연다. */
@@ -2828,9 +2676,6 @@ body.sb-collapsed .btn-menu {
     #hdrName {
         font-size: 16px;
     }
-    .hd-status {
-        display: none;
-    }
     #scroller {
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
@@ -3103,14 +2948,6 @@ body.sb-collapsed .btn-menu {
     .btn {
         min-height: 44px;
     }
-    .confirm-scrim {
-        align-items: flex-end;
-    }
-    .confirm-modal {
-        width: 100%;
-        border-radius: 22px 22px 0 0;
-        padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
-    }
     .sp-head .btn-icon,
     .key-row .btn-icon,
     .chip .chip-x {
@@ -3174,8 +3011,7 @@ body.sb-collapsed .btn-menu {
         color: inherit;
         background: transparent;
     }
-    .ask-opt:hover:not(:disabled),
-    .suggestion-chip:hover {
+    .ask-opt:hover:not(:disabled) {
         border-color: var(--border);
         color: inherit;
     }

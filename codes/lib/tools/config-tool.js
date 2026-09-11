@@ -1,5 +1,6 @@
 import { loadUserConfig, saveUserConfig } from "../config-loader.js";
 import { getCachedProviderThinkingMeta, normalizeThinkingLevel, normalizeNsfwLevel, NSFW_LEVELS } from "../user-settings.js";
+import { restartUpdateScheduler } from "../update/scheduler.js";
 
 const ALLOWED_KEYS = new Set(["language", "thinkingLevel", "showReplyFooter", "updateCheckEnabled", "nsfwLevel"]);
 
@@ -72,6 +73,7 @@ export async function executeConfigTool(name, args) {
 
     if (!updated) return { error: "No allowed fields provided" };
     saveUserConfig(config);
+    if (a.updateCheckEnabled !== undefined) restartUpdateScheduler();
     return {
         ok: true,
         language: config.language,

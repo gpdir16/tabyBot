@@ -85,7 +85,7 @@ function eventTitle(event) {
     return agent?.name || "tabyBot";
 }
 
-export function payloadFor(event) {
+function payloadFor(event) {
     if (!event || typeof event !== "object") return null;
     if (event.type === "notice") {
         // 대화 턴이 있는 알림(크론 결과 등)은 turn_done이 담당한다.

@@ -31,10 +31,6 @@ function extractAccountId(tokens) {
     return null;
 }
 
-export function codexAuthFilePath() {
-    return AUTH_FILE;
-}
-
 export function loadCodexTokens() {
     if (!fs.existsSync(AUTH_FILE)) return null;
     try {

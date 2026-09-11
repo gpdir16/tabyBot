@@ -143,6 +143,5 @@
         enabled,
         canInstall: () => Boolean(deferredInstall) && !isStandalone(),
         promptInstall,
-        isStandalone,
     };
 })((window.Taby = window.Taby || {}));

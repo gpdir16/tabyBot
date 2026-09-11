@@ -10,7 +10,7 @@ import { USER_DIR } from "../paths.js";
 const ROOT = path.join(USER_DIR, "temp", "web-files");
 const STORE_DIR = path.join(ROOT, "store");
 const INDEX_PATH = path.join(ROOT, "index.json");
-export const UPLOADS_DIR = path.join(USER_DIR, "uploads");
+const UPLOADS_DIR = path.join(USER_DIR, "uploads");
 
 export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1GB
 
@@ -58,7 +58,7 @@ function writeIndex(index) {
     fs.writeFileSync(INDEX_PATH, `${JSON.stringify(index, null, 2)}\n`, "utf8");
 }
 
-export function sanitizeFileName(originalName = "") {
+function sanitizeFileName(originalName = "") {
     const base = path.basename(String(originalName || "").replace(/\\/g, "/"));
     const cleaned = base
         .replace(/[^\p{L}\p{N}._\- ()[\]]+/gu, "_")

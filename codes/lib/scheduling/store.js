@@ -11,10 +11,6 @@ function defaultStore() {
     return { jobs: [] };
 }
 
-export function schedulingStorePath() {
-    return STORE_PATH;
-}
-
 export function loadScheduleStore() {
     if (!fs.existsSync(STORE_PATH)) return defaultStore();
     try {

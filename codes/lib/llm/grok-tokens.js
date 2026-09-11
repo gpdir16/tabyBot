@@ -47,10 +47,6 @@ function isFresh(stored, now = Date.now()) {
     return Boolean(stored?.accessToken && stored.expiresAt && now < stored.expiresAt - EXPIRY_MARGIN_MS);
 }
 
-export function grokAuthFilePath() {
-    return AUTH_FILE;
-}
-
 export function loadGrokTokens() {
     if (!fs.existsSync(AUTH_FILE)) return null;
     try {

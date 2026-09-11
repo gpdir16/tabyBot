@@ -26,6 +26,7 @@ import { subscribe, emit, eventsSince } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import { createRouter } from "./http.js";
 import { dispatchMessage, recoverInterruptedTurns, stopConversation } from "./turns.js";
+import { restartUpdateScheduler } from "../update/scheduler.js";
 import { listRunningSessionKeys } from "../agent/session.js";
 import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
@@ -94,7 +95,6 @@ function providerPresets() {
     ]
         .map((id) => byId.get(id))
         .filter(Boolean);
-    // tabyAgent와 동일하게 실제 프리셋에 Custom API URL을 별도 선택지로 제공한다.
     presets.push({ id: "custom", label: "Custom API URL", type: "openai-compatible", baseURL: null, apiKeyOptional: false, needsBaseURL: true });
     return presets;
 }
@@ -474,6 +474,7 @@ export function startWebServer() {
         }
 
         saveUserConfig(config);
+        if (patch.updateCheckEnabled !== undefined) restartUpdateScheduler();
         // 프론트가 부분 객체로 상태를 덮어쓰지 않도록 항상 전체 스냅샷을 돌려준다.
         ctx.json200(buildSettingsPayload());
     });
