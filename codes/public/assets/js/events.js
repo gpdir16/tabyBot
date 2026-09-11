@@ -23,7 +23,7 @@
 
     function notifyIncoming(conversationId, body, tag) {
         if (!T.notifications) return;
-        const title = (conversationId && state.botByThreadId(conversationId)?.name) || "tabyBot";
+        const title = (conversationId && state.botByUuid(conversationId)?.name) || "tabyBot";
         T.notifications.show(title, body, tag);
     }
 

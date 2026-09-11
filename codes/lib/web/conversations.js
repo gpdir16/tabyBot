@@ -1,20 +1,12 @@
-// 대화(컨버세이션) 인덱스: chat-history의 세션 저장소 위에서 목록·제목·에이전트를 관리한다.
-// 저장 구조는 기존과 동일 — user/temp/chat-<sessionKey>/manifest.json + sessions/*.json
+// 대화 인덱스: 에이전트당 하나의 스레드. 디스크는 user/session/<agent-uuid>/.
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
-import { USER_DIR } from "../paths.js";
-import { firstAgentId } from "../agents-store.js";
-import { RECOVERY_PROMPT, loadChatHistory, previewSnippetFromTurns, stripMarkdownForPreview } from "../agent/chat-history.js";
-
-const TEMP_ROOT = path.join(USER_DIR, "temp");
-
-function conversationDir(id) {
-    return path.join(TEMP_ROOT, `chat-${id}`);
-}
+import { firstAgentId, getAgentByUuid, listAgents } from "../agents-store.js";
+import { RECOVERY_PROMPT, conversationDir, loadChatHistory, previewSnippetFromTurns, stripMarkdownForPreview } from "../agent/chat-history.js";
 
 function manifestPath(id) {
-    return path.join(conversationDir(id), "manifest.json");
+    const dir = conversationDir(id);
+    return dir ? path.join(dir, "manifest.json") : null;
 }
 
 function readJson(file, fallback = null) {
@@ -31,16 +23,13 @@ function writeJson(file, data) {
 }
 
 export function isValidId(id) {
-    return /^web-[0-9a-zA-Z_-]{1,64}$/.test(String(id || ""));
+    return Boolean(conversationDir(id));
 }
 
-export function ensureConversation(id, agentId = firstAgentId()) {
+export function ensureConversation(id) {
     if (!isValidId(id)) return null;
-    return getConversationMeta(id) || writeFreshManifest(id, agentId);
-}
-
-function dirToId(dirName) {
-    return dirName.startsWith("chat-") ? dirName.slice(5) : null;
+    if (!readMeta(id)) loadChatHistory(id);
+    return readMeta(id);
 }
 
 function statTime(file, key = "mtimeMs") {
@@ -56,11 +45,13 @@ function toIso(ms) {
 }
 
 function readMeta(id) {
-    const manifest = readJson(manifestPath(id));
-    if (!manifest?.activeSessionId) return null;
+    const mPath = manifestPath(id);
     const dir = conversationDir(id);
-    const updatedAt = Math.max(statTime(manifestPath(id)), statTime(path.join(dir, "sessions", `${manifest.activeSessionId}.json`)));
-    const createdAt = statTime(manifestPath(id), "birthtimeMs") || statTime(manifestPath(id));
+    if (!mPath || !dir) return null;
+    const manifest = readJson(mPath);
+    if (!manifest?.activeSessionId) return null;
+    const updatedAt = Math.max(statTime(mPath), statTime(path.join(dir, "sessions", `${manifest.activeSessionId}.json`)));
+    const createdAt = statTime(mPath, "birthtimeMs") || statTime(mPath);
     let preview = typeof manifest.preview === "string" ? stripMarkdownForPreview(manifest.preview) : "";
     // preview가 없거나 빈 문자열이면 히스토리에서 마지막 발화를 채운다.
     if (!preview) {
@@ -73,34 +64,24 @@ function readMeta(id) {
     if (preview && manifest.preview !== preview) {
         try {
             manifest.preview = preview;
-            writeJson(manifestPath(id), manifest);
+            writeJson(mPath, manifest);
         } catch {
             /* 목록 응답은 유지 */
         }
     }
     return {
         id,
-        title: typeof manifest.title === "string" && manifest.title.trim() ? manifest.title : null,
         preview: typeof preview === "string" ? preview : "",
-        agentId: manifest.agentId || firstAgentId(),
+        agentId: getAgentByUuid(id)?.id || firstAgentId(),
         createdAt: toIso(createdAt),
         updatedAt: toIso(updatedAt),
     };
 }
 
 export function listConversations() {
-    let entries = [];
-    try {
-        entries = fs.readdirSync(TEMP_ROOT, { withFileTypes: true });
-    } catch {
-        return [];
-    }
     const metas = [];
-    for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const id = dirToId(entry.name);
-        if (!id) continue;
-        const meta = readMeta(id);
+    for (const agent of listAgents()) {
+        const meta = readMeta(agent.uuid);
         if (meta) metas.push(meta);
     }
     metas.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
@@ -110,85 +91,6 @@ export function listConversations() {
 export function getConversationMeta(id) {
     if (!isValidId(id)) return null;
     return readMeta(id);
-}
-
-function writeFreshManifest(id, agentId) {
-    const now = new Date().toISOString();
-    writeJson(manifestPath(id), {
-        version: 1,
-        activeSessionId: "s000001",
-        title: null,
-        preview: "",
-        agentId: agentId || firstAgentId(),
-        createdAt: now,
-        sessions: [
-            {
-                id: "s000001",
-                file: "sessions/s000001.json",
-                startedAt: now,
-                closedAt: null,
-                kind: "active",
-            },
-        ],
-    });
-    return readMeta(id);
-}
-
-export function createConversation(agentId = firstAgentId()) {
-    const id = `web-${crypto.randomBytes(4).toString("hex")}`;
-    return writeFreshManifest(id, agentId);
-}
-
-// 봇의 영구 스레드: 봇마다 하나뿐이며 삭제/초기화되지 않는다.
-export function ensureAgentThread(agentId) {
-    const id = `web-agent-${agentId}`;
-    let meta = getConversationMeta(id);
-    if (!meta) {
-        meta = writeFreshManifest(id, agentId || firstAgentId());
-    } else if (meta.agentId !== (agentId || firstAgentId())) {
-        meta = setConversationAgent(id, agentId || firstAgentId()) || meta;
-    }
-    return meta;
-}
-
-export function renameConversation(id, title) {
-    const meta = getConversationMeta(id);
-    if (!meta) return null;
-    const clean = String(title || "")
-        .trim()
-        .slice(0, 120);
-    const manifest = readJson(manifestPath(id));
-    manifest.title = clean || null;
-    writeJson(manifestPath(id), manifest);
-    return { ...meta, title: manifest.title };
-}
-
-// 첫 사용자 메시지로 제목을 한 번만 자동 지정한다.
-export function ensureTitleFromMessage(id, text) {
-    const meta = getConversationMeta(id);
-    if (!meta || meta.title) return meta;
-    const clean = String(text || "")
-        .replace(/\s+/g, " ")
-        .trim();
-    if (!clean) return meta;
-    return renameConversation(id, clean.slice(0, 60));
-}
-
-export function setConversationAgent(id, agentId) {
-    const meta = getConversationMeta(id);
-    if (!meta) return null;
-    const manifest = readJson(manifestPath(id));
-    manifest.agentId = agentId || firstAgentId();
-    writeJson(manifestPath(id), manifest);
-    return { ...meta, agentId: manifest.agentId };
-}
-
-export function deleteConversation(id) {
-    if (!isValidId(id)) return false;
-    const dir = conversationDir(id);
-    if (!fs.existsSync(dir)) return false;
-    fs.rmSync(dir, { recursive: true, force: true });
-    return true;
 }
 
 // 히스토리의 내부 주입 프롬프트를 화면용으로 정규화한다.

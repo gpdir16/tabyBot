@@ -9,8 +9,8 @@
         settings: null, // GET /api/settings 응답
         bots: [], // GET /api/agents 응답(메신저 라스터)
         botQuery: "", // 봇 검색 필터
-        conversations: [], // 스레드 메타(봇 threadId + 스케줄 결과 등)
-        convs: new Map(), // threadId → { meta, loaded, turns, pending, live }
+        conversations: [], // 스레드 메타(봇 uuid + 스케줄 결과 등)
+        convs: new Map(), // uuid → { meta, loaded, turns, pending, live }
         currentId: null,
         conn: "disconnected",
         offline: true,
@@ -50,7 +50,7 @@
         let c = state.convs.get(id);
         if (!c) {
             c = blankConv();
-            c.meta = { id, title: T.i18n.t("untitled"), preview: "", agentId: null, createdAt: null, updatedAt: null };
+            c.meta = { id, preview: "", agentId: null, createdAt: null, updatedAt: null };
             state.convs.set(id, c);
         }
         return c;
@@ -66,21 +66,21 @@
         // 에이전트 목록에 실린 미리보기를 스레드 메타에 바로 반영한다(클릭 전에 사이드바에 보이게).
         for (const bot of state.bots) {
             const preview = String(bot.preview || "").trim();
-            if (!bot.threadId || !preview) continue;
-            const c = conv(bot.threadId);
+            if (!bot.uuid || !preview) continue;
+            const c = conv(bot.uuid);
             if (!String(c.meta?.preview || "").trim()) {
-                c.meta = Object.assign({}, c.meta, { id: bot.threadId, preview });
+                c.meta = Object.assign({}, c.meta, { id: bot.uuid, preview });
             }
         }
         emit("bots", {});
     }
 
-    function botByThreadId(threadId) {
-        return state.bots.find((b) => b.threadId === threadId) || null;
+    function botByUuid(uuid) {
+        return state.bots.find((b) => b.uuid === uuid) || null;
     }
 
     function currentBot() {
-        return state.currentId ? botByThreadId(state.currentId) : null;
+        return state.currentId ? botByUuid(state.currentId) : null;
     }
     function sortConversations() {
         state.conversations.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
@@ -325,7 +325,7 @@
         removeConversation,
         replaceConversations,
         setBots,
-        botByThreadId,
+        botByUuid,
         currentBot,
         applyStatus,
         applyDelta,

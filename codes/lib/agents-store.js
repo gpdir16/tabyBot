@@ -1,14 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { USER_DIR } from "./paths.js";
+import { SESSION_DIR, USER_DIR } from "./paths.js";
 
 export const DEFAULT_AGENT_ID = "main";
 export const DEFAULT_AGENT_NAME = "tabyBot";
 
 const AGENTS_PATH = path.join(USER_DIR, "agents.json");
 const AGENTS_ROOT = path.join(USER_DIR, "agents");
-const DELETED_ROOT = path.join(USER_DIR, "temp", "deleted-agents");
 
 const MAX_AGENTS = 20;
 const MAX_NAME = 32;
@@ -79,8 +78,9 @@ export function getAgent(id) {
     return listAgents().find((a) => a.id === id) || null;
 }
 
-export function agentThreadId(id) {
-    return `web-agent-${id}`;
+export function getAgentByUuid(uuid) {
+    if (!uuid) return null;
+    return listAgents().find((a) => a.uuid === uuid) || null;
 }
 
 export function findAgentByNameOrId(query) {
@@ -199,18 +199,14 @@ export function updateAgent(id, patch) {
         if (person.error) return person;
         current.persona = person.persona;
     }
-    if (patch.threadId !== undefined) delete patch.threadId;
     store.agents[idx] = current;
     saveAgentsStore(store);
     return { agent: current };
 }
 
-function moveDirAside(src) {
-    if (!fs.existsSync(src)) return false;
-    fs.mkdirSync(DELETED_ROOT, { recursive: true });
-    const dest = path.join(DELETED_ROOT, `${path.basename(src)}-${Date.now()}`);
-    fs.renameSync(src, dest);
-    return true;
+function removeDir(src) {
+    if (!src || !fs.existsSync(src)) return;
+    fs.rmSync(src, { recursive: true, force: true });
 }
 
 export function removeAgent(id) {
@@ -220,7 +216,8 @@ export function removeAgent(id) {
     if (store.agents.length <= 1) return { error: "last_agent" };
     const [removed] = store.agents.splice(idx, 1);
     saveAgentsStore(store);
-    moveDirAside(agentHomeDir(id));
+    removeDir(agentHomeDir(id));
+    if (removed.uuid) removeDir(path.join(SESSION_DIR, removed.uuid));
     return { agent: removed };
 }
 

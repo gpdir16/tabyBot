@@ -79,7 +79,7 @@
 
     // 마지막 발화 → 없으면 "아직 맡은 일이 없어요". 미리보기 줄은 항상 채운다.
     function previewOf(bot) {
-        const c = state.conv(bot.threadId);
+        const c = state.conv(bot.uuid);
         const fromMeta = snippet(c?.meta?.preview);
         if (fromMeta) return fromMeta;
         const fromBot = snippet(bot.preview);
@@ -100,7 +100,7 @@
         if (state.state.offline) return Promise.resolve();
         const jobs = [];
         for (const bot of state.state.bots) {
-            const id = bot.threadId;
+            const id = bot.uuid;
             if (!id || hydrating.has(id) || previewOf(bot)) continue;
             hydrating.add(id);
             jobs.push(
@@ -120,7 +120,7 @@
 
     // 봇 행: 아바타 + 이름 + 대화 미리보기 + 실행중 점 + ⋯ 메뉴
     function buildRow(bot) {
-        const live = state.conv(bot.threadId)?.live;
+        const live = state.conv(bot.uuid)?.live;
         const preview = previewOf(bot);
         const empty = !preview;
         const previewText = empty ? t("botNoJob") : preview;
@@ -142,8 +142,8 @@
         const row = T.h(
             "div",
             {
-                class: "bot-row" + (state.state.currentId === bot.threadId && !T.settingsUI.isOpen() ? " active" : ""),
-                "aria-current": state.state.currentId === bot.threadId && !T.settingsUI.isOpen() ? "true" : null,
+                class: "bot-row" + (state.state.currentId === bot.uuid && !T.settingsUI.isOpen() ? " active" : ""),
+                "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() ? "true" : null,
                 role: "button",
                 "aria-label": `${bot.name}. ${previewText}`.trim(),
                 tabindex: "0",
@@ -239,7 +239,7 @@
     function openBot(bot) {
         try {
             if (T.settingsUI.isOpen()) T.settingsUI.hide();
-            history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid || bot.id)}`);
+            history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid)}`);
         } catch (_) {}
         if (isMobile()) setMobileChat(true);
         T.app?.renderRoute();

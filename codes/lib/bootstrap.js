@@ -61,6 +61,7 @@ export function ensureUserDir() {
     fs.mkdirSync(USER_DIR, { recursive: true });
     fs.mkdirSync(path.join(USER_DIR, "skills"), { recursive: true });
     fs.mkdirSync(path.join(USER_DIR, "temp"), { recursive: true });
+    fs.mkdirSync(path.join(USER_DIR, "session"), { recursive: true });
 
     seedUserFromTemplates();
 

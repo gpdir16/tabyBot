@@ -549,7 +549,7 @@
                 T.state.setBots(r.agents || []);
             } catch (_) {}
             const first = T.state.state.bots[0];
-            if (first) T.chat.open(first.threadId);
+            if (first) T.chat.open(first.uuid);
             T.events.connect();
         } catch (err) {
             saving = false;

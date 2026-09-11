@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { USER_DIR } from "../paths.js";
+import { SESSION_DIR, USER_DIR } from "../paths.js";
+import { getAgentByUuid } from "../agents-store.js";
 
 import { STOP_BY_USER_HINT } from "./session.js";
 
@@ -18,32 +19,28 @@ const INTERNAL_USER_HINTS = new Set([
 
 const RECOVERABLE_TURN_STATUSES = new Set(["pending", "in_progress", "interrupted"]);
 
-function safeSessionKey(sessionKey) {
-    return (
-        String(sessionKey || "")
-            .replace(/:/g, "-")
-            .replace(/[^0-9A-Za-z_-]/g, "") || "unknown"
-    );
-}
-
-function chatTempRoot(sessionKey) {
-    return path.join(USER_DIR, "temp", `chat-${safeSessionKey(sessionKey)}`);
+export function conversationDir(chatId) {
+    const agent = getAgentByUuid(chatId);
+    if (!agent?.uuid) return null;
+    return path.join(SESSION_DIR, agent.uuid);
 }
 
 function manifestPath(chatId) {
-    return path.join(chatTempRoot(chatId), "manifest.json");
+    const root = conversationDir(chatId);
+    return root ? path.join(root, "manifest.json") : null;
 }
 
 function activeSessionPath(chatId) {
+    const root = conversationDir(chatId);
     const manifest = loadManifest(chatId);
-    if (!manifest?.activeSessionId) return null;
+    if (!root || !manifest?.activeSessionId) return null;
     const entry = manifest.sessions?.find((s) => s.id === manifest.activeSessionId);
     if (!entry?.file) return null;
-    return path.join(chatTempRoot(chatId), entry.file);
+    return path.join(root, entry.file);
 }
 
 function readJson(filePath, fallback = null) {
-    if (!fs.existsSync(filePath)) return fallback;
+    if (!filePath || !fs.existsSync(filePath)) return fallback;
     try {
         return JSON.parse(fs.readFileSync(filePath, "utf8"));
     } catch {
@@ -75,7 +72,9 @@ function sessionPayload({ sessionId, turns, extra = {} }) {
 }
 
 function ensureManifest(chatId) {
+    const root = conversationDir(chatId);
     const mPath = manifestPath(chatId);
+    if (!root || !mPath) return null;
     let manifest = readJson(mPath, null);
     if (manifest?.activeSessionId && Array.isArray(manifest.sessions) && manifest.sessions.length) {
         return manifest;
@@ -83,7 +82,6 @@ function ensureManifest(chatId) {
 
     const sessionId = "s000001";
     const relFile = `sessions/${sessionId}.json`;
-    const root = chatTempRoot(chatId);
     const now = new Date().toISOString();
 
     writeJson(path.join(root, relFile), sessionPayload({ sessionId, turns: [] }));
@@ -105,12 +103,15 @@ function ensureManifest(chatId) {
 }
 
 function loadManifest(chatId) {
-    if (!chatId) return null;
-    return readJson(manifestPath(chatId), null);
+    const mPath = manifestPath(chatId);
+    if (!chatId || !mPath) return null;
+    return readJson(mPath, null);
 }
 
 function saveManifest(chatId, manifest) {
-    writeJson(manifestPath(chatId), manifest);
+    const mPath = manifestPath(chatId);
+    if (!mPath) return;
+    writeJson(mPath, manifest);
 }
 
 function readActiveSessionData(chatId) {
@@ -121,39 +122,16 @@ function readActiveSessionData(chatId) {
         return { turns: [] };
     }
     const data = readJson(filePath, {});
-    let turns = Array.isArray(data.turns) ? data.turns : [];
-    // Backward compat: old session files stored compressedSummary as a separate field.
-    // Migrate it into a system-message turn so the session file is purely turns.
-    if (typeof data.compressedSummary === "string" && data.compressedSummary.trim()) {
-        const hasSummaryTurn = turns.some(
-            (t) =>
-                Array.isArray(t?.messages) &&
-                t.messages.some((m) => m?.role === "system" && typeof m?.content === "string" && m.content.includes("compressed summary")),
-        );
-        if (!hasSummaryTurn) {
-            turns = [
-                {
-                    at: new Date().toISOString(),
-                    messages: [
-                        {
-                            role: "system",
-                            content: `## Earlier conversation (compressed summary — your own past context, not a user message)\n\n${data.compressedSummary.trim()}`,
-                        },
-                    ],
-                },
-                ...turns,
-            ];
-        }
-    }
-    return { turns };
+    return { turns: Array.isArray(data.turns) ? data.turns : [] };
 }
 
 function writeActiveSessionData(chatId, turns) {
     if (!chatId) return;
+    const root = conversationDir(chatId);
     const manifest = ensureManifest(chatId);
-    const entry = manifest.sessions.find((s) => s.id === manifest.activeSessionId);
-    if (!entry?.file) return;
-    const filePath = path.join(chatTempRoot(chatId), entry.file);
+    const entry = manifest?.sessions.find((s) => s.id === manifest.activeSessionId);
+    if (!root || !entry?.file) return;
+    const filePath = path.join(root, entry.file);
     writeJson(
         filePath,
         sessionPayload({
@@ -212,13 +190,7 @@ export function previewSnippetFromTurns(turns) {
 }
 
 export function turnToMessages(turn) {
-    if (Array.isArray(turn?.messages) && turn.messages.length) {
-        return turn.messages;
-    }
-    const out = [];
-    if (turn?.user?.trim()) out.push({ role: "user", content: turn.user });
-    if (turn?.assistant?.trim()) out.push({ role: "assistant", content: turn.assistant });
-    return out;
+    return Array.isArray(turn?.messages) ? turn.messages : [];
 }
 
 export function extractTurnMessages(messages, fromIndex) {
@@ -232,32 +204,6 @@ export function loadChatHistory(chatId) {
     return readActiveSessionData(chatId).turns;
 }
 
-export function clearChatHistory(chatId) {
-    if (!chatId) return;
-    const manifest = ensureManifest(chatId);
-    const now = new Date().toISOString();
-    const activeEntry = manifest.sessions.find((s) => s.id === manifest.activeSessionId);
-    if (activeEntry) {
-        activeEntry.closedAt = now;
-        activeEntry.kind = "archived";
-    }
-
-    const newId = nextSessionId(manifest);
-    const relFile = `sessions/${newId}.json`;
-    writeJson(path.join(chatTempRoot(chatId), relFile), sessionPayload({ sessionId: newId, turns: [], extra: { startedAfterClear: true } }));
-
-    manifest.sessions.push({
-        id: newId,
-        file: relFile,
-        startedAt: now,
-        closedAt: null,
-        kind: "active",
-        parentSessionId: activeEntry?.id || null,
-    });
-    manifest.activeSessionId = newId;
-    saveManifest(chatId, manifest);
-}
-
 export function replaceChatHistory(chatId, turns) {
     if (!chatId) return;
     writeActiveSessionData(chatId, turns);
@@ -267,7 +213,9 @@ export function replaceChatHistory(chatId, turns) {
 // The compressed summary is stored as a system-message turn at the start of the new session.
 export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary) {
     if (!chatId) return null;
+    const root = conversationDir(chatId);
     const manifest = ensureManifest(chatId);
+    if (!root || !manifest) return null;
     const oldId = manifest.activeSessionId;
     const now = new Date().toISOString();
 
@@ -301,7 +249,7 @@ export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary)
     const newId = nextSessionId(manifest);
     const relFile = `sessions/${newId}.json`;
     writeJson(
-        path.join(chatTempRoot(chatId), relFile),
+        path.join(root, relFile),
         sessionPayload({
             sessionId: newId,
             turns,
@@ -524,9 +472,9 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
 
 export function listArchivedSessionFiles(chatId) {
     const manifest = loadManifest(chatId);
-    if (!manifest?.sessions?.length) return [];
+    const root = conversationDir(chatId);
+    if (!manifest?.sessions?.length || !root) return [];
     const activeId = manifest.activeSessionId;
-    const root = chatTempRoot(chatId);
     return manifest.sessions
         .filter((s) => s.id !== activeId)
         .map((s) => ({

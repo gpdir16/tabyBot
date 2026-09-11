@@ -29,11 +29,6 @@ const MESSAGES = {
         ko: "(출력 없음)",
         ja: "(出力なし)",
     },
-    new_chat_ok: {
-        en: "Started a new conversation.",
-        ko: "새 대화를 시작했습니다.",
-        ja: "新しい会話を開始しました。",
-    },
 };
 
 export function t(key, lang = "en", vars = {}) {

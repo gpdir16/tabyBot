@@ -1,5 +1,7 @@
 import { listScheduleJobs, markScheduleJobRun } from "./store.js";
 import { scheduleWork } from "../agent-queue.js";
+import { firstAgent, getAgent } from "../agents-store.js";
+import { isValidId } from "../web/conversations.js";
 
 const TICK_MS = 1000;
 const tasksInFlight = new Set();
@@ -12,7 +14,9 @@ export function setScheduleJobHandler(handler) {
 }
 
 function conversationKey(job) {
-    return job.conversationId || `web-sched-${job.id}`;
+    const id = String(job.conversationId || "").trim();
+    if (isValidId(id)) return id;
+    return getAgent(job.agentId)?.uuid || firstAgent()?.uuid || "";
 }
 
 async function tick() {

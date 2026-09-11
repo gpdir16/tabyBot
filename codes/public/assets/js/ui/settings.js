@@ -1100,16 +1100,15 @@
                         return;
                     }
                     delBtn.disabled = true;
-                    const threadId = agent.threadId || `web-agent-${agent.id}`;
                     T.api
                         .deleteAgent(agent.id)
                         .then((r) => {
                             const agents = r && Array.isArray(r.agents) ? r.agents : [];
                             state.mergeSettingsLocal({ agents });
                             state.setBots(agents);
-                            if (state.state.currentId === threadId) {
+                            if (state.state.currentId === agent.uuid) {
                                 const next = agents[0];
-                                if (next && T.chat) T.chat.open(next.threadId);
+                                if (next && T.chat) T.chat.open(next.uuid);
                                 else if (T.chat) T.chat.open(null);
                             }
                             editingAgent = agents[0]?.id || "__new__";

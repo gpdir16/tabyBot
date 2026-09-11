@@ -102,10 +102,7 @@
         bootstrap: () => request("/api/bootstrap"),
 
         conversations: () => request("/api/conversations"),
-        createConversation: () => request("/api/conversations", { method: "POST", json: {} }),
         conversation: (id) => request("/api/conversations/" + enc(id)),
-        renameConversation: (id, title) => request("/api/conversations/" + enc(id), { method: "PATCH", json: { title } }),
-        deleteConversation: (id) => request("/api/conversations/" + enc(id), { method: "DELETE" }),
 
         sendMessage: (id, text, attachmentIds) => {
             const body = { text };
