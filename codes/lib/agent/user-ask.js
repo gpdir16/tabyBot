@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { emit } from "../web/bus.js";
+import { clearTodoWaiting, markTodoWaiting } from "../todos/store.js";
 
 const pendingAsks = new Map();
 
@@ -8,6 +9,7 @@ function settle(entry, result) {
     entry.settled = true;
     clearTimeout(entry.timer);
     pendingAsks.delete(entry.key);
+    if (entry.todoId && clearTodoWaiting(entry.todoId, entry.id)) emit({ type: "todos_changed" });
     entry.resolve(result);
     return true;
 }
@@ -42,7 +44,7 @@ export function cancelPendingAsk(sessionKey, reason = "aborted") {
     return settleAndNotify(entry, `__CANCELLED__:${reason}`);
 }
 
-export function askUser({ sessionKey, question, options = [], timeoutMs = 120_000 }) {
+export function askUser({ sessionKey, question, options = [], timeoutMs = 120_000, todoId = null }) {
     const key = String(sessionKey);
     cancelPendingAsk(key, "superseded");
 
@@ -52,6 +54,7 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
         question: String(question),
         options: options.map((o) => String(o)),
         expiresAt: Date.now() + timeoutMs,
+        todoId: todoId ? String(todoId) : null,
         settled: false,
         resolve: null,
         timer: null,
@@ -66,6 +69,7 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
     }, timeoutMs);
 
     pendingAsks.set(key, entry);
+    if (entry.todoId && markTodoWaiting(entry.todoId, { askId: entry.id, question: entry.question, convId: key })) emit({ type: "todos_changed" });
     emit({
         type: "ask",
         conversationId: key,
@@ -73,6 +77,7 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
         question: entry.question,
         options: entry.options,
         expiresAt: new Date(entry.expiresAt).toISOString(),
+        todoId: entry.todoId || undefined,
     });
 
     return promise.then((raw) => {

@@ -12,6 +12,10 @@
         conversations: [], // 스레드 메타(봇 uuid + 스케줄 결과 등)
         convs: new Map(), // uuid → { meta, loaded, turns, pending, live }
         currentId: null,
+        currentTodoId: null,
+        todos: [],
+        todoSuggestions: [],
+        todosFailed: false,
         conn: "disconnected",
         offline: true,
     };
@@ -127,7 +131,52 @@
     function setCurrent(id) {
         if (state.currentId === id) return;
         state.currentId = id;
+        if (id) {
+            state.currentTodoId = null;
+            emit("todos");
+        }
         emit("current", id);
+    }
+
+    function setTodos(payload) {
+        const data = payload && typeof payload === "object" ? payload : {};
+        state.todos = Array.isArray(data.items) ? data.items : Array.isArray(payload) ? payload : [];
+        state.todoSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        state.todosRecovered = data.recovered || null;
+        emit("todos", true);
+    }
+
+    async function fetchTodos() {
+        const ticket = todosTicket();
+        try {
+            const r = await T.api.todos();
+            return applyTodos(ticket, r);
+        } catch (err) {
+            state.todosFailed = true;
+            emit("todos");
+            throw err;
+        }
+    }
+
+    let todosReqSeq = 0;
+    let todosAppliedSeq = 0;
+    function todosTicket() {
+        return ++todosReqSeq;
+    }
+    function applyTodos(ticket, payload) {
+        if (ticket <= todosAppliedSeq) return false;
+        todosAppliedSeq = ticket;
+        state.todosFailed = false;
+        setTodos(payload);
+        return true;
+    }
+
+    function setCurrentTodo(id) {
+        const next = id || null;
+        if (state.currentTodoId === next) return;
+        state.currentTodoId = next;
+        emit("current", state.currentId);
+        emit("todos");
     }
 
     /* ── SSE 이벤트 반영(mutator) ──────────────────────────── */
@@ -314,6 +363,11 @@
         conv,
         currentConv,
         setCurrent,
+        setTodos,
+        todosTicket,
+        applyTodos,
+        fetchTodos,
+        setCurrentTodo,
         upsertMeta,
         replaceConversations,
         setBots,

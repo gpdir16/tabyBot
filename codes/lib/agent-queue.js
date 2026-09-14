@@ -55,7 +55,7 @@ export function cancelQueuedAgentWork(sessionKey) {
 function pickNextIndex(queue) {
     const userIdx = queue.findIndex((q) => q.priority === "user");
     if (userIdx >= 0) return userIdx;
-    return queue.findIndex((q) => q.priority === "cron" || q.priority === "schedule");
+    return queue.length ? 0 : -1;
 }
 
 async function pump(sessionKey) {

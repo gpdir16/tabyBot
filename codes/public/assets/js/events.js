@@ -18,23 +18,51 @@
     let fallbackTimer = null;
     let polling = false;
     let pollCursor = 0;
+    const handledSeqs = new Set();
     let connectionStartedAt = 0;
     let receivedEvent = false;
 
-    function notifyIncoming(conversationId, body, tag) {
+    function notifyIncoming(conversationId, body, tag, url) {
         if (!T.notifications) return;
         const title = (conversationId && state.botByUuid(conversationId)?.name) || "tabyBot";
-        T.notifications.show(title, body, tag);
+        T.notifications.show(title, body, tag, url);
     }
 
-    function handle(msg) {
+    const FRESH_LOAD_GAP_MS = 15000;
+
+    async function replayGap(since, retried, recentMs) {
+        try {
+            const r = await api.eventsPoll(since, recentMs);
+            for (const ev of r?.events || []) {
+                if (ev?.type === "hello") continue;
+                handle(ev, true);
+            }
+        } catch (_) {
+            if (!retried) setTimeout(() => void replayGap(since, true, recentMs), 2000);
+        }
+    }
+
+    function handle(msg, replay = false) {
         if (!msg || typeof msg !== "object" || !msg.type) return;
         const seq = Number(msg.seq) || 0;
-        if (seq) {
-            if (seq <= pollCursor) return;
+        if (msg.type === "hello") {
+            const prev = pollCursor;
+            if (!replay && seq < prev) handledSeqs.clear();
             pollCursor = seq;
+            if (!replay && prev > 0 && seq !== prev) void replayGap(prev);
+            else if (!replay && prev === 0) void replayGap(0, false, FRESH_LOAD_GAP_MS);
+        } else if (seq) {
+            if (seq <= pollCursor && !replay) return;
         }
-        if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt) return;
+        const gapSafe = msg.type === "todo_due" || msg.type === "todos_changed" || msg.type === "conversations_changed" || msg.type === "hello";
+        if (replay && !gapSafe) return;
+        if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt && !gapSafe) return;
+        if (seq && msg.type !== "hello") {
+            if (handledSeqs.has(seq)) return;
+            handledSeqs.add(seq);
+            if (handledSeqs.size > 4000) handledSeqs.delete(handledSeqs.values().next().value);
+        }
+        if (seq > pollCursor) pollCursor = seq;
         receivedEvent = true;
         switch (msg.type) {
             case "hello":
@@ -47,6 +75,7 @@
                     .agents()
                     .then((r) => state.setBots(r.agents || []))
                     .catch(() => {});
+                state.fetchTodos().catch(() => {});
                 T.chat.refreshCurrent?.();
                 break;
             case "status":
@@ -69,8 +98,7 @@
                     msg.attachments || [],
                     Boolean(msg.silent),
                 );
-                // stopped_by_user는 조용히 종료. 그 외 오류는 토스트.
-                if (msg.error && msg.error !== "stopped_by_user") {
+                if (msg.error && msg.error !== "stopped_by_user" && !msg.automated) {
                     const detail = typeof msg.error === "string" ? msg.error : (msg.error && (msg.error.detail || msg.error.code)) || "";
                     T.toast.show("error", T.i18n.t("errorPrefix") + (detail ? ": " + detail : ""));
                 }
@@ -110,9 +138,34 @@
                     .then((r) => state.setBots(r.agents || []))
                     .catch(() => {});
                 break;
+            case "todos_changed":
+                refreshTodos();
+                break;
+            case "todo_due": {
+                const due = T.todosUI?.describeDue?.(msg) || msg.text || msg.title || "";
+                T.toast.show("info", due, () => {
+                    if (msg.url) {
+                        if (location.pathname !== msg.url) {
+                            try {
+                                history.pushState(null, "", msg.url);
+                            } catch (_) {}
+                        }
+                        T.app?.renderRoute?.();
+                    }
+                });
+                notifyIncoming(msg.conversationId, due, "todo-" + (msg.url || ""), msg.url);
+                refreshTodos();
+                break;
+            }
             default:
                 break; // 미지의 이벤트 타입은 무시 (하위 호환)
         }
+    }
+
+    let todosTimer = null;
+    function refreshTodos() {
+        clearTimeout(todosTimer);
+        todosTimer = setTimeout(() => state.fetchTodos().catch(() => {}), 120);
     }
 
     // 목록 재조회(연속 이벤트 디바운스)
@@ -155,9 +208,9 @@
     async function pollLoop() {
         while (polling && !stopped) {
             try {
-                const result = await api.eventsPoll(pollCursor);
+                const result = await api.eventsPoll(pollCursor, pollCursor ? 0 : FRESH_LOAD_GAP_MS);
                 for (const event of result?.events || []) handle(event);
-                if (result && Number.isFinite(Number(result.cursor)) && Number(result.cursor) > pollCursor) {
+                if (result && Number.isFinite(Number(result.cursor)) && Number(result.cursor) !== pollCursor) {
                     pollCursor = Number(result.cursor);
                 }
                 state.setConn("connected");
@@ -201,23 +254,34 @@
             state.setConn("disconnected");
         };
         schedulePollingFallback();
-        // 죽은 연결 감지: 서버는 15초마다 ping을 보낸다. 40초 무응답이면 강제 재접속.
+        armWatchdog();
+    }
+
+    function armWatchdog() {
         clearInterval(watchdog);
         watchdog = setInterval(() => {
-            if (usingFetch || polling || stopped) return;
+            if (polling || stopped) return;
             if (Date.now() - lastSeen > 40_000) {
                 lastSeen = Date.now(); // 재시작 연쇄 방지
                 state.setConn("disconnected");
-                try {
-                    es.close();
-                } catch (_) {}
-                setTimeout(connect, 200);
+                if (usingFetch) {
+                    try {
+                        ctrl?.abort();
+                    } catch (_) {}
+                } else {
+                    try {
+                        es?.close();
+                    } catch (_) {}
+                    setTimeout(connect, 200);
+                }
             }
         }, 5_000);
     }
 
     async function startFetch() {
         usingFetch = true;
+        lastSeen = Date.now();
+        armWatchdog();
         schedulePollingFallback();
         while (!stopped && !polling) {
             ctrl = new AbortController();
@@ -229,12 +293,14 @@
                 if (!res.ok || !res.body) throw new Error("sse status " + res.status);
 
                 state.setConn("connected");
+                lastSeen = Date.now();
                 const reader = res.body.getReader();
                 const dec = new TextDecoder();
                 let buf = "";
                 for (;;) {
                     const { done, value } = await reader.read();
                     if (done) break;
+                    lastSeen = Date.now();
                     buf += dec.decode(value, { stream: true });
                     let nl;
                     while ((nl = buf.indexOf("\n")) > -1) {
@@ -306,6 +372,7 @@
     document.addEventListener("visibilitychange", () => {
         if (document.hidden) return;
         refreshConversations();
+        refreshTodos();
         if (!state.state.offline && state.state.conn === "disconnected") connect();
     });
 

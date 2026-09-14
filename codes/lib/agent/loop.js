@@ -219,6 +219,7 @@ async function runAgentTurn(
         consultDepth = 0,
         onCheckpoint,
         quietEmpty = false,
+        todoId = null,
     } = {},
 ) {
     clearFileReadCache();
@@ -431,6 +432,7 @@ async function runAgentTurn(
                 sessionKey: resolvedSessionKey,
                 agentId: resolvedAgentId,
                 consultDepth,
+                todoId,
                 messages,
                 model: llm.provider.model,
                 modelMeta: llm.modelMeta,

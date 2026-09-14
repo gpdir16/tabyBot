@@ -186,6 +186,23 @@
             return;
         }
 
+        try {
+            const tp = new URLSearchParams(location.search).get("token");
+            if (tp) {
+                const params = new URLSearchParams(location.search);
+                params.delete("token");
+                const q = params.toString();
+                history.replaceState(null, "", location.pathname + (q ? `?${q}` : "") + location.hash);
+                const prev = T.api.getToken();
+                T.api.setToken(tp);
+                try {
+                    await T.api.bootstrap();
+                } catch (_) {
+                    T.api.setToken(prev);
+                }
+            }
+        } catch (_) {}
+
         const token = ++bootToken;
         try {
             const bs = await T.api.bootstrap();
@@ -214,29 +231,40 @@
             } catch (err) {
                 T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
             }
+            try {
+                const ticket = state.todosTicket();
+                const r = await T.api.todos();
+                if (token !== bootToken) return;
+                state.applyTodos(ticket, r);
+            } catch (err) {
+                state.state.todosFailed = true;
+                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+            }
             const bots = state.state.bots;
 
             state.state.offline = false;
             booted = true;
             if (T.sidebar.hydrate) await T.sidebar.hydrate();
 
-            // 봇 선택: URL uuid → 첫 봇
             const fromPath = botUuidFromPath();
-            let bot = (fromPath && bots.find((b) => b.uuid === fromPath)) || bots[0] || null;
-            if (token !== bootToken) return;
-            // 설정 라우트 판별을 봇 복원보다 먼저 한다(showList의 경로 리셋과 충돌 방지).
             const sr = settingsRoute();
+            const tr = T.todosUI?.routeFromPath?.();
+            let bot = (fromPath && bots.find((b) => b.uuid === fromPath)) || (!tr && bots[0]) || null;
+            if (token !== bootToken) return;
             if (bot) {
                 await T.chat.open(bot.uuid, { params: urlParams() });
                 if (fromPath || sr) T.sidebar.showChat?.();
-                else T.sidebar.showList?.();
+                else if (!tr) T.sidebar.showList?.();
                 consumeParams(urlParams());
-            } else if (!sr) {
+            } else if (!sr && !tr) {
                 history.replaceState(null, "", "/");
             }
 
-            // 설정 페이지 경로(/s/...)면 설정을 연 상태로 복원한다.
             if (sr) T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
+            else if (tr) {
+                T.sidebar.showChat?.();
+                T.todosUI.open({ id: tr.id || null, fromUrl: true });
+            }
 
             T.events.connect();
 
@@ -259,11 +287,21 @@
         const sr = T.settingsUI.routeFromPath();
         if (sr) {
             // 설정 라우트: 모바일에서도 /a/와 마찬가지로 메인 패널을 표시한다.
+            T.todosUI?.hide?.();
             T.sidebar?.showChat?.();
             T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
             return;
         }
+        const tr = T.todosUI?.routeFromPath?.();
+        if (tr) {
+            T.settingsUI.hide();
+            T.sidebar?.showChat?.();
+            T.todosUI.open({ id: tr.id || null, fromUrl: true });
+            T.sidebar?.syncRoute?.();
+            return;
+        }
         T.settingsUI.hide();
+        T.todosUI?.hide?.();
         const uuid = botUuidFromPath();
         const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
         if (bot && bot.uuid !== state.state.currentId) T.chat.open(bot.uuid, { replaceState: true });
@@ -301,6 +339,7 @@
     T.chat.init();
     T.composer.init();
     T.settingsUI.init();
+    T.todosUI?.init?.();
     if (T.notifications) T.notifications.init();
 
     boot();

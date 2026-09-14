@@ -31,7 +31,7 @@
 
     // API 응답에서 사용자에게 보여줄 오류 원인을 추출한다.
     function errorDetail(err) {
-        if (err?.network) return "Network request failed. Check the server connection.";
+        if (err?.network) return T.i18n?.t("networkError") || "Network request failed. Check the server connection.";
         const payload = err?.payload;
         if (payload?.error === "not_configured") {
             const key = payload.reason === "model_missing" ? "modelRequired" : "providerRequired";
@@ -110,7 +110,7 @@
             return request("/api/conversations/" + enc(id) + "/messages", { method: "POST", json: body });
         },
         stopConversation: (id) => request("/api/conversations/" + enc(id) + "/stop", { method: "POST", json: {} }),
-        eventsPoll: (since) => request("/api/events/poll?since=" + enc(since || 0)),
+        eventsPoll: (since, recentMs) => request("/api/events/poll?since=" + enc(since || 0) + (recentMs ? "&recentMs=" + enc(recentMs) : "")),
 
         upload: (file) =>
             request("/api/uploads", {
@@ -129,6 +129,18 @@
         createAgent: (b) => request("/api/agents", { method: "POST", json: b }),
         updateAgent: (id, b) => request("/api/agents/" + enc(id), { method: "PATCH", json: b }),
         deleteAgent: (id) => request("/api/agents/" + enc(id), { method: "DELETE" }),
+
+        todos: () => request("/api/todos"),
+        createTodo: (b) => request("/api/todos", { method: "POST", json: b }),
+        updateTodo: (todoId, b) => request("/api/todos/" + enc(todoId), { method: "PATCH", json: b }),
+        deleteTodo: (todoId) => request("/api/todos/" + enc(todoId), { method: "DELETE" }),
+        completeTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/complete", { method: "POST", json: {} }),
+        reopenTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/reopen", { method: "POST", json: {} }),
+        approveTodo: (id, b) => request("/api/todos/suggestions/" + enc(id) + "/approve", { method: "POST", json: b || {} }),
+        rejectTodo: (id) => request("/api/todos/suggestions/" + enc(id) + "/reject", { method: "POST", json: {} }),
+        acceptHandoff: (todoId, agentId) => request("/api/todos/" + enc(todoId) + "/handoff/" + enc(agentId), { method: "POST", json: {} }),
+        unassignTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/unassign", { method: "POST", json: {} }),
+        runTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/run", { method: "POST", json: {} }),
 
         answerAsk: (askId, body) => request("/api/asks/" + enc(askId) + "/answer", { method: "POST", json: body }),
 

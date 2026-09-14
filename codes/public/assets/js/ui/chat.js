@@ -767,7 +767,7 @@
         // URL 동기화: /a/<uuid>?m=&q= — 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
         try {
             const bot = id ? state.botByUuid(String(id)) : null;
-            if (!/^\/s\//.test(location.pathname)) {
+            if (!/^\/s\//.test(location.pathname) && !/^\/t(?:\/|$)/.test(location.pathname)) {
                 const qs = new URLSearchParams();
                 if (o.params?.q) qs.set("q", o.params.q);
                 if (o.params?.m != null) qs.set("m", String(o.params.m));
@@ -836,11 +836,22 @@
 
     /* ── 헤더(봇 아바타/이름) ────────────────────────────────── */
     function refreshHeader() {
+        hdrAvatar.replaceChildren();
+        if (T.todosUI?.isOpen?.()) {
+            const name = t("todos");
+            document.title = name + " — tabyBot";
+            hdrAvatar.append(T.icon("list", "icon-sm"));
+            hdrAvatar.style.background = "var(--text-tertiary)";
+            hdrAvatar.style.color = "var(--text)";
+            hdrName.textContent = name;
+            return;
+        }
         const bot = T.state.currentBot();
         const name = bot ? bot.name : "";
         document.title = name ? `${name} — tabyBot` : "tabyBot";
-        hdrAvatar.textContent = name ? String(name).trim().slice(0, 1).toUpperCase() : "";
+        hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
         hdrAvatar.style.background = bot?.color || "var(--surface-2)";
+        hdrAvatar.style.color = "#fff";
         hdrName.textContent = name;
     }
 
@@ -856,6 +867,9 @@
         state.on("ask_resolved", routeIfCurrent);
         state.on("settings", () => {
             refreshHeader();
+        });
+        state.on("todos", () => {
+            if (T.todosUI?.isOpen?.()) refreshHeader();
         });
 
         state.on("user_message", (p) => {

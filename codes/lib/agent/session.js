@@ -33,11 +33,15 @@ export class AgentSession {
     }
 }
 
-export function beginAgentSession(chatId) {
+export function beginAgentSession(chatId, { automated = null } = {}) {
     const key = String(chatId);
     const existing = sessions.get(key);
-    if (existing?.running) return existing;
+    if (existing?.running) {
+        if (automated != null) existing.automated = automated;
+        return existing;
+    }
     const session = new AgentSession(key);
+    session.automated = automated === true;
     sessions.set(key, session);
     return session;
 }
@@ -69,6 +73,7 @@ export function requestAgentStop(chatId) {
 export function enqueueAgentMessage(chatId, text) {
     const session = getActiveAgentSession(chatId);
     if (!session) return false;
+    if (session.automated) return false;
     session.addPendingMessage(text);
     return true;
 }

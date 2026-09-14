@@ -14,6 +14,7 @@ import {
     buildApprovalPolicyText,
     approvalPolicyLabel,
 } from "../user-settings.js";
+import { formatTodosForPrompt } from "../todos/store.js";
 import { estimateContentTokens } from "../llm/vision.js";
 import { collectFilesFromHistory, formatAttachedFilesPrompt, hydrateUserContent } from "../web/attachments.js";
 import { formatSkillsListForPrompt } from "../skills-catalog.js";
@@ -104,6 +105,7 @@ export function buildSystemMessageContent(lang, { truncateMemory = false, maxMem
     const template = loadSystemPromptTemplate();
     const rt = runtimeInfo || {};
     const pastSessions = formatPastSessionsForPrompt(rt.sessionKey);
+    const todoBlocks = formatTodosForPrompt(rt.agentId);
     const vars = {
         ...buildDateTimePromptVars(lang),
         ...buildEnvironmentPromptVars(),
@@ -123,6 +125,8 @@ export function buildSystemMessageContent(lang, { truncateMemory = false, maxMem
         NSFW_POLICY: buildNsfwPolicyText(getNsfwLevel(loadUserConfig())),
         APPROVAL_LEVEL_LABEL: approvalPolicyLabel(getApprovalLevel(loadUserConfig())),
         APPROVAL_POLICY: buildApprovalPolicyText(getApprovalLevel(loadUserConfig())),
+        TODO_LIST: todoBlocks.list,
+        TODO_SUGGEST_LIST: todoBlocks.suggestions,
     };
     return renderSystemPrompt(template, vars).trim();
 }

@@ -3,6 +3,8 @@ import { configToolDefinitions, executeConfigTool } from "../tools/config-tool.j
 import { skillsToolDefinitions, executeSkillsTool } from "../tools/skills.js";
 import { terminalToolDefinitions, executeTerminalTool } from "../tools/terminal.js";
 import { scheduleToolDefinitions, executeScheduleTool } from "../tools/schedule-tool.js";
+import { todoToolDefinitions, executeTodoTool } from "../tools/todo-tool.js";
+import { stopTodoScheduler } from "../todos/scheduler.js";
 import { sendFileToolDefinitions, executeSendFileTool } from "../tools/send-file-tool.js";
 import { userAskToolDefinitions, executeUserAskTool } from "../tools/user-ask-tool.js";
 import { vizToolDefinitions, executeVizTool } from "../tools/visualization.js";
@@ -21,6 +23,7 @@ export async function initTools() {
 
 export async function shutdownTools() {
     stopScheduleScheduler();
+    stopTodoScheduler();
     stopUpdateScheduler();
     await disconnectMcpServers();
 }
@@ -32,6 +35,7 @@ export async function getAllToolDefinitions() {
         ...configToolDefinitions,
         ...skillsToolDefinitions,
         ...scheduleToolDefinitions,
+        ...todoToolDefinitions,
         ...terminalToolDefinitions,
         ...sendFileToolDefinitions,
         ...userAskToolDefinitions,
@@ -49,6 +53,7 @@ export async function executeTool(name, args, ctx = {}) {
         if (name === "config_set") return await executeConfigTool(name, args);
         if (name.startsWith("skills_")) return await executeSkillsTool(name, args);
         if (name.startsWith("schedule_")) return await executeScheduleTool(name, args, ctx);
+        if (name.startsWith("todo_")) return await executeTodoTool(name, args, ctx);
         if (name === "terminal_run" || name === "bg_status" || name === "bg_list" || name === "bg_kill") {
             return await executeTerminalTool(name, args, ctx);
         }
