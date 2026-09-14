@@ -6,7 +6,7 @@ An open-source alternative to Grok Bot. Built on tabyAgent, an agent that runs o
 
 Give it a task and it will do it — even if it takes hours, even if things go wrong.
 
-Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI apps work out of the box. No extra setup.
+Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI apps work out of the box. No extra setup.
 
 ## What it can do
 
@@ -14,6 +14,7 @@ Memory, skills, self-improvement, scheduled tasks, web browsing, and GUI apps wo
 - **Inference providers**: Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, or your own API endpoint.
 - **Skills, MCP**: Add the capabilities and tools you want to the agent yourself.
 - **Scheduled tasks**: Recurring jobs run on a schedule, report when they finish, and skip when they are not needed.
+- **Todos**: Keep a task list the agent can see. Bots suggest additions or changes for your approval, and you can hand a task off to them — agents volunteer, you pick one, and it does the job on a schedule or right away. Tasks you keep remind you when they're due.
 - **Multiple agents**: Create specialist agents for different roles and have them work together.
 - **Run it anywhere**: Docker container or local Node.js. Native support is macOS and Linux. Windows can work through Docker, but that is not guaranteed.
 - **Self-improvement**: tabyBot can improve itself. It learns from how problems were solved and from your corrections, and it gets sharper the more you use it.
