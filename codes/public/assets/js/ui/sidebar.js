@@ -328,7 +328,7 @@
     }
 
     function todosPreview() {
-        const open = (state.state.todos || []).filter((row) => row.status === "open" && !row.periodDone);
+        const open = (state.state.todos || []).filter((row) => row.status === "open" && !row.periodDone && (row.list || "user") === "user");
         const n = (state.state.todoSuggestions || []).length;
         if (n) return t("todosInbox", { n });
         if (!open.length) return t("todosNone");

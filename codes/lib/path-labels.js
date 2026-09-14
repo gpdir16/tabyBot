@@ -14,10 +14,6 @@ export function skillsDirPath() {
     return path.join(USER_DIR, "skills");
 }
 
-export function schedulingConfigPath() {
-    return path.join(USER_DIR, "scheduling.json");
-}
-
 export function todosConfigPath() {
     return path.join(USER_DIR, "todos.json");
 }
@@ -47,10 +43,6 @@ export function sendFileDescription() {
     return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`. Optional caption is shown with the attachment.`;
 }
 
-export function schedulingListDescription() {
-    return `List scheduling jobs from \`${schedulingConfigPath()}\`.`;
-}
-
 export function todosPathHint(agentId) {
     return path.join(USER_DIR, "agents", agentId || "<agent-id>", "todos.json");
 }
@@ -67,7 +59,7 @@ export function buildSkillContentVars() {
         SYSTEM_SKILLS_DIR: SKILLS_SYSTEM_DIR,
         MEMORY_PATH: memoryFilePath(),
         MCP_CONFIG_PATH: mcpConfigPath(),
-        SCHEDULING_PATH: schedulingConfigPath(),
+        SCHEDULING_PATH: todosConfigPath(),
         CAMOFOX_DIR: path.join(CODES_DIR, "skills", "camofox"),
         CAMOFOX_DATA_DIR: path.join(USER_DIR, "camofox"),
     };
@@ -83,7 +75,7 @@ function skillContentVars() {
 const LEGACY_SKILL_PATHS = [
     ["/app/user/memory.md", (v) => v.MEMORY_PATH],
     ["/app/user/mcp.json", (v) => v.MCP_CONFIG_PATH],
-    ["/app/user/scheduling.json", (v) => v.SCHEDULING_PATH],
+    ["/app/user/scheduling.json", (v) => todosConfigPath()],
     ["/app/user/skills", (v) => v.SKILLS_DIR],
     ["/app/codes/skills", (v) => path.join(v.CODES_DIR, "skills")],
     ["/app/user", (v) => v.USER_DIR],

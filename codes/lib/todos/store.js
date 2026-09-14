@@ -7,6 +7,7 @@ import { computeNextRun, defaultTimeZone, describeSchedule, isValidTimeZone, par
 
 const STORE_PATH = path.join(USER_DIR, "todos.json");
 const MAX_ITEMS = 80;
+const MAX_RUNS = 20;
 const MAX_TITLE = 200;
 const MAX_PROMPT = 4000;
 const MAX_REASON = 500;
@@ -177,6 +178,14 @@ function agentBrief(id) {
     return { id: agent.id, name: agent.name, color: agentColor(agent.id) };
 }
 
+// 실행 주체: assignee가 우선이고, 없으면 봇 소유 리스트(list !== "user")의 주인 봇.
+export function executorIdOf(item) {
+    if (!item) return null;
+    if (item.assigneeId) return item.assigneeId;
+    const list = item.list || "user";
+    return list === "user" ? null : list;
+}
+
 function publicOffer(offer) {
     const agent = agentBrief(offer.agentId);
     return {
@@ -191,16 +200,23 @@ function publicOffer(offer) {
 
 export function publicTodo(item) {
     if (!item) return null;
+    const list = item.list || "user";
+    const executorId = executorIdOf(item);
     return {
         ...item,
+        list,
+        conversationId: item.conversationId || "",
+        enabled: item.enabled !== false,
         status: STATUSES.has(item.status) ? item.status : "open",
         when: describeTodoWhen(item),
         periodDone: isPeriodDone(item),
         assignee: item.assigneeId ? agentBrief(item.assigneeId) : null,
+        executor: executorId ? agentBrief(executorId) : null,
         offers: (Array.isArray(item.offers) ? item.offers : []).map(publicOffer),
         running: isRunning(item),
         lastError: item.lastError || null,
         waiting: item.status === "open" && item.waiting ? item.waiting : null,
+        runs: Array.isArray(item.runs) ? item.runs.slice(-MAX_RUNS) : [],
     };
 }
 
@@ -321,8 +337,8 @@ function pendingSlotDelivered(item) {
     return delivered >= slot;
 }
 
-function openCount(store) {
-    return store.items.filter((row) => row.status === "open").length;
+function openCount(store, list = "user") {
+    return store.items.filter((row) => row.status === "open" && (row.list || "user") === list).length;
 }
 
 export function listTodos() {
@@ -344,6 +360,7 @@ export function listDueTodos(now = new Date()) {
     const due = [];
     for (const item of readStore().items) {
         if (item.status !== "open") continue;
+        if (item.enabled === false) continue;
         if (!["at", "cron", "every"].includes(item.kind)) continue;
         const next = Date.parse(item.nextRunAt || "");
         if (!Number.isFinite(next) || next > ts) continue;
@@ -354,11 +371,14 @@ export function listDueTodos(now = new Date()) {
 
 export function addTodo(input = {}) {
     const store = readStore();
-    if (openCount(store) >= MAX_ITEMS) return { error: "too_many" };
+    const list = input.list != null && String(input.list).trim() !== "" ? clip(input.list, 24) : "user";
+    if (list !== "user" && !getAgent(list)) return { error: "agent_not_found" };
+    if (openCount(store, list) >= MAX_ITEMS) return { error: "too_many" };
     const title = clip(input.title, MAX_TITLE);
     if (!title) return { error: "title_required" };
     const when = resolveWhen(input, {});
     if (when.error) return { error: when.error };
+    if (list !== "user" && when.kind === "none") return { error: "schedule_required" };
     if (input.assigneeId && !getAgent(input.assigneeId)) return { error: "agent_not_found" };
     const now = new Date().toISOString();
     const item = {
@@ -372,16 +392,21 @@ export function addTodo(input = {}) {
         timezone: when.timezone,
         prompt: clip(input.prompt, MAX_PROMPT),
         assigneeId: input.assigneeId || null,
+        list,
+        conversationId: clip(input.conversationId, 64),
+        enabled: input.enabled !== false,
         offers: [],
         nextRunAt: null,
         lastRunAt: null,
         lastDoneAt: null,
         lastNotifiedAt: null,
+        runs: [],
         createdBy: input.createdBy === "agent" ? "agent" : "user",
         createdAt: now,
         updatedAt: now,
     };
     applyWhen(item, when);
+    if (input.fireImmediately === true && item.kind !== "none") item.nextRunAt = new Date(Date.now() - 1).toISOString();
     store.items.push(item);
     writeStore(store);
     return { item: publicTodo(item) };
@@ -433,6 +458,31 @@ export function updateTodo(id, patch = {}, opts = {}) {
         changed = true;
         editedFields.push("assignee");
     }
+    if (patch.list != null) {
+        const next = clip(patch.list, 24) || "user";
+        if (next !== "user" && !getAgent(next)) return { error: "agent_not_found" };
+        if (next !== (item.list || "user")) {
+            item.list = next;
+            changed = true;
+            editedFields.push("list");
+        }
+    }
+    if (patch.conversationId != null) {
+        const v = clip(patch.conversationId, 64);
+        if (v !== (item.conversationId || "")) {
+            item.conversationId = v;
+            changed = true;
+            editedFields.push("conversation");
+        }
+    }
+    if (patch.enabled != null) {
+        const v = Boolean(patch.enabled);
+        if (v !== (item.enabled !== false)) {
+            item.enabled = v;
+            changed = true;
+            editedFields.push("enabled");
+        }
+    }
     const wantsWhen =
         patch.cron != null || patch.every != null || patch.at != null || patch.timezone != null || patch.kind != null || patch.clearWhen;
     if (wantsWhen) {
@@ -449,9 +499,25 @@ export function updateTodo(id, patch = {}, opts = {}) {
             editedFields.push("schedule");
         }
     }
+    // 봇 소유 항목은 반드시 트리거(스케줄)가 있어야 한다 — 해제 불가.
+    if ((item.list || "user") !== "user" && (!item.kind || item.kind === "none")) return { error: "schedule_required" };
     if (item.status === "done" && item.nextRunAt != null) {
         item.nextRunAt = null;
         changed = true;
+    }
+    if (patch.fireImmediately === true) {
+        item.enabled = true;
+        if (item.status === "done") {
+            item.status = "open";
+            item.lastDoneAt = null;
+            voidRun(item);
+        }
+        if (item.kind && item.kind !== "none") {
+            item.nextRunAt = new Date(Date.now() - 1).toISOString();
+            item.consumedSlot = null;
+        }
+        changed = true;
+        editedFields.push("schedule");
     }
     if (changed) {
         item.updatedAt = new Date().toISOString();
@@ -495,6 +561,7 @@ export function completeTodo(id) {
     const store = readStore();
     const item = store.items.find((row) => row.id === id);
     if (!item) return { error: "not_found" };
+    if ((item.list || "user") !== "user") return { error: "not_a_user_todo" };
     const now = new Date();
     if (item.status === "done" || isPeriodDone(item)) return { item: publicTodo(item) };
     completeItem(item, now);
@@ -541,6 +608,10 @@ export function addSuggestion(input = {}) {
     const title = clip(input.title, MAX_TITLE);
     if (kind === "add" && !title) return { error: "title_required" };
     if (kind !== "add" && !input.targetId) return { error: "target_required" };
+    if (kind !== "add") {
+        const target = store.items.find((row) => row.id === input.targetId);
+        if (target && (target.list || "user") !== "user") return { error: "not_a_user_todo" };
+    }
     const dupe = store.suggestions.find(
         (row) =>
             row.kind === kind &&
@@ -682,6 +753,7 @@ export function offerHandoff(todoId, { agentId, reason, prompt } = {}) {
     const store = readStore();
     const item = store.items.find((row) => row.id === todoId);
     if (!item) return { error: "not_found" };
+    if ((item.list || "user") !== "user") return { error: "not_a_user_todo" };
     if (item.status !== "open") return { error: "not_open" };
     if (!getAgent(agentId)) return { error: "agent_not_found" };
     if (item.assigneeId === agentId) return { error: "already_assigned" };
@@ -751,6 +823,11 @@ export function clearAssignee(todoId) {
 export function purgeAgentTodos(agentId) {
     const store = readStore();
     let changed = false;
+    const kept = store.items.filter((row) => (row.list || "user") !== agentId);
+    if (kept.length !== store.items.length) {
+        store.items = kept;
+        changed = true;
+    }
     for (const item of store.items) {
         if (item.assigneeId === agentId) {
             item.assigneeId = null;
@@ -774,13 +851,13 @@ export function purgeAgentTodos(agentId) {
     return { changed };
 }
 
-export function dispatchTodoRun(id, { advance = true } = {}) {
+export function dispatchTodoRun(id, { advance = true, manual = false } = {}) {
     const store = readStore();
     const item = store.items.find((row) => row.id === id);
     if (!item || item.status !== "open") return null;
     if (item.running && !item.running.consumed && isRunning(item)) return null;
     const token = crypto.randomBytes(8).toString("hex");
-    item.running = { token, slot: item.nextRunAt || null, at: new Date().toISOString(), advanced: advance };
+    item.running = { token, slot: item.nextRunAt || null, at: new Date().toISOString(), advanced: advance, manual };
     item.waiting = null;
     if (advance) bumpNextRun(item, new Date());
     writeStore(store);
@@ -859,7 +936,7 @@ export function markTodoNotified(id, { token = null } = {}) {
     return publicTodo(item);
 }
 
-export function markTodoRun(id, { error = null, token = null } = {}) {
+export function markTodoRun(id, { error = null, token = null, silent = false } = {}) {
     const store = readStore();
     const item = store.items.find((row) => row.id === id);
     if (!item) return null;
@@ -875,6 +952,16 @@ export function markTodoRun(id, { error = null, token = null } = {}) {
     }
     const delivered = pendingSlotDelivered(item);
     item.lastRunAt = now.toISOString();
+    item.runs = [...(Array.isArray(item.runs) ? item.runs : []), { at: item.lastRunAt, silent: Boolean(silent), error: error || null }].slice(
+        -MAX_RUNS,
+    );
+    // 수동 실행(테스트 run): 슬롯/상태를 소비하지 않고 기록만 남긴다.
+    if (running?.manual) {
+        if (error && error !== "stopped_by_user") item.lastError = { at: item.lastRunAt, message: clip(error, 300) };
+        else if (!error) item.lastError = null;
+        writeStore(store);
+        return publicTodo(item);
+    }
     const needBump = !running?.advanced && !delivered;
     if (error === "stopped_by_user") {
         if (needBump) bumpNextRun(item, now);
@@ -917,7 +1004,7 @@ export function reconcileRuns() {
         const slotMs = Date.parse(item.running.slot || "");
         if (item.kind === "at" && Number.isFinite(slotMs) && slotMs > now - 86_400_000) {
             item.nextRunAt = item.running.slot;
-        } else if (item.assigneeId) {
+        } else if (executorIdOf(item)) {
             item.lastError = { at: new Date().toISOString(), message: "interrupted" };
         }
         item.running = null;
@@ -929,7 +1016,8 @@ export function reconcileRuns() {
 
 export function formatTodosForPrompt(agentId) {
     const { items, suggestions } = listTodos();
-    const open = items.filter((row) => row.status === "open");
+    const open = items.filter((row) => row.status === "open" && (row.list || "user") === "user");
+    const jobs = items.filter((row) => row.status === "open" && (row.list || "user") === agentId);
     const lines = open.map((row) => {
         const when = row.when ? ` · ${row.when}` : "";
         const assigned = row.assignee ? ` · assigned: ${row.assignee.name} (${row.assignee.id})` : " · assigned: none";
@@ -947,8 +1035,17 @@ export function formatTodosForPrompt(agentId) {
         const who = row.agentName || row.agentId || "agent";
         return `- [${row.kind}] ${row.title || row.targetId} — ${who}${row.reason ? `: ${row.reason}` : ""}`;
     });
+    const jobLines = jobs.map((row) => {
+        const when = row.when ? ` · ${row.when}` : "";
+        const paused = row.enabled === false ? " · paused" : "";
+        const last = row.lastRunAt ? ` · last run ${row.lastRunAt}` : "";
+        const err = row.lastError?.message ? ` · last error: ${String(row.lastError.message).slice(0, 80)}` : "";
+        const running = row.running ? " · running" : "";
+        return `- \`${row.id}\` ${row.title}${when}${paused}${running}${last}${err}`;
+    });
     return {
         list: lines.length ? lines.join("\n") : "- (none)",
         suggestions: pending.length ? pending.join("\n") : "- (none)",
+        jobs: jobLines.length ? jobLines.join("\n") : "- (none)",
     };
 }

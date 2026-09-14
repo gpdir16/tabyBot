@@ -1478,6 +1478,15 @@ kbd {
 .td-done-card {
     margin-top: 6px;
 }
+.td-sub-head {
+    margin-bottom: 4px;
+}
+.td-sub-label {
+    margin: var(--sp-2) var(--sp-1) 4px;
+    font-size: var(--fs-s);
+    font-weight: 600;
+    color: var(--text-tertiary);
+}
 
 .td-row {
     position: relative;
@@ -1562,6 +1571,18 @@ kbd {
 .td-check:disabled {
     opacity: 0.45;
 }
+.td-check.td-pause .icon {
+    opacity: 1;
+    width: 12px;
+    height: 12px;
+    color: var(--text-tertiary);
+}
+.td-check.td-pause:hover .icon {
+    color: var(--accent);
+}
+.td-check.td-pause.on .icon {
+    color: #fff;
+}
 .td-row-title {
     font-size: var(--fs-t);
     line-height: 1.4;
@@ -1598,6 +1619,10 @@ kbd {
 }
 .td-when.waiting {
     color: var(--warning);
+    font-weight: 600;
+}
+.td-when.paused {
+    color: var(--text-tertiary);
     font-weight: 600;
 }
 .td-wait-q {

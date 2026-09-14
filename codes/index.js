@@ -1,8 +1,7 @@
 import { ensureUserDir } from "./lib/bootstrap.js";
 import { initTools, shutdownTools } from "./lib/agent/tool-registry.js";
 import { startWebServer } from "./lib/web/server.js";
-import { setScheduleJobHandler, setTodoJobHandler } from "./lib/web/turns.js";
-import { startScheduleScheduler } from "./lib/scheduling/scheduler.js";
+import { setTodoJobHandler } from "./lib/web/turns.js";
 import { startTodoScheduler } from "./lib/todos/scheduler.js";
 import { startUpdateScheduler } from "./lib/update/scheduler.js";
 
@@ -19,9 +18,7 @@ async function main() {
     process.on("SIGTERM", shutdown);
 
     startWebServer();
-    setScheduleJobHandler();
     setTodoJobHandler();
-    startScheduleScheduler();
     startTodoScheduler();
     startUpdateScheduler();
 }

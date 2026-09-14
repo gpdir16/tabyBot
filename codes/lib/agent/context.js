@@ -127,6 +127,7 @@ export function buildSystemMessageContent(lang, { truncateMemory = false, maxMem
         APPROVAL_POLICY: buildApprovalPolicyText(getApprovalLevel(loadUserConfig())),
         TODO_LIST: todoBlocks.list,
         TODO_SUGGEST_LIST: todoBlocks.suggestions,
+        SCHEDULE_JOBS: todoBlocks.jobs,
     };
     return renderSystemPrompt(template, vars).trim();
 }

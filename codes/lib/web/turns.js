@@ -13,13 +13,11 @@ import {
 import { beginAgentSession, endAgentSession, enqueueAgentMessage, isAgentSessionRunning, requestAgentStop } from "../agent/session.js";
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
-import { setScheduleJobHandler as registerScheduleJobHandler } from "../scheduling/scheduler.js";
 import { setTodoHandlers } from "../todos/scheduler.js";
-import { SCHEDULED_TURN_MARKER } from "../tools/schedule-tool.js";
+import { SCHEDULED_TURN_MARKER } from "../tools/todo-tool.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
-import { ensureConversation, getConversationMeta, isValidId, listConversations } from "./conversations.js";
-import { firstAgent, firstAgentId, getAgent } from "../agents-store.js";
+import { ensureConversation, getConversationMeta, listConversations } from "./conversations.js";
 
 function isStoppedByUser(result) {
     return result?.error === "stopped_by_user";
@@ -247,78 +245,21 @@ export function stopConversation(sessionKey) {
     return stoppedActive || stoppedQueued;
 }
 
-function scheduleConversationId(job) {
-    const id = String(job.conversationId || "").trim();
-    if (isValidId(id)) return id;
-    return getAgent(job.agentId)?.uuid || firstAgent()?.uuid || "";
-}
-
-function buildScheduleFirePrompt(job) {
-    return `${SCHEDULED_TURN_MARKER}
-Scheduled task "${job.name}"${job.schedule ? ` (${job.schedule})` : ""}. This is an automatic run, not a user message.
-
-Task:
-${job.prompt}
-
-Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"). If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
-}
-
-// 스케줄 결과는 지정한 대화에 올라간다. 빈 확인은 알림하지 않는다.
-export function setScheduleJobHandler() {
-    registerScheduleJobHandler(async (job) => {
-        const lang = loadUserConfig().language || "en";
-        const conversationId = scheduleConversationId(job);
-        const agentId = job.agentId || firstAgentId();
-        ensureConversation(conversationId);
-        try {
-            const result = await runTurn({
-                sessionKey: conversationId,
-                agentId,
-                userText: buildScheduleFirePrompt(job),
-                quietEmpty: true,
-                automated: true,
-            });
-            if (!result || isSilentReply(result)) return result;
-            if (result.error) {
-                emit({
-                    type: "notice",
-                    level: "error",
-                    text: `⏰ ${job.name}: ${result.errorDetail || result.error}`,
-                    conversationId,
-                });
-                return result;
-            }
-            const body = result.text?.trim() || t("schedule_no_output", lang);
-            emit({ type: "notice", level: "info", text: `⏰ ${job.name}: ${body.slice(0, 400)}`, conversationId });
-            emit({ type: "conversations_changed" });
-            return result;
-        } catch (err) {
-            console.error("Schedule job error:", err?.stack || err);
-            emit({
-                type: "notice",
-                level: "error",
-                text: `⏰ ${job.name}: ${err?.message || String(err)}`,
-                conversationId,
-            });
-            return { error: err?.message || String(err), silent: true };
-        }
-    });
-}
-
-function buildTodoFirePrompt(item) {
+function buildFirePrompt(item) {
     const when = item.when ? ` (${item.when})` : "";
     const body = String(item.prompt || "").trim() || `Do the task: ${item.title}`;
+    const isJob = (item.list || "user") !== "user";
     const editNote =
         item.lastEdit?.by === "user"
             ? `\nNote: the user last edited this task at ${item.lastEdit.at}${item.lastEdit.fields?.length ? ` (changed: ${item.lastEdit.fields.join(", ")})` : ""}. The text below is the current version.`
             : "";
     return `${SCHEDULED_TURN_MARKER}
-Agent todo "${item.title}"${when}. This is an automatic run of a subcontracted task, not a user message.${editNote}
+${isJob ? `Scheduled job` : `Agent todo`} "${item.title}"${when}. This is an automatic run${isJob ? "" : " of a subcontracted task"}, not a user message.${editNote}
 
 Task:
 ${body}
 
-Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
+Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"). If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
 }
 
 export function setTodoJobHandler() {
@@ -326,12 +267,13 @@ export function setTodoJobHandler() {
         emit,
         async runAgent({ agent, item, sessionKey }) {
             const lang = loadUserConfig().language || "en";
+            const isJob = (item.list || "user") !== "user";
             ensureConversation(sessionKey);
             try {
                 const result = await runTurn({
                     sessionKey,
                     agentId: agent.id,
-                    userText: buildTodoFirePrompt(item),
+                    userText: buildFirePrompt(item),
                     quietEmpty: true,
                     automated: true,
                     todoId: item.id,
@@ -343,14 +285,19 @@ export function setTodoJobHandler() {
                         emit({
                             type: "notice",
                             level: "error",
-                            text: `❌ ${item.title}: ${result.errorDetail || result.error}`,
+                            text: `${isJob ? "⏰" : "❌"} ${item.title}: ${result.errorDetail || result.error}`,
                             conversationId: sessionKey,
                         });
                     }
                     return result;
                 }
                 const body = result.text?.trim() || t("schedule_no_output", lang);
-                emit({ type: "notice", level: "info", text: `✅ ${item.title}: ${body.slice(0, 400)}`, conversationId: sessionKey });
+                emit({
+                    type: "notice",
+                    level: "info",
+                    text: `${isJob ? "⏰" : "✅"} ${item.title}: ${body.slice(0, 400)}`,
+                    conversationId: sessionKey,
+                });
                 emit({ type: "conversations_changed" });
                 return result;
             } catch (err) {
@@ -358,7 +305,7 @@ export function setTodoJobHandler() {
                 emit({
                     type: "notice",
                     level: "error",
-                    text: `❌ ${item.title}: ${err?.message || String(err)}`,
+                    text: `${isJob ? "⏰" : "❌"} ${item.title}: ${err?.message || String(err)}`,
                     conversationId: sessionKey,
                 });
                 return { error: err?.message || String(err), silent: true };

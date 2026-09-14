@@ -678,7 +678,7 @@ export function startWebServer() {
         const item = getTodo(ctx.params.todoId);
         if (!item) return ctx.json404();
         if (item.status !== "open") return ctx.json400("not_open");
-        const agent = item.assigneeId ? getAgent(item.assigneeId) : null;
+        const agent = item.executor?.id ? getAgent(item.executor.id) : null;
         if (!agent) return ctx.json400("not_assigned");
         const queued = queueTodoNow(agent, item);
         if (queued.error) return ctx.json400(queued.error);
