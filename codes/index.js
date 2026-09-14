@@ -1,8 +1,9 @@
 import { ensureUserDir } from "./lib/bootstrap.js";
 import { initTools, shutdownTools } from "./lib/agent/tool-registry.js";
 import { startWebServer } from "./lib/web/server.js";
-import { setScheduleJobHandler } from "./lib/web/turns.js";
+import { setScheduleJobHandler, setTodoJobHandler } from "./lib/web/turns.js";
 import { startScheduleScheduler } from "./lib/scheduling/scheduler.js";
+import { startTodoScheduler } from "./lib/todos/scheduler.js";
 import { startUpdateScheduler } from "./lib/update/scheduler.js";
 
 async function shutdown() {
@@ -19,7 +20,9 @@ async function main() {
 
     startWebServer();
     setScheduleJobHandler();
+    setTodoJobHandler();
     startScheduleScheduler();
+    startTodoScheduler();
     startUpdateScheduler();
 }
 

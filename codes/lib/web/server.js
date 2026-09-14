@@ -19,15 +19,40 @@ import {
     pollGithubCopilotDeviceFlow,
 } from "../llm/github-copilot-tokens.js";
 import { NSFW_LEVELS, normalizeNsfwLevel, APPROVAL_LEVELS, normalizeApprovalLevel } from "../user-settings.js";
-import { listAgents, addAgent, updateAgent as storeUpdateAgent, removeAgent, agentColor, firstAgent, DEFAULT_AGENT_NAME } from "../agents-store.js";
+import {
+    listAgents,
+    addAgent,
+    updateAgent as storeUpdateAgent,
+    removeAgent,
+    agentColor,
+    firstAgent,
+    DEFAULT_AGENT_NAME,
+    getAgent,
+} from "../agents-store.js";
+import {
+    acceptHandoff,
+    addTodo,
+    approveSuggestion,
+    clearAssignee,
+    completeTodo,
+    getTodo,
+    listTodos,
+    purgeAgentTodos,
+    reopenTodo,
+    rejectSuggestion,
+    removeTodo,
+    updateTodo,
+} from "../todos/store.js";
+import { queueTodoNow } from "../todos/scheduler.js";
 import * as conversationsStore from "./conversations.js";
 import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLOAD_BYTES, UploadTooLargeError, EmptyUploadError } from "./files.js";
-import { subscribe, emit, eventsSince } from "./bus.js";
+import { subscribe, emit, eventsSince, currentSeq } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import { createRouter } from "./http.js";
 import { dispatchMessage, recoverInterruptedTurns, stopConversation } from "./turns.js";
 import { restartUpdateScheduler } from "../update/scheduler.js";
-import { listRunningSessionKeys } from "../agent/session.js";
+import { listRunningSessionKeys, requestAgentStop } from "../agent/session.js";
+import { cancelQueuedAgentWork } from "../agent-queue.js";
 import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
 const PUBLIC_DIR = path.join(CODES_DIR, "public");
@@ -218,6 +243,7 @@ function buildSettingsPayload() {
 export function startWebServer() {
     const router = createRouter({ publicDir: PUBLIC_DIR, token: WEB_TOKEN });
     router.setSseSubscribe(subscribe);
+    router.setSeqNow(currentSeq);
 
     // ---- 상태 ----
     router.add("GET", "/api/bootstrap", (ctx) => {
@@ -241,7 +267,7 @@ export function startWebServer() {
         }
     });
     router.add("GET", "/api/events/poll", (ctx) => {
-        ctx.json200(eventsSince(ctx.query.since));
+        ctx.json200(eventsSince(ctx.query.since, ctx.query.recentMs));
     });
 
     // ---- 대화 ----
@@ -342,7 +368,9 @@ export function startWebServer() {
             "Content-Disposition": file.mime.startsWith("image/") ? "inline" : `attachment; filename="${encodeURIComponent(file.name)}"`,
             "Cache-Control": "private, max-age=3600",
         });
-        fs.createReadStream(file.filePath).pipe(ctx.res);
+        fs.createReadStream(file.filePath)
+            .on("error", () => ctx.res.destroy())
+            .pipe(ctx.res);
     });
 
     // ---- OAuth 디바이스 플로우 ----
@@ -481,7 +509,10 @@ export function startWebServer() {
 
     // ---- 모델 목록 ----
     router.add("POST", "/api/models/fetch", async (ctx) => {
-        const body = await ctx.json().catch(() => ({}));
+        const body = await ctx.json().catch((err) => {
+            if (err?.code === "BAD_JSON") throw err;
+            return {};
+        });
         const config = loadUserConfig();
         try {
             let provider;
@@ -545,8 +576,113 @@ export function startWebServer() {
         const result = removeAgent(ctx.params.id);
         if (result.error === "last_agent") return ctx.json400("last_agent");
         if (result.error) return ctx.json404();
+        if (result.agent?.uuid) {
+            try {
+                cancelQueuedAgentWork(result.agent.uuid);
+                requestAgentStop(result.agent.uuid);
+            } catch (_) {}
+        }
+        if (purgeAgentTodos(ctx.params.id).changed) emit({ type: "todos_changed" });
         emit({ type: "conversations_changed" });
         ctx.json200({ agents: listAgents().map(publicAgent) });
+    });
+
+    function todoPayload() {
+        return listTodos();
+    }
+
+    function emitTodos() {
+        emit({ type: "todos_changed" });
+    }
+
+    router.add("GET", "/api/todos", (ctx) => {
+        ctx.json200(todoPayload());
+    });
+
+    router.add("POST", "/api/todos", async (ctx) => {
+        const body = await ctx.json().catch(() => null);
+        if (body == null || typeof body !== "object" || Array.isArray(body)) return ctx.json400("invalid_json");
+        const result = addTodo({ ...body, createdBy: "user" });
+        if (result.error) return ctx.json400(result.error);
+        emitTodos();
+        ctx.json200({ ...todoPayload(), item: result.item });
+    });
+
+    router.add("PATCH", "/api/todos/:todoId", async (ctx) => {
+        const body = await ctx.json().catch(() => null);
+        if (body == null || typeof body !== "object" || Array.isArray(body)) return ctx.json400("invalid_json");
+        const result = updateTodo(ctx.params.todoId, body);
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error === "conflict") return ctx.json409("conflict");
+        if (result.error) return ctx.json400(result.error);
+        emitTodos();
+        ctx.json200({ ...todoPayload(), item: result.item });
+    });
+
+    router.add("DELETE", "/api/todos/:todoId", (ctx) => {
+        const result = removeTodo(ctx.params.todoId);
+        if (result.error) return ctx.json404();
+        emitTodos();
+        ctx.json200(todoPayload());
+    });
+
+    router.add("POST", "/api/todos/:todoId/complete", (ctx) => {
+        const result = completeTodo(ctx.params.todoId);
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error) return ctx.json400(result.error);
+        emitTodos();
+        ctx.json200({ ...todoPayload(), item: result.item });
+    });
+
+    router.add("POST", "/api/todos/:todoId/reopen", (ctx) => {
+        const result = reopenTodo(ctx.params.todoId);
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error) return ctx.json400(result.error);
+        emitTodos();
+        ctx.json200({ ...todoPayload(), item: result.item });
+    });
+
+    router.add("POST", "/api/todos/suggestions/:id/approve", async (ctx) => {
+        const body = await ctx.json().catch(() => null);
+        const result = approveSuggestion(ctx.params.id, { fallbackTimeZone: body?.timezone });
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error) return ctx.json400(result.error);
+        emitTodos();
+        ctx.json200({ ...todoPayload(), ...result });
+    });
+
+    router.add("POST", "/api/todos/suggestions/:id/reject", (ctx) => {
+        const result = rejectSuggestion(ctx.params.id);
+        if (result.error) return ctx.json404();
+        emitTodos();
+        ctx.json200(todoPayload());
+    });
+
+    router.add("POST", "/api/todos/:todoId/handoff/:agentId", (ctx) => {
+        const result = acceptHandoff(ctx.params.todoId, ctx.params.agentId);
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error === "offer_not_found") return ctx.json400("offer_not_found");
+        if (result.error) return ctx.json400(result.error);
+        emitTodos();
+        ctx.json200({ ...todoPayload(), item: result.item });
+    });
+
+    router.add("POST", "/api/todos/:todoId/unassign", (ctx) => {
+        const result = clearAssignee(ctx.params.todoId);
+        if (result.error) return ctx.json404();
+        emitTodos();
+        ctx.json200({ ...todoPayload(), item: result.item });
+    });
+
+    router.add("POST", "/api/todos/:todoId/run", (ctx) => {
+        const item = getTodo(ctx.params.todoId);
+        if (!item) return ctx.json404();
+        if (item.status !== "open") return ctx.json400("not_open");
+        const agent = item.assigneeId ? getAgent(item.assigneeId) : null;
+        if (!agent) return ctx.json400("not_assigned");
+        const queued = queueTodoNow(agent, item);
+        if (queued.error) return ctx.json400(queued.error);
+        ctx.json200({ ok: true, ...todoPayload() });
     });
 
     const server = http.createServer((req, res) => router.handle(req, res));

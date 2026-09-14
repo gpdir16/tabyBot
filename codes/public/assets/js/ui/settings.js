@@ -79,6 +79,7 @@
         keyEditing = false;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
         const wasChatOpen = document.body.classList.contains("mobile-chat");
+        T.todosUI?.hide?.();
         T.sidebar?.showChat();
         mobileFromList = !wasChatOpen && document.body.classList.contains("mobile-chat");
         pushed = false;

@@ -6,7 +6,7 @@
     "use strict";
 
     const { state } = T;
-    const t = (k) => T.i18n.t(k);
+    const t = (k, v) => T.i18n.t(k, v);
 
     const listEl = document.getElementById("botList");
     const searchEl = document.getElementById("searchInput");
@@ -30,12 +30,7 @@
     }
 
     function initials(name) {
-        return (
-            String(name || "?")
-                .trim()
-                .slice(0, 1)
-                .toUpperCase() || "?"
-        );
+        return ([...String(name || "?").trim()][0] || "?").toUpperCase();
     }
 
     function matches(bot) {
@@ -142,8 +137,8 @@
         const row = T.h(
             "div",
             {
-                class: "bot-row" + (state.state.currentId === bot.uuid && !T.settingsUI.isOpen() ? " active" : ""),
-                "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() ? "true" : null,
+                class: "bot-row" + (state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""),
+                "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? "true" : null,
                 role: "button",
                 "aria-label": `${bot.name}. ${previewText}`.trim(),
                 tabindex: "0",
@@ -215,12 +210,12 @@
     function showMobileList() {
         if (!isMobile()) return;
         setMobileChat(false);
-        if (/^(\/a\/|\/s\/)/.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
+        if (/^(\/a\/|\/s\/|\/t(?:\/|$))/.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
         T.app?.renderRoute();
     }
 
     function setMobileChatFromRoute() {
-        if (isMobile()) setMobileChat(/^(\/a\/|\/s\/)/.test(location.pathname), { animate: false });
+        if (isMobile()) setMobileChat(/^(\/a\/|\/s\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
     }
 
     function setMobileOpen(open) {
@@ -235,6 +230,7 @@
     function openBot(bot) {
         try {
             if (T.settingsUI.isOpen()) T.settingsUI.hide();
+            if (T.todosUI?.isOpen?.()) T.todosUI.hide();
             history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid)}`);
         } catch (_) {}
         if (isMobile()) setMobileChat(true);
@@ -331,13 +327,72 @@
         render();
     }
 
+    function todosPreview() {
+        const open = (state.state.todos || []).filter((row) => row.status === "open" && !row.periodDone);
+        const n = (state.state.todoSuggestions || []).length;
+        if (n) return t("todosInbox", { n });
+        if (!open.length) return t("todosNone");
+        if (open.length === 1) return open[0].title;
+        return t("todosCount", { n: open.length });
+    }
+
+    function todosVisible() {
+        if (!query) return true;
+        const q = query.toLowerCase();
+        const hay = `${t("todos")} todos ${todosPreview()}`.toLowerCase();
+        return hay.includes(q);
+    }
+
+    function openTodos() {
+        try {
+            if (T.settingsUI.isOpen()) T.settingsUI.hide();
+            if (!/^\/t\/?$/.test(location.pathname)) history.pushState(null, "", "/t");
+        } catch (_) {}
+        if (isMobile()) setMobileChat(true);
+        T.app?.renderRoute();
+    }
+
+    function buildTodosRow() {
+        const preview = todosPreview();
+        const active = T.todosUI?.isOpen?.();
+        const pending = (state.state.todoSuggestions || []).length;
+        const row = T.h(
+            "div",
+            {
+                class: "bot-row" + (active ? " active" : ""),
+                "aria-current": active ? "page" : null,
+                role: "button",
+                "aria-label": `${t("todos")}. ${preview}`,
+                tabindex: "0",
+            },
+            [
+                T.h("span", { class: "bot-avatar todo-avatar" }, [T.icon("list", "icon-sm")]),
+                T.h("span", { class: "bot-meta" }, [
+                    T.h("span", { class: "bot-name" }, [
+                        document.createTextNode(t("todos")),
+                        pending ? T.h("span", { class: "attn-dot", "aria-hidden": "true" }) : null,
+                    ]),
+                    T.h("span", { class: "bot-persona" + (preview === t("todosNone") ? " is-empty" : ""), text: preview }),
+                ]),
+            ],
+        );
+        row.addEventListener("click", openTodos);
+        row.addEventListener("keydown", (e) => {
+            if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
+                e.preventDefault();
+                openTodos();
+            }
+        });
+        return row;
+    }
+
     /* ── 렌더 ───────────────────────────────────────────────── */
     function render() {
         if (!listEl) return;
         listEl.replaceChildren();
-        for (const bot of state.state.bots.filter(matches)) {
-            listEl.append(buildRow(bot));
-        }
+        const bots = state.state.bots.filter(matches);
+        for (const bot of bots) listEl.append(buildRow(bot));
+        if (todosVisible()) listEl.append(buildTodosRow());
         if (!listEl.children.length) {
             listEl.append(T.h("div", { class: "sb-empty", text: t("noBots") }));
         }
@@ -465,6 +520,7 @@
         state.on("turn_done", render);
         state.on("settings", render);
         state.on("conn", renderConn);
+        state.on("todos", render);
         T.i18n.onChange(syncMobileNavigation);
 
         initResize();

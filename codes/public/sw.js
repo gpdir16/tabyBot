@@ -91,14 +91,52 @@ self.addEventListener("push", (event) => {
     );
 });
 
+let appToken = "";
+
+self.addEventListener("message", (event) => {
+    if (event.data?.type === "auth-token") appToken = String(event.data.token || "");
+});
+
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
     const target = (event.notification.data && event.notification.data.url) || "/";
     event.waitUntil(
         self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
             const existing = list.find((c) => "focus" in c);
-            if (existing) return existing.focus();
-            if (self.clients.openWindow) return self.clients.openWindow(target);
+            if (existing) {
+                try {
+                    existing.postMessage({ type: "sw-navigate", url: target });
+                } catch (_) {}
+                return existing.focus();
+            }
+            const url = appToken ? target + (target.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(appToken) : target;
+            if (self.clients.openWindow) return self.clients.openWindow(url);
         }),
+    );
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+    const b64ToBytes = (b64) => {
+        const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+        const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+        const out = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+    };
+    const auth = appToken ? { Authorization: "Bearer " + appToken } : {};
+    event.waitUntil(
+        (async () => {
+            const cfg = await fetch("/api/push/config", { headers: auth }).then((r) => (r.ok ? r.json() : null));
+            if (!cfg?.publicKey) return;
+            const sub = await self.registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: b64ToBytes(cfg.publicKey),
+            });
+            await fetch("/api/push/subscribe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...auth },
+                body: JSON.stringify(sub.toJSON()),
+            });
+        })().catch(() => {}),
     );
 });

@@ -149,6 +149,10 @@
                 <path d="M12 3.5L2.5 19.5h19L12 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
                 <path d="M12 10v4M12 16.8h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
             </symbol>
+            <symbol id="i-list" viewBox="0 0 24 24">
+                <path d="M8 6h12M8 12h12M8 18h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                <path d="M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+            </symbol>
             <symbol id="i-error" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8" />
                 <path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
@@ -203,6 +207,7 @@
 
                 <div id="scroller">
                     <div id="thread" class="thread"></div>
+                    <section id="todosPage" class="todos-page thread" hidden aria-label="todos" tabindex="-1"></section>
                 </div>
 
                 <button id="jumpLatest" class="jump-latest">
@@ -216,6 +221,16 @@
                         <div class="composer-row">
                             <button id="btnAttach" class="btn-icon" data-i18n-tip="attachImage" data-i18n-aria="attachImage">
                                 <svg class="icon"><use href="#i-paperclip" /></svg>
+                            </button>
+                            <button
+                                id="btnHandoff"
+                                class="btn-icon hidden"
+                                data-i18n-tip="todosAssignLabel"
+                                data-i18n-aria="todosAssignLabel"
+                                aria-haspopup="menu"
+                                aria-expanded="false"
+                            >
+                                <span class="at-sign" aria-hidden="true">@</span>
                             </button>
                             <input id="fileInput" type="file" multiple hidden />
                             <textarea id="composerInput" rows="1" enterkeyhint="enter" data-i18n-ph="sendPlaceholder"></textarea>
@@ -259,6 +274,7 @@
         <script src="assets/js/ui/chat.js"></script>
         <script src="assets/js/ui/composer.js"></script>
         <script src="assets/js/ui/settings.js"></script>
+        <script src="assets/js/ui/todos.js"></script>
         <script src="assets/js/ui/onboarding.js"></script>
         <script src="assets/js/app.js"></script>
     </body>

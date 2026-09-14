@@ -14,24 +14,28 @@
     const btnSend = document.getElementById("btnSend");
     const btnStop = document.getElementById("btnStop");
     const btnAttach = document.getElementById("btnAttach");
+    const btnHandoff = document.getElementById("btnHandoff");
     const fileInput = document.getElementById("fileInput");
 
     const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
     // 모바일 구분은 화면 크기(≤860px)로 한다 — sidebar.js와 동일 기준. 좁은 화면엔 Shift가 없으므로 Enter 전송 대신 기본 줄바꿈 유지
-    const isTouch = window.matchMedia?.("(max-width: 860px)").matches;
+    const touchMq = window.matchMedia?.("(max-width: 860px)");
 
     // attachments: [{ id: string|null, name, mime, size, objUrl, uploading }]
     let attachments = [];
+    let handoffTo = null;
+    let handMenu = null;
     let dragDepth = 0;
     let draftId = null;
     const drafts = new Map(); // uuid → { text, attachments }
+    const HOME_DRAFT = "__home__";
 
     /* ── 자동성장 ───────────────────────────────────────────── */
     function grow() {
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 200) + "px";
-        box.classList.toggle("multiline", input.scrollHeight > 40 || attachments.length > 0);
+        box.classList.toggle("multiline", input.scrollHeight > 40 || attachments.length > 0 || !!handoffTo);
     }
 
     function updateSendState() {
@@ -63,7 +67,31 @@
 
     function renderChips() {
         chipsEl.textContent = "";
-        chipsEl.classList.toggle("hidden", !attachments.length);
+        const hand = handoffTo && T.todosUI?.isOpen?.() ? handoffTo : null;
+        chipsEl.classList.toggle("hidden", !attachments.length && !hand);
+        btnHandoff.classList.toggle("has", !!hand);
+        btnHandoff.setAttribute("aria-expanded", handMenu ? "true" : "false");
+        if (hand) {
+            const chip = T.h("div", { class: "chip cm-hand" }, [
+                T.h("span", { class: "td-dot", style: `background:${hand.color || "var(--accent)"}` }),
+                T.h("span", { class: "cm-hand-name", text: hand.name }),
+                T.h(
+                    "button",
+                    {
+                        class: "chip-x",
+                        "aria-label": t("todosUnassign"),
+                        onclick(e) {
+                            e.stopPropagation();
+                            handoffTo = null;
+                            renderChips();
+                            grow();
+                        },
+                    },
+                    [T.icon("x")],
+                ),
+            ]);
+            chipsEl.append(chip);
+        }
         for (const a of attachments) {
             const chip = T.h("div", { class: "chip" });
             const preview = a.mime?.startsWith("image/")
@@ -88,7 +116,7 @@
                     "button",
                     {
                         class: "chip-x",
-                        "aria-label": t("cancel"),
+                        "aria-label": t("removeAttachment"),
                         onclick(e) {
                             e.stopPropagation();
                             removeAttachment(a);
@@ -113,6 +141,10 @@
     }
 
     function addFiles(files) {
+        if (T.todosUI?.isOpen?.()) {
+            T.toast.show("info", t("todosNoAttach"));
+            return;
+        }
         for (const f of files) {
             if (!f.size) {
                 T.toast.show("error", t("emptyFile"));
@@ -151,8 +183,139 @@
     }
 
     /* ── 전송 / 정지 ────────────────────────────────────────── */
+    function syncMode() {
+        const todo = T.todosUI?.isOpen?.();
+        input.placeholder = todo ? t("todosQuickAdd") : t("sendPlaceholder");
+        box.classList.toggle("todo", !!todo);
+        btnAttach.classList.toggle("hidden", !!todo);
+        btnHandoff.classList.toggle("hidden", !todo);
+        if (!todo) closeHandMenu();
+        renderChips();
+        btnSend.querySelector("use")?.setAttribute("href", todo ? "#i-plus" : "#i-send");
+        btnSend.setAttribute("aria-label", t(todo ? "todosQuickAdd" : "send"));
+        btnSend.setAttribute("data-i18n-tip", todo ? "todosQuickAdd" : "send");
+        btnSend.setAttribute("data-tip", t(todo ? "todosQuickAdd" : "send"));
+        if (todo) input.maxLength = 200;
+        else input.removeAttribute("maxlength");
+        if (todo) loadDraft("__todos__");
+        else loadDraft(state.state.currentId || null);
+        grow();
+        updateSendState();
+        refreshRunState();
+    }
+
+    /* ── 할 일 @ 핸드오프 선택 ────────────────────────────── */
+    function closeHandMenu() {
+        if (!handMenu) return;
+        handMenu.remove();
+        handMenu = null;
+        btnHandoff.setAttribute("aria-expanded", "false");
+        document.removeEventListener("pointerdown", onHandPointer, true);
+        document.removeEventListener("keydown", onHandKey, true);
+    }
+    function onHandPointer(e) {
+        if (handMenu && !handMenu.contains(e.target) && !btnHandoff.contains(e.target)) closeHandMenu();
+    }
+    function onHandKey(e) {
+        if (e.key === "Escape") {
+            e.stopPropagation();
+            closeHandMenu();
+            btnHandoff.focus();
+        }
+    }
+    function toggleHandMenu() {
+        if (handMenu) {
+            closeHandMenu();
+            return;
+        }
+        const bots = (state.state.bots || []).filter((b) => b.id);
+        if (!bots.length) return;
+        if (handoffTo && !bots.some((b) => b.id === handoffTo.id)) {
+            handoffTo = null;
+            renderChips();
+            grow();
+        }
+        const menu = T.h("div", { class: "menu cm-hand-menu", role: "menu" });
+        if (handoffTo) {
+            menu.append(
+                T.h("button", {
+                    role: "menuitem",
+                    onclick(e) {
+                        e.stopPropagation();
+                        handoffTo = null;
+                        closeHandMenu();
+                        renderChips();
+                        grow();
+                        input.focus();
+                    },
+                    text: t("todosUser"),
+                }),
+            );
+        }
+        for (const b of bots) {
+            menu.append(
+                T.h(
+                    "button",
+                    {
+                        role: "menuitem",
+                        class: b.id === handoffTo?.id ? "on" : "",
+                        onclick(e) {
+                            e.stopPropagation();
+                            handoffTo = { id: b.id, name: b.name, color: b.color };
+                            closeHandMenu();
+                            renderChips();
+                            grow();
+                            input.focus();
+                        },
+                    },
+                    [T.h("span", { class: "td-dot", style: `background:${b.color || "var(--accent)"}` }), T.h("span", { text: b.name })],
+                ),
+            );
+        }
+        document.body.append(menu);
+        handMenu = menu;
+        btnHandoff.setAttribute("aria-expanded", "true");
+        const r = btnHandoff.getBoundingClientRect();
+        const w = menu.offsetWidth;
+        const left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+        menu.style.left = `${left}px`;
+        menu.style.top = `${Math.max(8, r.top - menu.offsetHeight - 6)}px`;
+        document.addEventListener("pointerdown", onHandPointer, true);
+        document.addEventListener("keydown", onHandKey, true);
+        menu.querySelector("button")?.focus();
+        if (T.tooltip) T.tooltip.hide();
+    }
+
     async function send() {
         if (btnSend.disabled) return;
+        if (T.todosUI?.isOpen?.()) {
+            const text = input.value.trim();
+            if (!text) return;
+            if (handoffTo && !(state.state.bots || []).some((b) => b.id === handoffTo.id)) {
+                handoffTo = null;
+                renderChips();
+                grow();
+                T.toast.show("error", t("todosAssigneeRemoved"));
+                return;
+            }
+            const handId = handoffTo?.id || null;
+            input.value = "";
+            grow();
+            updateSendState();
+            const ok = await T.todosUI.addFromComposer(text, handId);
+            if (!ok) {
+                if (T.todosUI?.isOpen?.()) {
+                    const cur = input.value.trim();
+                    restore(cur && cur !== text ? cur + "\n" + text : text, []);
+                    input.focus();
+                } else {
+                    drafts.set("__todos__", { text, attachments: [] });
+                }
+            } else {
+                input.focus();
+            }
+            return;
+        }
         const text = input.value.trim();
         const readyAtts = attachments
             .filter((a) => !a.uploading)
@@ -168,8 +331,16 @@
         grow();
 
         const ok = await T.chat.submitMessage({ text, attachments: readyAtts });
-        if (!ok) restore(text, sent);
-        else if (state.state.currentId) drafts.delete(state.state.currentId);
+        if (!ok) {
+            restore(text, sent);
+        } else {
+            for (const a of sent) {
+                try {
+                    URL.revokeObjectURL(a.objUrl);
+                } catch (_) {}
+            }
+            if (state.state.currentId) drafts.delete(state.state.currentId);
+        }
         input.focus();
     }
 
@@ -196,7 +367,7 @@
     /* ── 실행 중 표시 ───────────────────────────────────────── */
     function refreshRunState() {
         const c = state.currentConv();
-        const running = !!(c && c.live);
+        const running = !!(c && c.live) && !T.todosUI?.isOpen?.();
         btnStop.classList.toggle("hidden", !running);
         btnSend.classList.toggle("hidden", running);
         btnStop.tabIndex = running ? 0 : -1;
@@ -210,13 +381,14 @@
     }
 
     function loadDraft(id) {
-        if (draftId === id) return;
+        const key = id || HOME_DRAFT;
+        if (draftId === key) return;
         if (draftId) saveDraft();
-        else if (id && (input.value || attachments.length)) {
-            drafts.set(id, { text: input.value, attachments: attachments.slice() });
+        else if (input.value || attachments.length) {
+            drafts.set(key, { text: input.value, attachments: attachments.slice() });
         }
-        draftId = id || null;
-        const d = (id && drafts.get(id)) || { text: "", attachments: [] };
+        draftId = key;
+        const d = drafts.get(key) || { text: "", attachments: [] };
         input.value = d.text || "";
         attachments = Array.isArray(d.attachments) ? d.attachments.slice() : [];
         renderChips();
@@ -234,7 +406,7 @@
         input.addEventListener("keydown", (e) => {
             e.stopPropagation();
             // IME 조합(한/일 입력) 중 Enter는 전송하지 않는다
-            if (e.key === "Enter" && !e.shiftKey && !isTouch && !e.isComposing && e.keyCode !== 229) {
+            if (e.key === "Enter" && !e.shiftKey && !touchMq?.matches && !e.isComposing && e.keyCode !== 229) {
                 e.preventDefault();
                 send();
             }
@@ -243,6 +415,10 @@
         btnSend.addEventListener("click", send);
         btnStop.addEventListener("click", stop);
         btnAttach.addEventListener("click", () => fileInput.click());
+        btnHandoff.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleHandMenu();
+        });
         fileInput.addEventListener("change", () => {
             addFiles([...fileInput.files]);
             fileInput.value = "";
@@ -283,11 +459,16 @@
         state.on("live", refreshRunState);
         state.on("turn_done", refreshRunState);
         state.on("current", (id) => {
+            if (T.todosUI?.isOpen?.()) {
+                syncMode();
+                return;
+            }
             loadDraft(id);
+            input.placeholder = t("sendPlaceholder");
             refreshRunState();
         });
         T.i18n.onChange(() => {
-            input.placeholder = t("sendPlaceholder");
+            input.placeholder = T.todosUI?.isOpen?.() ? t("todosQuickAdd") : t("sendPlaceholder");
         });
 
         grow();
@@ -304,5 +485,5 @@
         saveDraft();
     }
 
-    T.composer = { init, setValue };
+    T.composer = { init, setValue, syncMode };
 })((window.Taby = window.Taby || {}));

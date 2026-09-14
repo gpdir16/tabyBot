@@ -50,15 +50,29 @@ function withSeed(agents) {
     return { agents, mutated };
 }
 
+let agentsCache = null;
+
+function statMtime() {
+    try {
+        return fs.statSync(AGENTS_PATH).mtimeMs;
+    } catch {
+        return -1;
+    }
+}
+
 export function loadAgentsStore() {
+    const mtime = statMtime();
+    if (agentsCache && mtime !== -1 && agentsCache.mtime === mtime) return agentsCache.store;
     const raw = readJson(AGENTS_PATH, { agents: [] });
     const { agents, mutated } = withSeed(Array.isArray(raw?.agents) ? raw.agents.filter((a) => a && typeof a.id === "string") : []);
     if (mutated) writeJson(AGENTS_PATH, { agents });
-    return { agents };
+    agentsCache = { mtime: mutated ? statMtime() : mtime, store: { agents } };
+    return agentsCache.store;
 }
 
 export function saveAgentsStore(store) {
     writeJson(AGENTS_PATH, { agents: store.agents || [] });
+    agentsCache = { mtime: statMtime(), store };
 }
 
 export function listAgents() {

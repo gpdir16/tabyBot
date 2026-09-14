@@ -14,6 +14,7 @@ import { beginAgentSession, endAgentSession, enqueueAgentMessage, isAgentSession
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
 import { setScheduleJobHandler as registerScheduleJobHandler } from "../scheduling/scheduler.js";
+import { setTodoHandlers } from "../todos/scheduler.js";
 import { SCHEDULED_TURN_MARKER } from "../tools/schedule-tool.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
@@ -60,9 +61,19 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null, 
     }
 }
 
-export async function runTurn({ sessionKey, agentId, userText, displayText = null, attachments = [], recovery = false, quietEmpty = false }) {
+export async function runTurn({
+    sessionKey,
+    agentId,
+    userText,
+    displayText = null,
+    attachments = [],
+    recovery = false,
+    quietEmpty = false,
+    automated = false,
+    todoId = null,
+}) {
     const lang = loadUserConfig().language || "en";
-    const session = beginAgentSession(sessionKey);
+    const session = beginAgentSession(sessionKey, { automated });
     let recoveryBaseMessages = recovery ? lastChatTurnMessages(sessionKey) : null;
     let resumed = recovery;
     const startedAt = Date.now();
@@ -84,6 +95,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
                 agentId,
                 session,
                 quietEmpty,
+                todoId,
                 attachments: appendToRecovery ? [] : attachments,
                 onStatusPhase: (phase, detail) => status(phase, detail),
                 onTextDelta: (text, full) => {
@@ -142,6 +154,7 @@ export async function runTurn({ sessionKey, agentId, userText, displayText = nul
                 stats: result.stats || null,
                 attachments: result.deliveredAttachments || [],
                 error: { code: result.error, detail },
+                automated: automated || undefined,
             });
             return result;
         }
@@ -220,7 +233,7 @@ export function recoverInterruptedTurns() {
 
 export function stopConversation(sessionKey) {
     const stoppedQueued = cancelQueuedAgentWork(sessionKey);
-    const stoppedActive = stoppedQueued ? false : requestAgentStop(sessionKey);
+    const stoppedActive = requestAgentStop(sessionKey);
     if (stoppedQueued || stoppedActive) {
         emit({
             type: "turn_done",
@@ -263,6 +276,7 @@ export function setScheduleJobHandler() {
                 agentId,
                 userText: buildScheduleFirePrompt(job),
                 quietEmpty: true,
+                automated: true,
             });
             if (!result || isSilentReply(result)) return result;
             if (result.error) {
@@ -288,5 +302,81 @@ export function setScheduleJobHandler() {
             });
             return { error: err?.message || String(err), silent: true };
         }
+    });
+}
+
+function buildTodoFirePrompt(item) {
+    const when = item.when ? ` (${item.when})` : "";
+    const body = String(item.prompt || "").trim() || `Do the task: ${item.title}`;
+    const editNote =
+        item.lastEdit?.by === "user"
+            ? `\nNote: the user last edited this task at ${item.lastEdit.at}${item.lastEdit.fields?.length ? ` (changed: ${item.lastEdit.fields.join(", ")})` : ""}. The text below is the current version.`
+            : "";
+    return `${SCHEDULED_TURN_MARKER}
+Agent todo "${item.title}"${when}. This is an automatic run of a subcontracted task, not a user message.${editNote}
+
+Task:
+${body}
+
+Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
+}
+
+export function setTodoJobHandler() {
+    setTodoHandlers({
+        emit,
+        async runAgent({ agent, item, sessionKey }) {
+            const lang = loadUserConfig().language || "en";
+            ensureConversation(sessionKey);
+            try {
+                const result = await runTurn({
+                    sessionKey,
+                    agentId: agent.id,
+                    userText: buildTodoFirePrompt(item),
+                    quietEmpty: true,
+                    automated: true,
+                    todoId: item.id,
+                });
+                emit({ type: "todos_changed" });
+                if (!result || isSilentReply(result)) return result;
+                if (result.error) {
+                    if (!isStoppedByUser(result)) {
+                        emit({
+                            type: "notice",
+                            level: "error",
+                            text: `❌ ${item.title}: ${result.errorDetail || result.error}`,
+                            conversationId: sessionKey,
+                        });
+                    }
+                    return result;
+                }
+                const body = result.text?.trim() || t("schedule_no_output", lang);
+                emit({ type: "notice", level: "info", text: `✅ ${item.title}: ${body.slice(0, 400)}`, conversationId: sessionKey });
+                emit({ type: "conversations_changed" });
+                return result;
+            } catch (err) {
+                console.error("Todo job error:", err?.stack || err);
+                emit({
+                    type: "notice",
+                    level: "error",
+                    text: `❌ ${item.title}: ${err?.message || String(err)}`,
+                    conversationId: sessionKey,
+                });
+                return { error: err?.message || String(err), silent: true };
+            }
+        },
+        async remindUser({ item }) {
+            emit({
+                type: "todo_due",
+                title: item.title,
+                kind: item.kind || "none",
+                cron: item.cron || "",
+                every: item.every || "",
+                at: item.at || "",
+                timezone: item.timezone || "",
+                text: item.title,
+                url: `/t/${item.id}`,
+            });
+            emit({ type: "todos_changed" });
+        },
     });
 }

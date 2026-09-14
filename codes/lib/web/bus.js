@@ -11,17 +11,29 @@ export function subscribe(handler) {
     return () => subscribers.delete(handler);
 }
 
-export function eventsSince(since = 0) {
+export function eventsSince(since = 0, recentMs = 0) {
     const cursor = Number.isFinite(Number(since)) ? Number(since) : 0;
+    const latest = nextEventSeq - 1;
+    const cutoff = Number.isFinite(Number(recentMs)) && Number(recentMs) > 0 ? Date.now() - Number(recentMs) : 0;
+    if (cursor > latest) {
+        return {
+            events: [{ type: "hello", at: new Date().toISOString(), seq: 0 }, ...eventLog],
+            cursor: latest,
+        };
+    }
     return {
-        events: eventLog.filter((event) => event.seq > cursor),
-        cursor: nextEventSeq - 1,
+        events: eventLog.filter((event) => event.seq > cursor && (!cutoff || (event.loggedAt || 0) >= cutoff)),
+        cursor: latest,
     };
+}
+
+export function currentSeq() {
+    return nextEventSeq - 1;
 }
 
 // 직렬화는 한 번만 수행해 모든 구독자가 동일한 문자열을 받는다.
 export function emit(event) {
-    const item = { ...event, at: new Date().toISOString(), seq: nextEventSeq++ };
+    const item = { ...event, at: event.at || new Date().toISOString(), loggedAt: Date.now(), seq: nextEventSeq++ };
     eventLog.push(item);
     if (eventLog.length > MAX_EVENT_LOG) eventLog.splice(0, eventLog.length - MAX_EVENT_LOG);
     const payload = JSON.stringify(item);
@@ -33,5 +45,5 @@ export function emit(event) {
         }
     }
     // SSE 수신자가 없으면 웹 푸시로 전달한다(브라우저가 닫혀 있을 때).
-    void maybePush(event, { liveClients: subscribers.size });
+    void maybePush(event, { liveClients: subscribers.size }).catch(() => {});
 }

@@ -1,4 +1,5 @@
 const MIN_EVERY_MS = 60_000;
+const MAX_EVERY_MS = 36_525 * 86_400_000;
 
 const MONTH_ALIAS = {
     jan: 1,
@@ -60,7 +61,9 @@ function parseCronField(raw, min, max, aliases = {}) {
     if (!field) return null;
     const values = new Set();
     for (const part of field.split(",")) {
-        const [rangeRaw, stepRaw] = part.split("/");
+        const segs = part.split("/");
+        if (segs.length > 2) return null;
+        const [rangeRaw, stepRaw] = segs;
         const step = stepRaw == null || stepRaw === "" ? 1 : Number(stepRaw);
         if (!Number.isInteger(step) || step < 1) return null;
         let start;
@@ -73,12 +76,11 @@ function parseCronField(raw, min, max, aliases = {}) {
             start = aliasNumber(a, aliases);
             end = aliasNumber(b, aliases);
         } else {
-            start = end = aliasNumber(rangeRaw, aliases);
+            start = aliasNumber(rangeRaw, aliases);
+            end = stepRaw != null && stepRaw !== "" ? max : start;
         }
-        if (start == null || end == null || start > end) return null;
-        for (let value = start; value <= end; value += step) {
-            if (value >= min && value <= max) values.add(value);
-        }
+        if (start == null || end == null || start > end || start < min || end > max) return null;
+        for (let value = start; value <= end; value += step) values.add(value);
     }
     return values.size ? values : null;
 }
@@ -122,6 +124,7 @@ export function parseEvery(raw) {
     const unit = match[2][0];
     const ms = unit === "s" ? n * 1000 : unit === "m" ? n * 60_000 : unit === "h" ? n * 3_600_000 : n * 86_400_000;
     if (ms < MIN_EVERY_MS) return { error: "interval must be at least 60s" };
+    if (ms > MAX_EVERY_MS) return { error: "interval too large" };
     return { ms, label: `${n}${unit}` };
 }
 
@@ -144,42 +147,65 @@ function zonedParts(date, timeZone) {
         year: Number(map.year),
         month: Number(map.month),
         day: Number(map.day),
-        hour: Number(map.hour),
+        hour: Number(map.hour) % 24,
         minute: Number(map.minute),
         dow: DOW_FROM_SHORT[map.weekday],
     };
 }
 
-function dayMatches(parsed, parts) {
-    const dom = parsed.dom.has(parts.day);
-    const dow = parsed.dow.has(parts.dow);
-    if (parsed.domStar && parsed.dowStar) return true;
-    if (parsed.domStar) return dow;
-    if (parsed.dowStar) return dom;
-    return dom || dow;
-}
-
 export function nextCronDate(expr, timeZone, from = new Date()) {
     const parsed = typeof expr === "string" ? parseCron(expr) : expr;
     if (!parsed || !isValidTimeZone(timeZone)) return null;
-    const start = new Date(from.getTime());
-    start.setUTCSeconds(0, 0);
-    const max = 366 * 24 * 60;
-    for (let i = 1; i <= max; i += 1) {
-        const candidate = new Date(start.getTime() + i * 60_000);
-        const parts = zonedParts(candidate, timeZone);
-        if (parsed.minute.has(parts.minute) && parsed.hour.has(parts.hour) && parsed.month.has(parts.month) && dayMatches(parsed, parts)) {
-            return candidate;
+    const minutes = [...parsed.minute].sort((a, b) => a - b);
+    const hours = [...parsed.hour].sort((a, b) => a - b);
+    const fromMs = from.getTime();
+    const start = zonedParts(from, timeZone);
+    for (let day = 0; day <= 3000; day++) {
+        const wall = new Date(Date.UTC(start.year, start.month - 1, start.day + day));
+        const wy = wall.getUTCFullYear();
+        const wm = wall.getUTCMonth() + 1;
+        const wday = wall.getUTCDate();
+        if (!parsed.month.has(wm)) continue;
+        const noonMs = wallClockUtcMs(wy, wm, wday, 12, 0, timeZone);
+        const dow = zonedParts(new Date(noonMs), timeZone).dow;
+        const domHit = parsed.dom.has(wday);
+        const dowHit = parsed.dow.has(dow);
+        const ok = parsed.domStar && parsed.dowStar ? true : parsed.domStar ? dowHit : parsed.dowStar ? domHit : domHit || dowHit;
+        if (!ok) continue;
+        let bestMs = null;
+        let bestNaive = null;
+        for (const h of hours) {
+            for (const mi of minutes) {
+                const naive = Date.UTC(wy, wm - 1, wday, h, mi);
+                if (bestMs != null && naive > bestNaive + 3_600_000) break;
+                const base = wallClockUtcMs(wy, wm, wday, h, mi, timeZone);
+                for (const ms of [base - 3_600_000, base, base + 3_600_000]) {
+                    const back = zonedParts(new Date(ms), timeZone);
+                    if (back.year !== wy || back.month !== wm || back.day !== wday || back.hour !== h || back.minute !== mi) continue;
+                    if (ms > fromMs && (bestMs == null || ms < bestMs)) {
+                        bestMs = ms;
+                        bestNaive = naive;
+                    }
+                }
+            }
+            if (bestMs != null && Date.UTC(wy, wm - 1, wday, h, 59) > bestNaive + 3_600_000) break;
         }
+        if (bestMs != null) return new Date(bestMs);
     }
     return null;
 }
 
 function wallClockUtcMs(year, month, day, hour, minute, timeZone) {
     const naive = Date.UTC(year, month - 1, day, hour, minute, 0);
-    const asInTz = zonedParts(new Date(naive), timeZone);
-    const offset = naive - Date.UTC(asInTz.year, asInTz.month - 1, asInTz.day, asInTz.hour, asInTz.minute);
-    return naive + offset;
+    let guess = naive;
+    for (let i = 0; i < 4; i++) {
+        const asInTz = zonedParts(new Date(guess), timeZone);
+        const wall = Date.UTC(asInTz.year, asInTz.month - 1, asInTz.day, asInTz.hour, asInTz.minute);
+        const next = guess + (naive - wall);
+        if (next === guess) break;
+        guess = next;
+    }
+    return guess;
 }
 
 export function parseAt(raw, timeZone) {
@@ -193,10 +219,40 @@ export function parseAt(raw, timeZone) {
     }
     const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
     if (!match) return { error: 'at must be ISO-8601, e.g. "2026-09-11T08:00"' };
-    const ms = wallClockUtcMs(Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4]), Number(match[5]), timeZone);
+    const [y, mo, d, h, mi, s] = [
+        Number(match[1]),
+        Number(match[2]),
+        Number(match[3]),
+        Number(match[4]),
+        Number(match[5]),
+        match[6] != null ? Number(match[6]) : 0,
+    ];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return { error: "invalid datetime" };
+    let ms = wallClockUtcMs(y, mo, d, h, mi, timeZone);
+    const probe = zonedParts(new Date(ms), timeZone);
+    if (probe.year === y && probe.month === mo && probe.day === d && (probe.hour !== h || probe.minute !== mi)) {
+        for (let i = 1; i <= 180; i++) {
+            const p = zonedParts(new Date(ms + i * 60_000), timeZone);
+            if (p.year === y && p.month === mo && p.day === d && p.hour * 60 + p.minute >= h * 60 + mi) {
+                ms = ms + i * 60_000;
+                break;
+            }
+        }
+    }
     const date = new Date(ms);
     if (Number.isNaN(date.getTime())) return { error: "invalid datetime" };
+    const back = zonedParts(date, timeZone);
+    if (back.year !== y || back.month !== mo || back.day !== d) return { error: "invalid datetime" };
     return { date };
+}
+
+export function sameWallClock(a, b, timeZone) {
+    const da = Date.parse(a instanceof Date ? a.toISOString() : a);
+    const db = Date.parse(b instanceof Date ? b.toISOString() : b);
+    if (!Number.isFinite(da) || !Number.isFinite(db)) return false;
+    const pa = zonedParts(new Date(da), timeZone);
+    const pb = zonedParts(new Date(db), timeZone);
+    return pa.year === pb.year && pa.month === pb.month && pa.day === pb.day && pa.hour === pb.hour && pa.minute === pb.minute;
 }
 
 export function computeNextRun(job, from = new Date()) {

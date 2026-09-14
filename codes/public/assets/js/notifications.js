@@ -90,7 +90,7 @@
         return false;
     }
 
-    function show(title, body, tag) {
+    function show(title, body, tag, url) {
         if (!enabled() || typeof Notification === "undefined" || Notification.permission !== "granted") return;
         // 보고 있는 탭이면 토스트만 쓰고 OS 알림은 띄우지 않는다.
         if (!document.hidden && document.hasFocus()) return;
@@ -99,9 +99,17 @@
             tag: tag || "tabybot",
             icon: "/assets/icons/icon-192.png",
             badge: "/assets/icons/icon-192.png",
+            data: { url: url || "/" },
         };
-        if (swReg) swReg.showNotification(title || "tabyBot", opts);
-        else new Notification(title || "tabyBot", opts);
+        if (swReg) {
+            swReg.showNotification(title || "tabyBot", opts);
+        } else {
+            const n = new Notification(title || "tabyBot", opts);
+            n.onclick = () => {
+                window.focus();
+                if (url) location.href = url;
+            };
+        }
         if (navigator.setAppBadge) navigator.setAppBadge(1).catch(() => {});
     }
 
@@ -120,7 +128,17 @@
 
     function init() {
         void registerSw().then(() => {
+            const tk = localStorage.getItem("tabybot.web.token") || "";
+            if (tk && swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
             if (enabled()) void ensurePush();
+        });
+        navigator.serviceWorker?.addEventListener?.("message", (ev) => {
+            const url = ev.data?.type === "sw-navigate" ? String(ev.data.url || "") : "";
+            if (!url || !url.startsWith("/") || url.startsWith("//")) return;
+            try {
+                if (location.pathname + location.search !== url) history.pushState(null, "", url);
+                T.app?.renderRoute?.();
+            } catch (_) {}
         });
         window.addEventListener("beforeinstallprompt", (e) => {
             e.preventDefault();

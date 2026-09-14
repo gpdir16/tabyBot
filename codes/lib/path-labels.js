@@ -18,6 +18,10 @@ export function schedulingConfigPath() {
     return path.join(USER_DIR, "scheduling.json");
 }
 
+export function todosConfigPath() {
+    return path.join(USER_DIR, "todos.json");
+}
+
 export function terminalRunDescription() {
     const runtime = isDockerRuntime() ? "Run a shell command inside the Docker container." : "Run a shell command on the host machine.";
     return `${runtime} Default cwd is \`${USER_DIR}\`.`;
@@ -45,6 +49,10 @@ export function sendFileDescription() {
 
 export function schedulingListDescription() {
     return `List scheduling jobs from \`${schedulingConfigPath()}\`.`;
+}
+
+export function todosPathHint(agentId) {
+    return path.join(USER_DIR, "agents", agentId || "<agent-id>", "todos.json");
 }
 
 export function mcpConfigEditHint(serverName) {

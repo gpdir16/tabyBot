@@ -72,7 +72,22 @@ export function createRouter({ publicDir, token = "" }) {
         }
         const raw = Buffer.concat(chunks).toString("utf8").trim();
         if (!raw) return {};
-        return JSON.parse(raw);
+        try {
+            return JSON.parse(raw);
+        } catch (err) {
+            err.code = "BAD_JSON";
+            throw err;
+        }
+    }
+
+    function headOnly(res) {
+        const realEnd = res.end.bind(res);
+        res.write = () => true;
+        res.end = (a, b, c) => {
+            const cb = [a, b, c].find((x) => typeof x === "function");
+            return realEnd(cb);
+        };
+        return res;
     }
 
     function serveIndex(res) {
@@ -83,7 +98,9 @@ export function createRouter({ publicDir, token = "" }) {
             "Content-Length": stat.size,
             "Cache-Control": "no-cache",
         });
-        fs.createReadStream(indexPath).pipe(res);
+        fs.createReadStream(indexPath)
+            .on("error", () => res.destroy())
+            .pipe(res);
     }
 
     function serveStatic(res, urlPath) {
@@ -125,7 +142,9 @@ export function createRouter({ publicDir, token = "" }) {
             "Content-Length": stat.size,
             "Cache-Control": isVendor ? "public, max-age=86400" : "no-cache",
         });
-        fs.createReadStream(filePath).pipe(res);
+        fs.createReadStream(filePath)
+            .on("error", () => res.destroy())
+            .pipe(res);
     }
 
     function openSse(req, res) {
@@ -137,7 +156,9 @@ export function createRouter({ publicDir, token = "" }) {
         });
         req.socket.setKeepAlive(true);
         req.socket.setTimeout(0);
-        res.write(`data: ${JSON.stringify({ type: "hello" })}\n\n`);
+        res.on("error", () => {});
+        req.on("error", () => {});
+        res.write(`data: ${JSON.stringify({ type: "hello", seq: seqNow() })}\n\n`);
         // 프록시/방화벽 유휴 끊김 방지 + 클라이언트 생존 감지용 데이터 프레임
         const heartbeat = setInterval(() => {
             if (!res.destroyed) res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
@@ -160,14 +181,25 @@ export function createRouter({ publicDir, token = "" }) {
         return close;
     }
 
-    // server.js가 bus.subscribe를 setSseSubscribe로 주입한다.
     let sseSubscribe = null;
+    let seqNow = () => 0;
     function setSseSubscribe(fn) {
         sseSubscribe = fn;
+    }
+    function setSeqNow(fn) {
+        seqNow = typeof fn === "function" ? fn : () => 0;
     }
 
     async function handle(req, res) {
         const url = new URL(req.url || "/", "http://localhost");
+
+        const rawPath = (req.url || "/").split(/[?#]/)[0] || "/";
+        if (/\/{2,}/.test(rawPath) && (req.method === "GET" || req.method === "HEAD")) {
+            const target = rawPath.replace(/\/{2,}/g, "/") + url.search;
+            res.writeHead(301, { Location: target, "Cache-Control": "no-store" });
+            res.end();
+            return;
+        }
 
         if (!authorized(url, req)) {
             const payload = JSON.stringify({ error: "unauthorized" });
@@ -187,9 +219,18 @@ export function createRouter({ publicDir, token = "" }) {
             if (!match) continue;
 
             const params = {};
+            let badPath = false;
             route.keys.forEach((key, i) => {
-                params[key] = decodeURIComponent(match[i + 1]);
+                try {
+                    params[key] = decodeURIComponent(match[i + 1]);
+                } catch {
+                    badPath = true;
+                }
             });
+            if (badPath) {
+                sendJson(res, 400, { error: "bad_path" });
+                return;
+            }
 
             const ctx = {
                 req,
@@ -208,6 +249,10 @@ export function createRouter({ publicDir, token = "" }) {
             try {
                 await route.handler(ctx);
             } catch (err) {
+                if (!res.headersSent && err?.code === "BAD_JSON") {
+                    sendJson(res, 400, { error: "invalid_json" });
+                    return;
+                }
                 console.error(`tabyBot: ${req.method} ${url.pathname} failed:`, err?.stack || err);
                 if (!res.headersSent) {
                     const tooLarge = err?.code === "UPLOAD_TOO_LARGE" || /payload too large/i.test(err?.message || "");
@@ -220,13 +265,13 @@ export function createRouter({ publicDir, token = "" }) {
             return;
         }
 
-        if (req.method === "GET") {
-            serveStatic(res, url.pathname);
+        if (req.method === "GET" || req.method === "HEAD") {
+            serveStatic(req.method === "HEAD" ? headOnly(res) : res, url.pathname);
             return;
         }
 
         sendJson(res, 404, { error: "not_found" });
     }
 
-    return { add, handle, setSseSubscribe };
+    return { add, handle, setSseSubscribe, setSeqNow };
 }

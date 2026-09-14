@@ -101,6 +101,19 @@ function payloadFor(event) {
         if (!body) return null;
         return { title: eventTitle(event), body: body.slice(0, 180), tag: `turn-${event.conversationId || ""}`, url: "/" };
     }
+    if (event.type === "todo_due") {
+        const body = [event.title || event.text || ""]
+            .map((s) => String(s).trim())
+            .filter(Boolean)
+            .join(" — ")
+            .slice(0, 180);
+        return {
+            title: eventTitle(event) || "tabyBot",
+            body,
+            tag: `todo-${event.url || event.agentId || event.title || ""}`,
+            url: event.url || "/",
+        };
+    }
     return null;
 }
 
