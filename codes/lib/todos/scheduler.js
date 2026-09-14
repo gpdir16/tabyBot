@@ -1,6 +1,7 @@
 import {
     clearTodoRun,
     dispatchTodoRun,
+    executorIdOf,
     getTodo,
     isTodoRunCurrent,
     listDueTodos,
@@ -11,7 +12,8 @@ import {
 } from "./store.js";
 import { sameWallClock } from "../scheduling/time.js";
 import { scheduleWork } from "../agent-queue.js";
-import { firstAgent, getAgent } from "../agents-store.js";
+import { getAgent } from "../agents-store.js";
+import { isValidId } from "../web/conversations.js";
 
 const TICK_MS = 1000;
 const inFlight = new Set();
@@ -29,6 +31,19 @@ export function setTodoHandlers({ runAgent, remindUser, emit } = {}) {
 
 function flightKey(todoId) {
     return `todo:${todoId}`;
+}
+
+// 실행 봇: assignee 우선, 없으면 봇 소유 리스트의 주인.
+function executorOf(item) {
+    const id = executorIdOf(item);
+    return id ? getAgent(id) : null;
+}
+
+// 결과를 올릴 스레드: conversationId가 유효하면 거기, 아니면 실행 봇 스레드.
+function sessionKeyFor(item, agent) {
+    const conv = String(item?.conversationId || "").trim();
+    if (conv && isValidId(conv)) return conv;
+    return agent?.uuid || "";
 }
 
 function notifyChanged() {
@@ -53,8 +68,8 @@ async function tick() {
         inFlight.add(key);
         notifyChanged();
 
-        const assignee = item.assigneeId ? getAgent(item.assigneeId) : null;
-        const sessionKey = assignee ? assignee.uuid || "" : `todo-remind:${item.id}`;
+        const assignee = executorOf(item);
+        const sessionKey = assignee ? sessionKeyFor(item, assignee) : `todo-remind:${item.id}`;
 
         scheduleWork(
             "todo",
@@ -69,7 +84,7 @@ async function tick() {
                             return { skipped: true };
                         }
                         const result = await runAgentTodo({ agent: assignee, item: fresh, sessionKey });
-                        markTodoRun(item.id, { error: result?.error || null, token });
+                        markTodoRun(item.id, { error: result?.error || null, token, silent: Boolean(result?.silent) });
                         return result;
                     }
                     if (remindUserTodo) await remindUserTodo({ item: fresh });
@@ -123,8 +138,10 @@ export function queueTodoNow(agent, item) {
     if (!runAgentTodo || !agent || !item) return { error: "scheduler not ready" };
     const key = flightKey(item.id);
     if (inFlight.has(key)) return { error: "already running" };
-    const sessionKey = agent.uuid || "";
-    const dispatch = dispatchTodoRun(item.id, { advance: false });
+    const sessionKey = sessionKeyFor(item, agent) || agent.uuid || "";
+    // 봇 소유 잡의 수동 실행은 테스트 run: one-shot 슬롯을 소비하지 않는다.
+    const manual = (item.list || "user") !== "user";
+    const dispatch = dispatchTodoRun(item.id, { advance: false, manual });
     if (!dispatch?.token) return { error: "already running" };
     const token = dispatch.token;
     inFlight.add(key);
@@ -137,7 +154,7 @@ export function queueTodoNow(agent, item) {
                 const fresh = getTodo(item.id);
                 if (!fresh) return { skipped: true };
                 const result = await runAgentTodo({ agent, item: fresh, sessionKey });
-                markTodoRun(item.id, { error: result?.error || null, token });
+                markTodoRun(item.id, { error: result?.error || null, token, silent: Boolean(result?.silent) });
                 return result;
             } finally {
                 inFlight.delete(key);

@@ -9,7 +9,7 @@
 
     let editId = null;
     let draft = null;
-    let doneOpen = { user: false, agent: false };
+    let doneOpen = { user: false, agent: false, jobs: false };
     let handPopFor = null;
     let recoveredDismissed = false;
     let loading = false;
@@ -45,6 +45,17 @@
         return state.state.todos || [];
     }
 
+    // 봇 소유 자동화 잡인가 (list !== "user")
+    function isJob(item) {
+        return (item?.list || "user") !== "user";
+    }
+
+    // 섹션 키: jobs(봇 자동화) / agent(봇에게 맡긴 일) / user(직접 할 일)
+    function secKeyOf(item) {
+        if (isJob(item)) return "jobs";
+        return item?.assigneeId ? "agent" : "user";
+    }
+
     function suggestions() {
         return state.state.todoSuggestions || [];
     }
@@ -65,6 +76,8 @@
             not_done: "todosErrNotDone",
             invalid_status: "todosErrGone",
             not_assigned: "todosErrNoAssignee",
+            schedule_required: "todosErrNeedSchedule",
+            not_a_user_todo: "todosErrGone",
             too_many_suggestions: "todosErrTooManySug",
             internal_error: "todosErrInternal",
             invalid_json: "todosErrBadReq",
@@ -495,7 +508,7 @@
                 if (recurring) {
                     T.toast.show("info", t("todosPeriodDone"));
                 } else {
-                    doneOpen[item.assigneeId ? "agent" : "user"] = true;
+                    doneOpen[secKeyOf(item)] = true;
                     T.toast.show("info", t("todosMovedDone"));
                 }
             } else {
@@ -962,6 +975,61 @@
     }
 
     /* ── 행 부품 ───────────────────────────────────────────── */
+    async function toggleEnabled(item) {
+        if (saving) {
+            queuePending(() => {
+                if (!routeFromPath()) return;
+                const cur = items().find((row) => row.id === item.id);
+                if (cur && isJob(cur) && cur.enabled !== !item.enabled) toggleEnabled(cur);
+            });
+            return;
+        }
+        if (editId === item.id && draft) {
+            const ok = await commitDraft();
+            if (!ok) {
+                build();
+                return;
+            }
+        }
+        saving = true;
+        try {
+            await T.api.updateTodo(item.id, { enabled: !item.enabled });
+            T.toast.show("info", item.enabled ? t("todosPaused") : t("todosResumed"));
+            await refresh();
+        } catch (err) {
+            T.toast.show("error", humanErr(err));
+            build();
+        } finally {
+            saving = false;
+            runPending();
+        }
+    }
+
+    function pauseBtn(item) {
+        const paused = item.enabled === false;
+        const btn = T.h(
+            "button",
+            {
+                type: "button",
+                class: "td-check td-pause" + (paused ? " on" : ""),
+                "aria-label": paused ? t("todosResume") : t("todosPause"),
+                "aria-pressed": String(paused),
+                title: paused ? t("todosResume") : t("todosPause"),
+            },
+            [T.icon(paused ? "play" : "pause")],
+        );
+        btn.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") e.stopPropagation();
+        });
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (btn.disabled) return;
+            btn.disabled = true;
+            toggleEnabled(item);
+        });
+        return btn;
+    }
+
     function checkBtn(item, checked) {
         const btn = T.h(
             "button",
@@ -986,6 +1054,11 @@
     }
 
     function whoSpan(item) {
+        if (isJob(item)) {
+            const exec = item.executor;
+            if (!exec) return null;
+            return T.h("span", { class: "td-who" }, [dotEl(exec.color || "#8e8e93"), T.h("span", { text: t("todosRunBy", { name: exec.name }) })]);
+        }
         if (!item.assigneeId) return null;
         const name = item.assignee?.name || t("todosAssigneeRemoved");
         return T.h("span", { class: "td-who" }, [dotEl(item.assignee?.color || "#8e8e93"), T.h("span", { text: t("todosAssignedTo", { name }) })]);
@@ -997,6 +1070,12 @@
         if (when) {
             const cls = "td-when" + (done ? "" : isOverdue(item) ? " over" : isTodayKind(item) ? " today" : "");
             parts.push(T.h("span", { class: cls, text: when }));
+        }
+        if (!done && isJob(item) && item.enabled === false) {
+            parts.push(T.h("span", { class: "td-when paused", text: t("todosPaused") }));
+        }
+        if (!done && isJob(item) && item.lastRunAt) {
+            parts.push(T.h("span", { class: "td-when", text: t("todosLastRun", { time: formatDay(item.lastRunAt) }) }));
         }
         if (!done && item.waiting) {
             parts.push(T.h("span", { class: "td-when waiting", text: t("todosNeedsYou") }));
@@ -1571,14 +1650,20 @@
 
         const foot = T.h("div", { class: "td-edit-foot" }, [
             delBtn,
-            item.assignee && item.status !== "done"
+            (item.executor || item.assignee) && item.status !== "done"
                 ? (() => {
                       const runNow = async (b) => {
                           if (b.disabled || dispatching.has(item.id)) return;
                           if (saving) {
                               queuePending(() => {
                                   const cur = items().find((r) => r.id === item.id);
-                                  if (routeFromPath() && cur?.assigneeId && cur.status === "open" && !cur.running && !dispatching.has(item.id))
+                                  if (
+                                      routeFromPath() &&
+                                      (cur?.executor || cur?.assigneeId) &&
+                                      cur.status === "open" &&
+                                      !cur.running &&
+                                      !dispatching.has(item.id)
+                                  )
                                       void runNow(b);
                               });
                               return;
@@ -1620,7 +1705,11 @@
         ]);
 
         return T.h("div", { class: "td-edit" }, [
-            T.h("div", { class: "td-edit-head" }, [checkBtn(item, checked), title, handoffEl(item, false)]),
+            T.h("div", { class: "td-edit-head" }, [
+                isJob(item) && item.status !== "done" ? pauseBtn(item) : checkBtn(item, checked),
+                title,
+                handoffEl(item, false),
+            ]),
             T.h("div", { class: "td-edit-body" }, body),
             foot,
         ]);
@@ -1628,7 +1717,8 @@
 
     function rowEl(item, done) {
         const editing = editId === item.id && draft;
-        const checked = done || !!item.periodDone;
+        const job = isJob(item);
+        const checked = done || (!job && !!item.periodDone);
         if (editing) {
             return T.h("div", { class: "td-row is-editing", role: "listitem", dataset: { id: item.id } }, [editEl(item, checked)]);
         }
@@ -1642,7 +1732,8 @@
                 "aria-label": [
                     item.title,
                     whenLabel(item),
-                    done ? t("todosDoneState") : item.periodDone ? t("todosPeriodDoneState") : "",
+                    done ? t("todosDoneState") : !job && item.periodDone ? t("todosPeriodDoneState") : "",
+                    job && item.enabled === false ? t("todosPaused") : "",
                     item.running ? t("todosRunning") : "",
                     t("todosEditHint"),
                 ]
@@ -1650,7 +1741,7 @@
                     .join(" — "),
             },
             [
-                checkBtn(item, checked),
+                job && !done ? pauseBtn(item) : checkBtn(item, checked),
                 T.h("div", { class: "td-row-main" }, [T.h("div", { class: "td-row-title", text: item.title }), metaEl(item, done)]),
                 (!done && handoffEl(item, true)) || T.h("span", { class: "td-edit-cue", "aria-hidden": "true" }, [T.icon("chevron", "icon-sm")]),
             ],
@@ -1815,6 +1906,29 @@
     }
 
     /* ── 섹션/빌드 ─────────────────────────────────────────── */
+    function doneToggleEl(doneItems, doneKey) {
+        const frag = document.createDocumentFragment();
+        const open = doneOpen[doneKey];
+        const btn = T.h("button", { type: "button", class: "td-done-btn" + (open ? " open" : ""), "aria-expanded": String(open) }, [
+            T.icon("chevron", "icon-sm"),
+            T.h("span", { text: t("todosCompleted", { n: doneItems.length }) }),
+        ]);
+        btn.addEventListener("click", async () => {
+            const editing = editId ? items().find((r) => r.id === editId) : null;
+            const editingHere = editing?.status === "done" && secKeyOf(editing) === doneKey;
+            if (doneOpen[doneKey] && editingHere && draft && !(await commitDraft())) return;
+            doneOpen[doneKey] = !doneOpen[doneKey];
+            build();
+        });
+        frag.append(btn);
+        if (open) {
+            const card = T.h("div", { class: "td-card td-done-card", role: "list" });
+            for (const item of doneItems) card.append(rowEl(item, true));
+            frag.append(card);
+        }
+        return frag;
+    }
+
     function sectionEl(title, openItems, doneItems, emptyKey, doneKey) {
         const sec = T.h("section", { class: "td-sec" }, [
             T.h("div", { class: "td-sec-head" }, [
@@ -1831,26 +1945,58 @@
             for (const item of openItems) card.append(rowEl(item, false));
             sec.append(card);
         }
-        if (doneItems.length) {
-            const open = doneOpen[doneKey];
-            const btn = T.h("button", { type: "button", class: "td-done-btn" + (open ? " open" : ""), "aria-expanded": String(open) }, [
-                T.icon("chevron", "icon-sm"),
-                T.h("span", { text: t("todosCompleted", { n: doneItems.length }) }),
-            ]);
-            btn.addEventListener("click", async () => {
+        if (doneItems.length) sec.append(doneToggleEl(doneItems, doneKey));
+        return sec;
+    }
+
+    // "에이전트" 통합 섹션: 봇에게 맡긴 할 일(접기 가능) + 봇 자동화 잡.
+    const AGENT_OPEN_KEY = "tabybot.todos.agentOpenCollapsed";
+    let agentOpenCollapsed = localStorage.getItem(AGENT_OPEN_KEY) === "1";
+
+    function agentsSectionEl(agentOpen, agentDone, jobsOpen, jobsDone) {
+        const total = agentOpen.length + jobsOpen.length;
+        const sec = T.h("section", { class: "td-sec" }, [
+            T.h("div", { class: "td-sec-head" }, [
+                T.h("h2", { class: "td-sec-title", text: t("todosAgents") }),
+                total ? T.h("span", { class: "td-sec-count", text: String(total) }) : null,
+            ]),
+        ]);
+        if (!total && !agentDone.length && !jobsDone.length) {
+            sec.append(T.h("div", { class: "td-empty", text: t("todosEmptyAgents") }));
+            return sec;
+        }
+        if (agentOpen.length) {
+            const collapsed = agentOpenCollapsed;
+            const head = T.h(
+                "button",
+                { type: "button", class: "td-done-btn td-sub-head" + (collapsed ? "" : " open"), "aria-expanded": String(!collapsed) },
+                [T.icon("chevron", "icon-sm"), T.h("span", { text: `${t("todosAgent")} (${agentOpen.length})` })],
+            );
+            head.addEventListener("click", async () => {
                 const editing = editId ? items().find((r) => r.id === editId) : null;
-                const editingHere = editing?.status === "done" && (editing.assigneeId ? "agent" : "user") === doneKey;
-                if (doneOpen[doneKey] && editingHere && draft && !(await commitDraft())) return;
-                doneOpen[doneKey] = !doneOpen[doneKey];
+                const editingHere = editing && secKeyOf(editing) === "agent" && editing.status === "open";
+                if (!collapsed && editingHere && draft && !(await commitDraft())) return;
+                agentOpenCollapsed = !collapsed;
+                try {
+                    localStorage.setItem(AGENT_OPEN_KEY, agentOpenCollapsed ? "1" : "0");
+                } catch (_) {}
                 build();
             });
-            sec.append(btn);
-            if (open) {
-                const card = T.h("div", { class: "td-card td-done-card", role: "list" });
-                for (const item of doneItems) card.append(rowEl(item, true));
+            sec.append(head);
+            if (!collapsed) {
+                const card = T.h("div", { class: "td-card", role: "list" });
+                for (const item of agentOpen) card.append(rowEl(item, false));
                 sec.append(card);
             }
         }
+        if (jobsOpen.length) {
+            if (agentOpen.length) sec.append(T.h("div", { class: "td-sub-label", text: t("todosJobs") }));
+            const card = T.h("div", { class: "td-card", role: "list" });
+            for (const item of jobsOpen) card.append(rowEl(item, false));
+            sec.append(card);
+        }
+        if (agentDone.length) sec.append(doneToggleEl(agentDone, "agent"));
+        if (jobsDone.length) sec.append(doneToggleEl(jobsDone, "jobs"));
         return sec;
     }
 
@@ -1913,14 +2059,16 @@
         page.replaceChildren();
 
         const all = items();
-        const mineOpen = all.filter((row) => row.status === "open" && !row.assigneeId);
-        const agentOpen = all.filter((row) => row.status === "open" && row.assigneeId);
+        const mineOpen = all.filter((row) => row.status === "open" && !isJob(row) && !row.assigneeId);
+        const agentOpen = all.filter((row) => row.status === "open" && !isJob(row) && row.assigneeId);
+        const jobsOpen = all.filter((row) => row.status === "open" && isJob(row));
         const doneDesc = (a, b) => String(b.lastDoneAt || b.createdAt || "").localeCompare(String(a.lastDoneAt || a.createdAt || ""));
-        const mineDone = all.filter((row) => row.status === "done" && !row.assigneeId).sort(doneDesc);
-        const agentDone = all.filter((row) => row.status === "done" && row.assigneeId).sort(doneDesc);
+        const mineDone = all.filter((row) => row.status === "done" && !isJob(row) && !row.assigneeId).sort(doneDesc);
+        const agentDone = all.filter((row) => row.status === "done" && !isJob(row) && row.assigneeId).sort(doneDesc);
+        const jobsDone = all.filter((row) => row.status === "done" && isJob(row)).sort(doneDesc);
 
         const editing = editId ? all.find((row) => row.id === editId) : null;
-        if (editing?.status === "done") doneOpen[editing.assigneeId ? "agent" : "user"] = true;
+        if (editing?.status === "done") doneOpen[secKeyOf(editing)] = true;
 
         const pending = suggestions();
         let wrapChildren;
@@ -1933,9 +2081,9 @@
             wrapChildren = [T.h("div", { class: "td-loadfail" }, [T.h("div", { class: "td-empty", text: t("todosLoadFailed") }), retryBtn])];
         } else {
             const secUser = sectionEl(t("todosUser"), mineOpen, mineDone, "todosEmptyUser", "user");
-            const secAgent = sectionEl(t("todosAgent"), agentOpen, agentDone, "todosEmptyAgent", "agent");
+            const secAgents = agentsSectionEl(agentOpen, agentDone, jobsOpen, jobsDone);
             const secSug = suggestionsEl(pending);
-            wrapChildren = pending.length ? [secSug, secUser, secAgent] : [secUser, secAgent, secSug];
+            wrapChildren = pending.length ? [secSug, secUser, secAgents] : [secUser, secAgents, secSug];
         }
         const rec = state.state.todosRecovered;
         if (rec && !recoveredDismissed) {

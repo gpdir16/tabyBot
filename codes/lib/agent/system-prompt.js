@@ -47,7 +47,7 @@ export function buildFilesystemPromptBlock() {
         "",
         `| Path | Role |`,
         `|------|------|`,
-        `| \`${USER_DIR}\` | **Main home (default).** Configuration, memory, skills, MCP, scheduling, sessions, and **most work**. Default \`terminal_run\` cwd. Relative \`file_*\` paths resolve here. |`,
+        `| \`${USER_DIR}\` | **Main home (default).** Configuration, memory, skills, MCP, todos, sessions, and **most work**. Default \`terminal_run\` cwd. Relative \`file_*\` paths resolve here. |`,
         `| \`${CODES_DIR}\` | Shipped agent source and built-in skills (image; avoid editing). |`,
         `| \`/tmp\` | Ephemeral scratch. |`,
         "",
