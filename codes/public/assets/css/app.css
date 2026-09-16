@@ -3898,8 +3898,7 @@ body.sb-collapsed .btn-menu {
 
 /* ── 12. 봇 컴퓨터 뷰(/c/<uuid>): 화면 스트림 + PTY 터미널 ── */
 
-/* 컴퓨터 라우트에서는 채팅 뷰를 숨긴다 — 한 번에 한 페이지만 표시된다 */
-body.computer-route #header,
+/* 컴퓨터 라우트에서는 채팅 뷰만 숨긴다 — 헤더는 채팅과 같은 #header를 그대로 쓴다 */
 body.computer-route #scroller,
 body.computer-route #composerWrap,
 body.computer-route #jumpLatest {
@@ -3913,37 +3912,13 @@ body.computer-route #jumpLatest {
     flex-direction: column;
     overflow: hidden;
     outline: none;
+    padding-top: var(--hdr-h); /* absolute #header 아래로 콘텐츠를 내린다 */
 }
 .computer-page[hidden] {
     display: none;
 }
 
-.cp-head {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    height: 50px;
-    padding: 0 var(--sp-3);
-    border-bottom: 1px solid var(--border);
-}
-.cp-avatar {
-    margin-left: 0;
-}
-.cp-title {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-.cp-name {
-    font-size: var(--fs-m);
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+/* 이름 옆에 나란히 붙는 상태 텍스트 (.hd-name-wrap 안에서 baseline 정렬) */
 .cp-status {
     font-size: var(--fs-xs);
     color: var(--text-tertiary);
@@ -4184,10 +4159,6 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
 }
 
 @media (max-width: 768px) {
-    .cp-head {
-        padding: env(safe-area-inset-top) 8px 0;
-        height: calc(50px + env(safe-area-inset-top));
-    }
     .cp-tab {
         padding: 6px 10px;
     }
