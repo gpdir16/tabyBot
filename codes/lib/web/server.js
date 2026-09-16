@@ -49,6 +49,7 @@ import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLO
 import { subscribe, emit, eventsSince, currentSeq } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import { createRouter } from "./http.js";
+import { registerComputerRoutes, initComputerWs, handleComputerUpgrade, purgeAgentComputer } from "./computer.js";
 import { dispatchMessage, recoverInterruptedTurns, stopConversation } from "./turns.js";
 import { restartUpdateScheduler } from "../update/scheduler.js";
 import { listRunningSessionKeys, requestAgentStop } from "../agent/session.js";
@@ -582,6 +583,8 @@ export function startWebServer() {
                 requestAgentStop(result.agent.uuid);
             } catch (_) {}
         }
+        // 삭제된 봇의 컴퓨터 자원(브라우저 세션·프로필·PTY)을 해제한다.
+        void purgeAgentComputer(ctx.params.id).catch(() => {});
         if (purgeAgentTodos(ctx.params.id).changed) emit({ type: "todos_changed" });
         emit({ type: "conversations_changed" });
         ctx.json200({ agents: listAgents().map(publicAgent) });
@@ -685,7 +688,17 @@ export function startWebServer() {
         ctx.json200({ ok: true, ...todoPayload() });
     });
 
+    registerComputerRoutes(router);
+
     const server = http.createServer((req, res) => router.handle(req, res));
+    initComputerWs(WEB_TOKEN);
+    server.on("upgrade", (req, socket, head) => {
+        try {
+            handleComputerUpgrade(req, socket, head);
+        } catch {
+            socket.destroy();
+        }
+    });
     server.listen(PORT, HOST, () => {
         console.log(`tabyBot: web UI ready at http://${HOST}:${PORT}${WEB_TOKEN ? " (token required)" : ""}`);
         if (isConfigReady()) recoverInterruptedTurns();

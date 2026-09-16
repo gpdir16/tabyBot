@@ -3895,3 +3895,300 @@ body.sb-collapsed .btn-menu {
         border-bottom-right-radius: var(--radius-l);
     }
 }
+
+/* ── 12. 봇 컴퓨터 뷰(/c/<uuid>): 화면 스트림 + PTY 터미널 ── */
+
+/* 컴퓨터 라우트에서는 채팅 뷰를 숨긴다 — 한 번에 한 페이지만 표시된다 */
+body.computer-route #header,
+body.computer-route #scroller,
+body.computer-route #composerWrap,
+body.computer-route #jumpLatest {
+    display: none;
+}
+
+.computer-page {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    outline: none;
+}
+.computer-page[hidden] {
+    display: none;
+}
+
+.cp-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: 50px;
+    padding: 0 var(--sp-3);
+    border-bottom: 1px solid var(--border);
+}
+.cp-avatar {
+    margin-left: 0;
+}
+.cp-title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.cp-name {
+    font-size: var(--fs-m);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cp-status {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cp-tabs {
+    flex: none;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-s);
+    background: var(--surface-2);
+}
+.cp-tab {
+    border: 0;
+    border-radius: 6px;
+    padding: 5px 14px;
+    background: none;
+    font: inherit;
+    font-size: var(--fs-s);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.cp-tab.active {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.cp-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.cp-pane.hidden {
+    display: none;
+}
+
+.cp-start {
+    border: 0;
+    border-radius: var(--radius-s);
+    padding: 7px 14px;
+    background: var(--surface-2);
+    font: inherit;
+    font-size: var(--fs-s);
+    color: var(--text);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.cp-start:hover {
+    background: var(--surface-3);
+}
+.cp-stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    background: #000;
+    overflow: hidden;
+}
+.cp-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    outline: none;
+    touch-action: none;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+.cp-canvas:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cp-msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    color: var(--text-secondary);
+    font-size: var(--fs-m);
+    text-align: center;
+    white-space: pre-line;
+    background: rgba(0, 0, 0, 0.55);
+}
+.cp-msg.hidden {
+    display: none;
+}
+.cp-msg .cp-start {
+    background: var(--accent);
+    color: #fff;
+}
+.cp-msg .cp-start:hover {
+    background: var(--accent-hover);
+}
+.cp-msg .cp-start:disabled {
+    opacity: 0.5;
+}
+
+/* 터미널 탭의 상태 오버레이는 버튼이 없으므로 클릭을 뚫는다 —
+   덮인 채로 탭하면 터미널 포커스가 빠져 모바일 키보드가 닫힌다. */
+.cp-terminal .cp-msg {
+    pointer-events: none;
+}
+
+/* 모바일 가상키보드 입력기: 보이지 않지만 포커스 가능해야 한다 */
+.cp-kbd {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    width: 2px;
+    height: 2px;
+    padding: 0;
+    border: 0;
+    opacity: 0.01;
+    resize: none;
+    pointer-events: none;
+    color: transparent;
+    background: transparent;
+    caret-color: transparent;
+}
+.cp-kbdbtn.active {
+    color: var(--accent);
+}
+
+/* 화면 위 플로팅 도구(모드 전환·가상 키보드) */
+.cp-tools {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    gap: 6px;
+    z-index: 4;
+}
+.cp-tool {
+    background: rgba(22, 22, 26, 0.72);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+}
+.cp-tool.active {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* 트랙패드 모드의 가상 커서 — 원격 좌표를 스테이지 좌표로 매핑해 JS가 위치시킨다 */
+.cp-cursor {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    color: #fff;
+    pointer-events: none;
+    display: none;
+    z-index: 3;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.85));
+}
+.cp-cursor .icon {
+    width: 18px;
+    height: 18px;
+}
+.cp-screen.tp .cp-cursor {
+    display: block;
+}
+
+/* 터미널 특수키 바: 마크업은 채팅 입력 바와 동일(.composer > .composer-row)하고
+   내용만 키 버튼이다. 키보드가 열렸을 때(body.kb-open)만 보이며 kb-open 컴포저처럼
+   화면 끝에 붙고 위쪽만 둥글다. 버튼은 pointerdown을 막아 포커스=키보드를 유지한다. */
+.cp-termkeyswrap {
+    display: none;
+    flex: none;
+    padding: 0;
+}
+body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
+    display: block;
+}
+.cp-termkeys {
+    max-width: none;
+    border-bottom: 0;
+    border-radius: calc(var(--radius-l) + var(--sp-2)) calc(var(--radius-l) + var(--sp-2)) 0 0;
+}
+.cp-termkeys .composer-row {
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+.cp-termkeys .composer-row::-webkit-scrollbar {
+    display: none;
+}
+.cp-tk {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    padding: 0 13px;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--fs-s);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        background var(--dur-1) var(--ease),
+        color var(--dur-1) var(--ease);
+}
+.cp-tk:active {
+    background: var(--hover);
+    color: var(--text);
+}
+.cp-tk.on {
+    color: var(--accent);
+    background: rgba(10, 132, 255, 0.16);
+}
+
+/* 터미널(xterm.js): 호스트는 stage를 채우고 xterm이 내부를 렌더링한다 */
+.cp-termhost {
+    position: absolute;
+    inset: 0;
+    background: #000;
+}
+.cp-termhost .xterm {
+    height: 100%;
+    padding: 4px 6px;
+}
+
+@media (max-width: 768px) {
+    .cp-head {
+        padding: env(safe-area-inset-top) 8px 0;
+        height: calc(50px + env(safe-area-inset-top));
+    }
+    .cp-tab {
+        padding: 6px 10px;
+    }
+}

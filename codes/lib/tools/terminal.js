@@ -1,5 +1,6 @@
 import { exec, spawn } from "node:child_process";
 import { loadAgentConfig } from "../config-loader.js";
+import { camofoxUser, camofoxEnv } from "../computer/camofox-user.js";
 import { USER_DIR, resolveAgentPath } from "../paths.js";
 import { isDockerRuntime } from "../runtime.js";
 import { terminalCwdParamDescription, terminalRunDescription } from "../path-labels.js";
@@ -200,7 +201,7 @@ function executeBackgroundTool(name, args, { maxChars } = {}) {
     return { error: `Unknown terminal tool: ${name}` };
 }
 
-export async function executeTerminalTool(name, args, { signal } = {}) {
+export async function executeTerminalTool(name, args, { signal, agentId } = {}) {
     if (!["terminal_run", "bg_status", "bg_list", "bg_kill"].includes(name)) {
         return { error: `Unknown terminal tool: ${name}` };
     }
@@ -220,7 +221,9 @@ export async function executeTerminalTool(name, args, { signal } = {}) {
     if (!command) return { error: "command is required" };
 
     const cwd = resolveCwd(args?.cwd);
-    const env = { ...process.env, HOME: isDockerRuntime() ? USER_DIR : process.env.HOME || USER_DIR };
+    const env = camofoxEnv({ ...process.env, HOME: isDockerRuntime() ? USER_DIR : process.env.HOME || USER_DIR });
+    // --user 생략한 camofox 호출이 웹 컴퓨터 뷰와 같은 봇 프로필을 쓰게 한다.
+    if (agentId) env.CAMOFOX_CLI_USER = camofoxUser(agentId);
 
     if (signal?.aborted) {
         return { ok: false, cwd, aborted: true, exitCode: null, stdout: "", stderr: "Stopped by user." };

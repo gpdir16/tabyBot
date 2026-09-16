@@ -12,9 +12,11 @@ CamoFox is an anti-detection browser automation system built on Camoufox + Playw
 Run CLI commands through `terminal_run`. Use `--format json` for output that must be parsed. The Docker and local installers provision the `camofox` command and configure persistent state under `{{CAMOFOX_DATA_DIR}}`.
 
 ```bash
-camofox open https://example.com --user tabybot --format json
-camofox snapshot --user tabybot --format json
+camofox open https://example.com --format json
+camofox snapshot --format json
 ```
+
+**Do not pass `--user`.** `terminal_run` already exports `CAMOFOX_CLI_USER` pointing at this bot's own profile, so plain `camofox` commands share the exact browser profile and logins that the user sees in the web computer view. Passing a different `--user` creates a separate profile with separate cookies — only do it when you deliberately need an isolated identity.
 
 CamoFox starts its local server automatically when a command needs it. Use `xvfb_gui` only for non-browser Linux GUI programs; it is not the web browsing path.
 
@@ -61,10 +63,10 @@ Follow this loop for reliable automation:
 CLI:
 
 ```bash
-camofox open https://example.com --user agent1
-camofox snapshot --user agent1
-camofox click e5 --user agent1
-camofox type e7 "hello world" --user agent1
+camofox open https://example.com
+camofox snapshot
+camofox click e5
+camofox type e7 "hello world"
 ```
 
 API:
@@ -72,13 +74,13 @@ API:
 ```bash
 curl -X POST http://localhost:9377/tabs \
   -H 'Content-Type: application/json' \
-  -d '{"userId":"agent1","sessionKey":"default","url":"https://example.com"}'
+  -d "{\"userId\":\"$CAMOFOX_CLI_USER\",\"sessionKey\":\"default\",\"url\":\"https://example.com\"}"
 
-curl "http://localhost:9377/tabs/<tabId>/snapshot?userId=agent1"
+curl "http://localhost:9377/tabs/<tabId>/snapshot?userId=$CAMOFOX_CLI_USER"
 
 curl -X POST http://localhost:9377/tabs/<tabId>/click \
   -H 'Content-Type: application/json' \
-  -d '{"userId":"agent1","ref":"e5"}'
+  -d "{\"userId\":\"$CAMOFOX_CLI_USER\",\"ref\":\"e5\"}"
 ```
 
 Dual interface mapping (most common path):
@@ -215,9 +217,9 @@ Full endpoint map: `references/api-endpoints.md`.
 CLI:
 
 ```bash
-camofox snapshot --user agent1
-camofox fill '[e4]="Jane Doe" [e5]="jane@example.com"' --user agent1
-camofox press Enter --user agent1
+camofox snapshot
+camofox fill '[e4]="Jane Doe" [e5]="jane@example.com"'
+camofox press Enter
 ```
 
 Safety notes:
@@ -230,16 +232,16 @@ API:
 ```bash
 curl -X POST http://localhost:9377/tabs/<tabId>/type \
   -H 'Content-Type: application/json' \
-  -d '{"userId":"agent1","ref":"e5","text":"jane@example.com"}'
+  -d '{"userId":"$CAMOFOX_CLI_USER","ref":"e5","text":"jane@example.com"}'
 ```
 
 ### B) Stealth scraping loop
 
 ```bash
-camofox open https://target.example --user scraper-us
-camofox snapshot --user scraper-us
-camofox get-text --selector "main" --user scraper-us
-camofox get-links --user scraper-us
+camofox open https://target.example
+camofox snapshot
+camofox get-text --selector "main"
+camofox get-links
 ```
 
 Recommended loop shape:
@@ -253,7 +255,7 @@ Recommended loop shape:
 ### C) Search workflow (CLI engines)
 
 ```bash
-camofox search "best playwright anti-detection" --engine duckduckgo --user research1
+camofox search "best playwright anti-detection" --engine duckduckgo
 ```
 
 When using CLI search:
@@ -266,7 +268,7 @@ When using CLI search:
 ```bash
 curl -X POST http://localhost:9377/tabs/<tabId>/navigate \
   -H 'Content-Type: application/json' \
-  -d '{"userId":"agent1","macro":"@google_search","query":"camoufox js"}'
+  -d '{"userId":"$CAMOFOX_CLI_USER","macro":"@google_search","query":"camoufox js"}'
 ```
 
 ## 6) Authentication (Auth Vault)
@@ -312,16 +314,16 @@ Session identity is scoped by `userId` and persistent profile dir:
 CLI pattern:
 
 ```bash
-camofox open https://example.com --user account-a
-camofox snapshot --user account-a
-camofox click e9 --user account-a
+camofox open https://example.com
+camofox snapshot
+camofox click e9
 ```
 
 Cookie session file helpers:
 
 ```bash
-camofox session save checkout-flow --user account-a
-camofox session load checkout-flow --user account-a
+camofox session save checkout-flow
+camofox session load checkout-flow
 ```
 
 Isolation reminder:
@@ -342,7 +344,7 @@ Important distinction:
 CLI example:
 
 ```bash
-camofox search "vite plugin" --engine github --user dev1
+camofox search "vite plugin" --engine github
 ```
 
 API macro example:
@@ -376,7 +378,7 @@ Built-in preset names:
 CLI:
 
 ```bash
-camofox open https://example.com --geo japan --user jp-agent
+camofox open https://example.com --geo japan
 ```
 
 API:
@@ -439,12 +441,12 @@ Example script (`login-and-capture.cf`):
 
 ```text
 # open login page
-open https://example.com/login --user ops1
-snapshot --user ops1
-fill '[e3]="user@example.com" [e4]="not-stored-here"' --user ops1
-press Enter --user ops1
-wait networkidle --timeout 12000 --user ops1
-screenshot --output login-result.png --user ops1
+open https://example.com/login
+snapshot
+fill '[e3]="user@example.com" [e4]="not-stored-here"'
+press Enter
+wait networkidle --timeout 12000
+screenshot --output login-result.png
 ```
 
 ## 12) Deep-Dive Documentation

@@ -249,14 +249,19 @@
             const fromPath = botUuidFromPath();
             const sr = settingsRoute();
             const tr = T.todosUI?.routeFromPath?.();
-            let bot = (fromPath && bots.find((b) => b.uuid === fromPath)) || (!tr && bots[0]) || null;
+            const cr = T.computerUI?.routeFromPath?.();
+            let bot =
+                (fromPath && bots.find((b) => b.uuid === fromPath)) ||
+                (cr && bots.find((b) => b.uuid === cr.uuid)) ||
+                (!tr && !cr && bots[0]) ||
+                null;
             if (token !== bootToken) return;
             if (bot) {
                 await T.chat.open(bot.uuid, { params: urlParams() });
-                if (fromPath || sr) T.sidebar.showChat?.();
+                if (fromPath || sr || cr) T.sidebar.showChat?.();
                 else if (!tr) T.sidebar.showList?.();
                 consumeParams(urlParams());
-            } else if (!sr && !tr) {
+            } else if (!sr && !tr && !cr) {
                 history.replaceState(null, "", "/");
             }
 
@@ -265,6 +270,7 @@
                 T.sidebar.showChat?.();
                 T.todosUI.open({ id: tr.id || null, fromUrl: true });
             }
+            if (cr) T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
 
             T.events.connect();
 
@@ -288,6 +294,7 @@
         if (sr) {
             // 설정 라우트: 모바일에서도 /a/와 마찬가지로 메인 패널을 표시한다.
             T.todosUI?.hide?.();
+            T.computerUI?.hide?.();
             T.sidebar?.showChat?.();
             T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
             return;
@@ -295,13 +302,25 @@
         const tr = T.todosUI?.routeFromPath?.();
         if (tr) {
             T.settingsUI.hide();
+            T.computerUI?.hide?.();
             T.sidebar?.showChat?.();
             T.todosUI.open({ id: tr.id || null, fromUrl: true });
             T.sidebar?.syncRoute?.();
             return;
         }
+        const cr = T.computerUI?.routeFromPath?.();
+        if (cr) {
+            // 봇 컴퓨터 라우트: 화면 스트림 + PTY 터미널 페이지.
+            T.settingsUI.hide();
+            T.todosUI?.hide?.();
+            T.sidebar?.showChat?.();
+            T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
+            T.sidebar?.syncRoute?.();
+            return;
+        }
         T.settingsUI.hide();
         T.todosUI?.hide?.();
+        T.computerUI?.hide?.();
         const uuid = botUuidFromPath();
         const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
         if (bot && bot.uuid !== state.state.currentId) T.chat.open(bot.uuid, { replaceState: true });
@@ -340,6 +359,7 @@
     T.composer.init();
     T.settingsUI.init();
     T.todosUI?.init?.();
+    T.computerUI?.init?.();
     if (T.notifications) T.notifications.init();
 
     boot();
