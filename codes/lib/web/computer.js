@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { writeFileAtomic } from "../atomic-file.js";
 import { createWsServer } from "./ws.js";
 import * as display from "../computer/display.js";
 import { attachTerminal, killSession, killAllSessions, terminalEnabled } from "../computer/pty.js";
@@ -77,7 +78,7 @@ function ensureProfilePrefs(user) {
         fs.mkdirSync(dir, { recursive: true });
         const file = path.join(dir, "user.js");
         const body = ['user_pref("browser.startup.page", 3);', 'user_pref("browser.sessionstore.resume_from_crash", true);', ""].join("\n");
-        if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== body) fs.writeFileSync(file, body);
+        if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== body) writeFileAtomic(file, body);
     } catch {}
 }
 
@@ -111,8 +112,7 @@ function writeTabSnapshot(user, urls) {
         const file = tabSnapshotFile(user);
         const body = JSON.stringify(urls);
         if (fs.existsSync(file) && fs.readFileSync(file, "utf8") === body) return;
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, body);
+        writeFileAtomic(file, body);
     } catch {}
 }
 

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { writeFileAtomic } from "../atomic-file.js";
 import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
 import { resolveAgentPath } from "../paths.js";
 import { filePathParamDescription, filePatchDescription, fileReadDescription } from "../path-labels.js";
@@ -293,7 +294,8 @@ export async function executeFilePatch(args, ctx = {}) {
         offset = applied.offset;
     }
     const newContent = joinLines(resultLines, { trailingNewline: currentContent.endsWith("\n") });
-    fs.writeFileSync(resolved, newContent, "utf8");
+    // 부분 쓰기 상태가 남지 않도록 원자적으로 교체한다.
+    writeFileAtomic(resolved, newContent);
     ctx.fileSnapshots?.set(resolved, newContent);
 
     return {
