@@ -2,7 +2,7 @@ English | [한국어](README.ko.md)
 
 # tabyBot
 
-An open-source alternative to Grok Bot. Built on tabyAgent, an agent that runs on Telegram.
+An open-source alternative to Grok Bot. Built on my previous project [tabyAgent](https://github.com/gpdir16/tabyAgent).
 
 Give it a task and it will do it — even if it takes hours, even if things go wrong.
 
@@ -10,35 +10,38 @@ Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI 
 
 ## What it can do
 
-- **Everyday chat**: Get answers in the browser. Text and images are both supported.
+- **Everyday chat**: Get answers in the browser. Almost every format is supported — text, images, files, and more.
 - **Inference providers**: Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, or your own API endpoint.
-- **Skills, MCP**: Add the capabilities and tools you want to the agent yourself.
+- **Skills, MCP**: Add the capabilities and tools you want to the agent. Even if you don't install anything yourself, the agent finds and installs what it needs.
 - **Scheduled tasks**: Recurring jobs run on a schedule, report when they finish, and skip when they are not needed.
-- **Todos**: Keep a task list the agent can see. Bots suggest additions or changes for your approval, and you can hand a task off to them — agents volunteer, you pick one, and it does the job on a schedule or right away. Tasks you keep remind you when they're due.
+- **Todos**: Manages todo lists for both you and the agents. You use it like a regular todo app, while agents automatically watch the list, schedule work, and handle your tasks for you.
 - **Multiple agents**: Create specialist agents for different roles and have them work together.
 - **Run it anywhere**: Docker container or local Node.js. Native support is macOS and Linux. Windows can work through Docker, but that is not guaranteed.
-- **Self-improvement**: tabyBot can improve itself. It learns from how problems were solved and from your corrections, and it gets sharper the more you use it.
+- **Self-improvement**: tabyBot can improve itself. It learns from how problems were solved and from your corrections, and it gets sharper the more you use it. It also learns the things you regularly do, and can remind you when you forget.
 
 ## Differences
 
-- tabyBot and tabyAgent share almost every feature. This repo (tabyBot) runs in its own web UI; tabyAgent runs on Telegram.
+- Differences between tabyBot and tabyAgent: (1) tabyBot runs in its own web UI while tabyAgent runs on Telegram. (2) Many features, like improved self-improvement and dreaming, are only in tabyBot for now and will be ported to tabyAgent later. (3) Because tabyBot is not tied to a specific platform, new features can be added faster.
 
-| Feature            | tabyBot                        | Grok Bot         | OpenClaw         | Hermes           | ChatGPT                            |
-| ------------------ | ------------------------------ | ---------------- | ---------------- | ---------------- | ---------------------------------- |
-| Everyday chat      | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ✅ Yes                             |
-| Multiple agents    | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ No                              |
-| Search             | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ✅ Yes                             |
-| Multiple providers | ✅ Yes                         | ❌ No            | ✅ Yes           | ✅ Yes           | ❌ No                              |
-| Skills             | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ No                              |
-| MCP                | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ Paid plan, server-side MCP only |
-| Scheduled tasks    | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ✅ Yes                             |
-| Self-improvement   | ✅ Yes                         | ✅ Yes           | ❌ No            | ✅ Yes           | ❌ No                              |
-| Terminal           | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ Sandbox only                    |
-| Browser            | ✅ Yes                         | ✅ Yes           | ✅ Yes           | ✅ Yes           | ❌ No                              |
-| GUI apps           | ✅ Yes                         | ✅ Yes           | ❌ No            | ❌ No            | ❌ No                              |
-| Local execution    | ✅ Yes                         | ❌ No            | ✅ Yes           | ✅ Yes           | ❌ No                              |
-| NSFW level         | ✅ Allow, indirect only, block | ❌ Not available | ❌ Not available | ❌ Not available | ❌ Block                           |
-| License            | ✅ AGPL-3.0                    | ❌ Proprietary   | ✅ MIT           | ✅ MIT           | ❌ Proprietary                     |
+| Feature                 | tabyBot              | Grok Bot             | OpenClaw         | Hermes           | ChatGPT (Chat)  |
+| ----------------------- | -------------------- | -------------------- | ---------------- | ---------------- | --------------- |
+| Everyday chat           | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
+| Multiple agents         | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Search                  | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
+| Multiple providers      | ✅ Yes               | ❌ No                | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Smart todo list         | ✅ User + agents     | ❌ No                | ❌ No            | ❌ No            | ❌ No           |
+| Remote computer control | ✅ Browser, terminal | ✅ Browser, terminal | ❌ No            | ❌ No            | ❌ No           |
+| Proactive outreach      | ✅ Yes               | ❌ No                | ❌ No            | ❌ No            | ❌ No           |
+| Skills                  | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| MCP                     | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Dev mode     |
+| Scheduled tasks         | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
+| Self-improvement        | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Terminal                | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ Sandbox only |
+| Browser                 | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| GUI apps                | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Local execution         | ✅ Yes               | ❌ No                | ✅ Yes           | ✅ Yes           | ❌ No           |
+| NSFW level              | ✅ Allow, block      | ❌ Not available     | ❌ Not available | ❌ Not available | ❌ Block        |
+| License                 | ✅ AGPL-3.0          | ❌ Proprietary       | ✅ MIT           | ✅ MIT           | ❌ Proprietary  |
 
 > Tests used the Grok OAuth provider and the Grok 4.6 model.
 
@@ -58,6 +61,15 @@ Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI 
 - "Compare privatestater analytics and privatestater captcha with Google Analytics and reCAPTCHA."
 - "What's a privacy-respecting Gmail alternative?"
 - "What should I eat for lunch in a bit? I have 4,328 won in my account."
+- "Every morning at 8, send me today's weather and my todos."
+- "Let me know when a new one drops. (manga/channel link)"
+- "If there's anything on my todo list you can handle, just do it."
+- "I study Japanese around 9pm every night — nudge me if I forget."
+- "What was that thing we talked about before?"
+- "Make a translation specialist bot and have it translate this whole document."
+- "That thing you did earlier was wrong — do it this way from now on."
+- "Take as long as you need — organize every photo in this folder by date."
+- "Before I get off work, summarize what I did today."
 
 ## Quick start
 
