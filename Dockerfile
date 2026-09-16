@@ -8,6 +8,9 @@ ENV TABYBOT_VERSION=${TABYBOT_VERSION}
 ENV TABYBOT_MODE=docker
 RUN printf '%s\n' "${TABYBOT_VERSION}" > /app/VERSION
 LABEL org.opencontainers.image.version="${TABYBOT_VERSION}"
+LABEL org.opencontainers.image.source="https://github.com/gpdir16/tabyBot"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+LABEL org.opencontainers.image.title="tabyBot"
 ENV USER_DIR=/app/user
 ENV HOME=/app/user
 ENV APP_ROOT=/app

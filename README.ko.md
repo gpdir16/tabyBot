@@ -104,6 +104,7 @@ docker compose up -d
 | marked                    | 12.0.2  | MIT                  | [저장소](https://github.com/markedjs/marked)                     |
 | DOMPurify                 | 3.1.6   | Apache-2.0 / MPL-2.0 | [저장소](https://github.com/cure53/DOMPurify)                    |
 | Highlight.js              | 11.9.0  | BSD-3-Clause         | [저장소](https://github.com/highlightjs/highlight.js)            |
+| xterm.js                  | —       | MIT                  | [저장소](https://github.com/xtermjs/xterm.js)                    |
 | @modelcontextprotocol/sdk | 1.30.0  | MIT                  | [저장소](https://github.com/modelcontextprotocol/typescript-sdk) |
 | js-tiktoken               | 1.0.21  | MIT                  | [저장소](https://github.com/dqbd/tiktoken)                       |
 | node-cron                 | 3.0.3   | ISC                  | [저장소](https://github.com/node-cron/node-cron)                 |
