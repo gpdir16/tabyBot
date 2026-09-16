@@ -100,8 +100,6 @@
             },
             [T.icon("arrow-left")],
         );
-        const avatar = T.h("span", { class: "hdr-avatar cp-avatar" });
-        const name = T.h("span", { class: "cp-name" });
         const status = T.h("span", { class: "cp-status" });
         const tabScreen = T.h("button", {
             class: "cp-tab",
@@ -116,8 +114,6 @@
             onclick: () => setTab("terminal"),
         });
         const tabs = T.h("div", { class: "cp-tabs", role: "tablist" }, [tabScreen, tabTerm]);
-
-        const head = T.h("div", { class: "cp-head" }, [backBtn, avatar, T.h("div", { class: "cp-title" }, [name, status]), tabs]);
 
         /* 화면 탭 — 화면 안에 브라우저 주소창이 있으므로 별도 URL 바는 두지 않는다 */
         // 모바일용: 공유 화면에 키를 보낼 가상 키보드 입력기. canvas는 tabindex라
@@ -186,11 +182,12 @@
             T.h("div", { class: "cp-termkeyswrap" }, [termKeys]),
         ]);
 
-        page.append(head, screenPane, termPane);
+        /* 헤더는 채팅과 같은 #header 요소를 쓴다 — open()에서 backBtn/status/tabs를 주입한다 */
+        page.append(screenPane, termPane);
         els = {
-            avatar,
-            name,
+            backBtn,
             status,
+            tabs,
             tabScreen,
             tabTerm,
             screenPane,
@@ -912,10 +909,28 @@
             } catch (_) {}
         }
 
+        const header = document.getElementById("header");
+        const hdrMenu = document.getElementById("btnMenu");
+        const hdrComp = document.getElementById("btnHdrComputer");
+        const hdrAvatar = document.getElementById("hdrAvatar");
+        const hdrName = document.getElementById("hdrName");
+        const nameWrap = header?.querySelector(".hd-name-wrap");
+        if (header && hdrMenu && hdrComp && nameWrap) {
+            hdrMenu.style.display = "none";
+            hdrMenu.after(els.backBtn);
+            nameWrap.append(els.status);
+            hdrComp.style.display = "none";
+            header.append(els.tabs);
+        }
+
         const name = bot ? bot.name : "";
-        els.avatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
-        els.avatar.style.background = bot?.color || "var(--surface-2)";
-        els.name.textContent = name;
+        if (hdrAvatar) {
+            hdrAvatar.replaceChildren();
+            hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
+            hdrAvatar.style.background = bot?.color || "var(--surface-2)";
+            hdrAvatar.style.color = "#fff";
+        }
+        if (hdrName) hdrName.textContent = name;
         els.status.textContent = "";
         document.title = name ? `${name} — ${t("computer")} — tabyBot` : "tabyBot";
 
@@ -950,6 +965,15 @@
         page.hidden = true;
         document.body.classList.remove("computer-route");
         pushed = false;
+        /* #header에 주입한 요소를 빼고 원래 버튼을 복원한다 */
+        els.backBtn?.remove();
+        els.status?.remove();
+        els.tabs?.remove();
+        const hdrMenu = document.getElementById("btnMenu");
+        const hdrComp = document.getElementById("btnHdrComputer");
+        if (hdrMenu) hdrMenu.style.display = "";
+        if (hdrComp) hdrComp.style.display = "";
+        T.chat?.refreshHeader?.();
         if (screenWs) {
             try {
                 screenWs.close();
