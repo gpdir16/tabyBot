@@ -1,9 +1,11 @@
 import { ensureUserDir } from "./lib/bootstrap.js";
 import { initTools, shutdownTools } from "./lib/agent/tool-registry.js";
 import { startWebServer } from "./lib/web/server.js";
-import { setTodoJobHandler } from "./lib/web/turns.js";
+import { setTodoJobHandler, setProactiveHandler } from "./lib/web/turns.js";
 import { startTodoScheduler } from "./lib/todos/scheduler.js";
 import { startUpdateScheduler } from "./lib/update/scheduler.js";
+import { startDreamingScheduler } from "./lib/dreaming/scheduler.js";
+import { startProactiveScheduler } from "./lib/proactive.js";
 import { isDockerRuntime } from "./lib/runtime.js";
 import { ensureSession, DISPLAY } from "./lib/computer/display.js";
 import { shutdownComputer } from "./lib/web/computer.js";
@@ -38,8 +40,11 @@ async function main() {
     startWebServer();
     startSharedDisplay();
     setTodoJobHandler();
+    setProactiveHandler();
     startTodoScheduler();
     startUpdateScheduler();
+    startDreamingScheduler();
+    startProactiveScheduler();
 }
 
 main().catch((err) => {

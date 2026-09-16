@@ -9,6 +9,20 @@
     "terminalEnabled": true,
     "terminalTimeoutMs": 120000,
     "terminalMaxOutputChars": 32000,
+    "dreaming": {
+        "enabled": true,
+        "cron": "0 4 * * *",
+        "maxOpsPerRun": 5,
+        "reviewMinToolCalls": 5,
+        "idleMin": 30
+    },
+    "proactive": {
+        "enabled": true,
+        "intervalMin": 60,
+        "activeStartHour": 8,
+        "activeEndHour": 23,
+        "idleMin": 30
+    },
     "updateCheck": {
         "enabled": true,
         "intervalCron": "0 * * * *",
