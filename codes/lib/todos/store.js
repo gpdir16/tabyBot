@@ -92,6 +92,9 @@ function migrateLegacy() {
 }
 
 let lastRecovery = null;
+// 깨진 스토어 파일을 매 읽기(1초 tick)마다 새 .bak로 복사하지 않게
+// 프로세스 수명 동안 한 번만 백업한다.
+let corruptBackupPath = null;
 
 function readStore() {
     if (!fs.existsSync(STORE_PATH)) {
@@ -110,9 +113,11 @@ function readStore() {
         };
     } catch {
         try {
-            const bak = `${STORE_PATH}.corrupt-${Date.now()}.bak`;
-            fs.copyFileSync(STORE_PATH, bak);
-            lastRecovery = { at: new Date().toISOString(), backup: path.basename(bak) };
+            if (!corruptBackupPath) {
+                corruptBackupPath = `${STORE_PATH}.corrupt-${Date.now()}.bak`;
+                fs.copyFileSync(STORE_PATH, corruptBackupPath);
+            }
+            lastRecovery = { at: new Date().toISOString(), backup: path.basename(corruptBackupPath) };
         } catch {
             lastRecovery = { at: new Date().toISOString(), backup: "" };
         }

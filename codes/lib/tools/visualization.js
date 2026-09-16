@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { writeFileAtomic } from "../atomic-file.js";
 import { CODES_DIR, USER_DIR, resolveAgentPath } from "../paths.js";
 
 const TEMPLATES_DIR = path.join(CODES_DIR, "skills", "visualization", "templates");
@@ -136,8 +137,7 @@ export async function executeVizTool(name, args) {
     const outPath = outRaw ? resolveAgentPath(outRaw) : path.join(USER_DIR, "temp", `viz-${Date.now()}.html`);
     if (!outPath) return { error: "invalid output path" };
 
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, html, "utf8");
+    writeFileAtomic(outPath, html);
 
     return { ok: true, path: outPath, template, sizeBytes: html.length };
 }

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { writeFileAtomic } from "../atomic-file.js";
 import { USER_DIR } from "../paths.js";
 import { fetchCodexModels } from "./codex-client.js";
 import { fetchGrokModels } from "./grok-client.js";
@@ -98,8 +99,7 @@ export async function fetchProviderModels(provider, { useCache = true } = {}) {
     }
 
     const models = normalizeModelsList(payload);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify({ fetchedAt: Date.now(), models }, null, 2)}\n`, "utf8");
+    writeFileAtomic(filePath, `${JSON.stringify({ fetchedAt: Date.now(), models }, null, 2)}\n`);
     return models;
 }
 
