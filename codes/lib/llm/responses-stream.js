@@ -161,6 +161,15 @@ export function applyResponsesStreamEvent(state, evt) {
 
     if (type === "response.completed" || type === "response.done") {
         applyCompletedOutput(state, evt);
+        return;
+    }
+
+    // 스트림 실패/불완전 응답을 무시하면 잘린 도구 인자가 그대로 실행된다.
+    // 끝까지 소비한 뒤 에러로 던져 턴을 실패로 확정한다.
+    if (type === "response.failed" || type === "response.incomplete" || type === "error") {
+        const detail =
+            evt.response?.error?.message || evt.error?.message || evt.response?.incomplete_details?.reason || evt.message || evt.code || type;
+        state.streamError = `Responses stream ${type}: ${detail}`;
     }
 }
 
@@ -205,8 +214,9 @@ export async function consumeResponsesStream(res, signal, onTextDelta) {
 
         for (const line of lines) {
             const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const data = trimmed.slice(6);
+            // SSE 스펙상 data: 뒤 공백은 선택 — 공백 없는 프레임도 받는다.
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+            const data = trimmed.slice(5).replace(/^ /, "");
             if (data === "[DONE]") continue;
             try {
                 applyResponsesStreamEvent(state, JSON.parse(data));
@@ -217,5 +227,6 @@ export async function consumeResponsesStream(res, signal, onTextDelta) {
     }
 
     flushArgBuffers(state);
+    if (state.streamError) throw new Error(state.streamError);
     return { content: state.content, usage: state.usage, toolCalls: state.toolCalls };
 }

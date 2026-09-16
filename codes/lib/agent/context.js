@@ -143,12 +143,15 @@ function dropPendingCurrent(history, userMessage) {
     return history;
 }
 
-function toLlmMessage(message, { visionEnabled = false } = {}) {
+function toLlmMessage(message) {
     const cloned = cloneStoredMessage(message);
     delete cloned.imageUrl;
     if (cloned.role === "user") {
         const text = typeof cloned.content === "string" ? cloned.content : "";
-        cloned.content = hydrateUserContent(text, cloned.attachments, { visionEnabled });
+        // 히스토리 메시지의 첨부 이미지를 매 턴 base64로 다시 싣지 않는다 —
+        // 경로는 ATTACHED_FILES 목록에 남는다. 인라인 이미지는 현재 사용자
+        // 메시지에서만 붙인다.
+        cloned.content = hydrateUserContent(text, cloned.attachments, { visionEnabled: false });
     }
     delete cloned.attachments;
     return cloned;
@@ -173,7 +176,7 @@ export function buildInitialMessages(
 
     for (const turn of historyForPrompt) {
         for (const message of turnToMessages(turn)) {
-            messages.push(toLlmMessage(message, { visionEnabled }));
+            messages.push(toLlmMessage(message));
         }
     }
     messages.push({

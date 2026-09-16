@@ -3,6 +3,7 @@ import path from "node:path";
 import { USER_DIR } from "../paths.js";
 import { loadProviderConfig } from "../config-loader.js";
 import { fetchProviderModels, findModelContextWindow, findModelVisionSupport } from "./models.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 
 const META_PATH = path.join(USER_DIR, "temp", "model-meta.json");
 const DEFAULT_CONTEXT = 128000;
@@ -20,8 +21,7 @@ export function loadModelMeta() {
 }
 
 export function saveModelMeta(meta) {
-    fs.mkdirSync(path.dirname(META_PATH), { recursive: true });
-    fs.writeFileSync(META_PATH, `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+    writeJsonAtomic(META_PATH, meta);
 }
 
 export async function ensureModelMeta(provider) {
@@ -39,12 +39,14 @@ export async function ensureModelMeta(provider) {
     }
 
     let contextWindow = defaultContext;
-    let supportsVision = findModelVisionSupport(null, provider.model);
+    // Copilot "auto"는 모델 목록에 없는 가상 라우팅 id — 요청마다 큐레이션된
+    // 비전 모델 풀에서 고른다. false로 두면 첨부/스크린샷이 조용히 버려진다.
+    let supportsVision = provider.model === "auto" ? true : findModelVisionSupport(null, provider.model);
     try {
         const models = await fetchProviderModels(provider);
         const fromList = findModelContextWindow(models, provider.model);
         if (fromList) contextWindow = fromList;
-        supportsVision = findModelVisionSupport(models, provider.model);
+        supportsVision = provider.model === "auto" ? models.some((m) => m?.supportsVision !== false) : findModelVisionSupport(models, provider.model);
     } catch {
         // keep defaults
     }

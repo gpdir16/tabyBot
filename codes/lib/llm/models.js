@@ -111,7 +111,7 @@ export function findModelContextWindow(models, modelId) {
 function guessVisionFromModelId(modelId) {
     const id = String(modelId || "").toLowerCase();
     if (!id || /embed|whisper|dall-e|dalle|tts|sora|moderat|rerank/i.test(id)) return false;
-    return /gpt-4o|gpt-4\.1|gpt-4-turbo|claude-3|claude-sonnet|claude-opus|claude-haiku|gemini|pixtral|llava|qwen.*vl|\/vl|vision|kimi|moonshot|internvl|glm-4v|grok-4/i.test(
+    return /gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|claude-3|claude-4|claude-sonnet|claude-opus|claude-haiku|gemini|pixtral|llava|qwen.*vl|\/vl|vision|kimi|moonshot|internvl|glm-4v|grok-4/i.test(
         id,
     );
 }

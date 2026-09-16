@@ -97,6 +97,13 @@
             seen.add(item.id);
             const c = conv(item.id);
             c.meta = Object.assign({}, c.meta, item);
+            // 재접속 사이에 놓친 turn_done: 서버가 실행 중이 아니면 stale live를 정리한다.
+            // (running 필드가 없는 예전 서버와의 하위 호환을 위해 명시적 false만 본다)
+            if (item.running === false && c.live) {
+                c.live = null;
+                emit("live", { id: item.id });
+                emit("turn_done", { id: item.id, error: null, finalized: true });
+            }
         }
         for (const [id, c] of state.convs) {
             if (!seen.has(id) && !c.live && id !== state.currentId && c.loaded === false) {

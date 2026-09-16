@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { APP_ROOT, USER_DIR } from "../paths.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 
 const STATE_PATH = path.join(USER_DIR, "temp", "update-state.json");
 const BAKED_VERSION_PATH = path.join(APP_ROOT, "VERSION");
@@ -25,8 +26,7 @@ export function loadUpdateState() {
 
 export function saveUpdateState(patch) {
     const state = { ...loadUpdateState(), ...patch };
-    fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-    fs.writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    writeJsonAtomic(STATE_PATH, state);
     return state;
 }
 

@@ -1951,7 +1951,10 @@
 
     // "에이전트" 통합 섹션: 봇에게 맡긴 할 일(접기 가능) + 봇 자동화 잡.
     const AGENT_OPEN_KEY = "tabybot.todos.agentOpenCollapsed";
-    let agentOpenCollapsed = localStorage.getItem(AGENT_OPEN_KEY) === "1";
+    let agentOpenCollapsed = false;
+    try {
+        agentOpenCollapsed = localStorage.getItem(AGENT_OPEN_KEY) === "1";
+    } catch {}
 
     function agentsSectionEl(agentOpen, agentDone, jobsOpen, jobsDone) {
         const total = agentOpen.length + jobsOpen.length;

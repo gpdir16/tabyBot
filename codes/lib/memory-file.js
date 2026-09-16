@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { TEMPLATES_USER_DIR, USER_DIR } from "./paths.js";
+import { writeFileAtomic } from "./atomic-file.js";
 import { agentMemoryDir, agentMemoryPath, ensureAgentMemory } from "./agents-store.js";
 
 const MEMORY_PATH = path.join(USER_DIR, "memory.md");
@@ -15,8 +16,7 @@ function defaultMemoryContent() {
 
 function ensureMemoryFile() {
     if (!fs.existsSync(MEMORY_PATH)) {
-        fs.mkdirSync(USER_DIR, { recursive: true });
-        fs.writeFileSync(MEMORY_PATH, defaultMemoryContent(), "utf8");
+        writeFileAtomic(MEMORY_PATH, defaultMemoryContent());
     }
 }
 

@@ -4,6 +4,7 @@
 import { exec, execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonAtomic } from "../atomic-file.js";
 
 export const SESSIONS_DIR = "/tmp/tabybot-xvfb";
 export const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
@@ -100,7 +101,7 @@ export function loadSession() {
 }
 
 export function saveSession(sess) {
-    fs.writeFileSync(sessionPath(), JSON.stringify(sess, null, 2), "utf8");
+    writeJsonAtomic(sessionPath(), sess);
 }
 
 export function finiteNumber(value) {
@@ -378,6 +379,10 @@ export async function doAction(sess, args) {
         case "kill_app": {
             const pid = boundedInt(args.pid, null, { min: 1, max: 9999999 });
             if (!pid) return { error: "numeric pid required for kill_app" };
+            // 이 세션에서 launch로 띄운 앱만 죽일 수 있다 — 임의 PID(예: 1)는 거부.
+            if (!(sess.apps || []).some((a) => a.pid === pid)) {
+                return { error: `pid ${pid} is not an app launched in this session. Use a pid from a launch result.` };
+            }
             killPid(pid);
             sess.apps = (sess.apps || []).filter((a) => a.pid !== pid);
             saveSession(sess);

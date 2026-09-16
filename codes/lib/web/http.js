@@ -46,6 +46,11 @@ export function createRouter({ publicDir, token = "" }) {
             return true;
         }
         if (!token) return true;
+        // 토큰 모드에서도 정적 셸(HTML/JS/CSS)은 공개한다 — 토큰 입력 화면 자체가
+        // 이 파일들로 로드된다. 데이터와 액션은 전부 /api/ 아래라 계속 보호된다.
+        if ((req.method === "GET" || req.method === "HEAD") && !url.pathname.startsWith("/api/")) {
+            return true;
+        }
         const header = req.headers.authorization || "";
         if (header === `Bearer ${token}`) return true;
         if (req.headers["x-tabybot-token"] === token) return true;

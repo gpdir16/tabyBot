@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { USER_DIR } from "../paths.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 
 const ROOT = path.join(USER_DIR, "temp", "web-files");
 const STORE_DIR = path.join(ROOT, "store");
@@ -55,7 +56,7 @@ function readIndex() {
 
 function writeIndex(index) {
     fs.mkdirSync(ROOT, { recursive: true });
-    fs.writeFileSync(INDEX_PATH, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    writeJsonAtomic(INDEX_PATH, index);
 }
 
 function sanitizeFileName(originalName = "") {
@@ -179,14 +180,27 @@ export async function saveUploadStream(req, mimeType, originalName = "", limitBy
 }
 
 // 에이전트가 만든 파일을 저장소로 복사해 다운로드 가능하게 한다.
-export function registerProducedFile(filePath, caption = "") {
+// 스트림 복사라 큰 파일이 이벤트 루프를 막지 않는다.
+export async function registerProducedFile(filePath, caption = "") {
     const stat = fs.statSync(filePath);
+    if (stat.size > MAX_UPLOAD_BYTES) {
+        throw new Error(`file too large to send (${(stat.size / 1073741824).toFixed(1)} GB > 1 GB)`);
+    }
     const id = crypto.randomBytes(8).toString("hex");
     const ext = path.extname(filePath).toLowerCase();
     const name = sanitizeFileName(path.basename(filePath));
     const dir = path.join(STORE_DIR, id);
     fs.mkdirSync(dir, { recursive: true });
-    fs.copyFileSync(filePath, path.join(dir, name));
+    try {
+        await pipeline(fs.createReadStream(filePath), fs.createWriteStream(path.join(dir, name)));
+    } catch (err) {
+        try {
+            fs.rmSync(dir, { recursive: true, force: true });
+        } catch {
+            // 부분 복사 정리 실패는 원래 에러를 가리지 않는다
+        }
+        throw err;
+    }
     return commitEntry({
         id,
         name,

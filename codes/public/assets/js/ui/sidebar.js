@@ -423,11 +423,25 @@
             menuBtn.setAttribute("aria-label", menuLabel);
         }
     }
+    // 프라이빗 모드/스토리지 차단 브라우저에서 localStorage 접근이 SecurityError를
+    // 던진다 — 사이드바 초기화 전체가 죽지 않게 접근마다 가드한다.
+    const lsGet = (k) => {
+        try {
+            return localStorage.getItem(k);
+        } catch {
+            return null;
+        }
+    };
+    const lsSet = (k, v) => {
+        try {
+            localStorage.setItem(k, v);
+        } catch {}
+    };
     function initResize() {
-        const savedW = Number(localStorage.getItem(W_KEY));
+        const savedW = Number(lsGet(W_KEY));
         if (savedW >= 240 && savedW <= 460) applyWidth(savedW);
-        applyCollapsed(localStorage.getItem(C_KEY) === "1");
-        collapsedState = localStorage.getItem(C_KEY) === "1";
+        applyCollapsed(lsGet(C_KEY) === "1");
+        collapsedState = lsGet(C_KEY) === "1";
         let dragging = false;
         resizeEl.addEventListener("pointerdown", (e) => {
             dragging = true;
@@ -443,7 +457,7 @@
             if (!dragging) return;
             dragging = false;
             document.body.classList.remove("resizing");
-            localStorage.setItem(W_KEY, String(currentWidth));
+            lsSet(W_KEY, String(currentWidth));
         });
         collapseBtn.addEventListener("click", () => {
             if (isMobile()) {
@@ -451,7 +465,7 @@
                 return;
             }
             const next = !collapsedState;
-            localStorage.setItem(C_KEY, next ? "1" : "0");
+            lsSet(C_KEY, next ? "1" : "0");
             collapsedState = next;
             applyCollapsed(next);
             if (T.tooltip) T.tooltip.hide();
@@ -464,7 +478,7 @@
                 }
                 if (!collapsedState) return;
                 collapsedState = false;
-                localStorage.setItem(C_KEY, "0");
+                lsSet(C_KEY, "0");
                 applyCollapsed(false);
                 if (T.tooltip) T.tooltip.hide();
             });

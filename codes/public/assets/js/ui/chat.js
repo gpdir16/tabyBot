@@ -821,7 +821,13 @@
         try {
             const r = await T.api.conversation(id);
             if (seq !== refreshSeq || state.state.currentId !== id) return;
-            if (c.live) return;
+            if (c.live) {
+                // 서버가 아직 실행 중이면 스트림이 곧 상태를 갱신하므로 덮지 않는다.
+                if (r?.running === true) return;
+                // 서버는 끝났는데 live가 남았다 = 재접속 사이 turn_done 유실 — 정리하고 복원.
+                c.live = null;
+                state.emit("live", { id });
+            }
             const incoming = (r.turns || []).map(normalizeTurn);
             if (incoming.length < c.turns.length) return;
             c.turns = incoming;

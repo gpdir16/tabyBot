@@ -1,7 +1,9 @@
 // 대화 인덱스: 에이전트당 하나의 스레드. 디스크는 user/session/<agent-uuid>/.
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonAtomic } from "../atomic-file.js";
 import { firstAgentId, getAgentByUuid, listAgents } from "../agents-store.js";
+import { isAgentSessionRunning } from "../agent/session.js";
 import { RECOVERY_PROMPT, conversationDir, loadChatHistory, previewSnippetFromTurns, stripMarkdownForPreview } from "../agent/chat-history.js";
 
 function manifestPath(id) {
@@ -18,8 +20,7 @@ function readJson(file, fallback = null) {
 }
 
 function writeJson(file, data) {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    writeJsonAtomic(file, data);
 }
 
 export function isValidId(id) {
@@ -75,6 +76,8 @@ function readMeta(id) {
         agentId: getAgentByUuid(id)?.id || firstAgentId(),
         createdAt: toIso(createdAt),
         updatedAt: toIso(updatedAt),
+        // 클라이언트가 SSE 재접속 사이에 놓친 turn_done을 정합한다.
+        running: isAgentSessionRunning(id),
     };
 }
 

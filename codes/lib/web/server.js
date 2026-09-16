@@ -58,8 +58,11 @@ import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
 const PUBLIC_DIR = path.join(CODES_DIR, "public");
 const WEB_TOKEN = process.env.TABYBOT_WEB_TOKEN?.trim() || "";
-const PORT = Number(process.env.TABYBOT_PORT || 8999);
-const HOST = "0.0.0.0";
+// 도커 안에서는 항상 8999로 듣는다 — 호스트 포트는 compose 매핑이 담당한다
+// (TABYBOT_PORT를 컨테이너에 주입하면 커스텀 포트에서 매핑이 깨진다).
+const PORT = isDockerRuntime() ? 8999 : Number(process.env.TABYBOT_PORT || 8999);
+// 기본은 loopback만 연다. LAN 노출이 필요하면 TABYBOT_HOST=0.0.0.0으로 명시한다.
+const HOST = process.env.TABYBOT_HOST?.trim() || (isDockerRuntime() ? "0.0.0.0" : "127.0.0.1");
 
 const PROVIDER_LABELS = {
     default: "OpenAI",
