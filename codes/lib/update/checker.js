@@ -41,6 +41,11 @@ export function compareSemver(a, b) {
         if (va > vb) return 1;
         if (va < vb) return -1;
     }
+    // 숫자부가 같으면 프리릴리즈 접미사가 붙은 쪽이 더 오래됐다 (1.0.0-rc1 < 1.0.0).
+    const aPre = /-/.test(String(a || ""));
+    const bPre = /-/.test(String(b || ""));
+    if (aPre && !bPre) return -1;
+    if (!aPre && bPre) return 1;
     return 0;
 }
 
