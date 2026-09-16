@@ -18,6 +18,9 @@ import { SCHEDULED_TURN_MARKER } from "../tools/todo-tool.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
 import { ensureConversation, getConversationMeta, listConversations } from "./conversations.js";
+import { maybeScheduleSessionReview } from "../dreaming/review.js";
+import { markUserActivity } from "../user-activity.js";
+import { setProactiveRunner, CHECKIN_PROMPT } from "../proactive.js";
 
 function isStoppedByUser(result) {
     return result?.error === "stopped_by_user";
@@ -31,7 +34,7 @@ function shouldRecover(result) {
     return isReplyFailure(result) || result?.error === "agent_error" || result?.error === "agent_turn_failed";
 }
 
-function isSilentReply(result) {
+export function isSilentReply(result) {
     return Boolean(result?.silent) && !result?.text?.trim();
 }
 
@@ -128,6 +131,7 @@ export async function runTurn({
         if (getConversationMeta(sessionKey)) {
             saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
             if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
+            maybeScheduleSessionReview({ sessionKey, agentId, result });
         }
 
         if (isStoppedByUser(result)) {
@@ -185,6 +189,7 @@ export async function runTurn({
 
 // 실행 중이면 현재 턴에 끼워 넣고(pending), 아니면 새 턴을 예약한다.
 export function dispatchMessage({ sessionKey, agentId, userText, displayText = null, attachments = [] }) {
+    markUserActivity();
     try {
         appendPendingUserTurn(sessionKey, displayText ?? userText, attachments);
     } catch (err) {
@@ -260,6 +265,28 @@ Task:
 ${body}
 
 Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"). If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
+}
+
+// 능동 체크인: 봇의 메인 스레드에서 조용히 깨어 할 말이 있을 때만 게시한다.
+export function setProactiveHandler() {
+    setProactiveRunner(async (agent) => {
+        const sessionKey = agent.uuid;
+        ensureConversation(sessionKey);
+        const result = await runTurn({
+            sessionKey,
+            agentId: agent.id,
+            userText: `${SCHEDULED_TURN_MARKER}\nAutomatic proactive check-in — not a user message.\n\n${CHECKIN_PROMPT}`,
+            quietEmpty: true,
+            automated: true,
+        });
+        if (!result || isSilentReply(result) || result.error) return result;
+        const body = result.text?.trim();
+        if (body) {
+            emit({ type: "notice", level: "info", text: body.slice(0, 400), conversationId: sessionKey });
+            emit({ type: "conversations_changed" });
+        }
+        return result;
+    });
 }
 
 export function setTodoJobHandler() {

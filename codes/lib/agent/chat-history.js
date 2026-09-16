@@ -514,6 +514,29 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
     writePreview(chatId, turns);
 }
 
+export function extractSessionTextLines(turns) {
+    const lines = [];
+    for (const turn of turns || []) {
+        for (const m of turn?.messages || []) {
+            if (m?.role !== "user" && m?.role !== "assistant") continue;
+            if (typeof m.content !== "string") continue;
+            if (isInternalStoredMessage(m)) continue;
+            let text = m.content;
+            if (m.role === "assistant") {
+                if (text.trim() === "__SILENT__") continue;
+            } else {
+                if (text.includes("[tabybot-scheduled]")) continue;
+                if (text.startsWith(PENDING_USER_PREFIX)) text = text.slice(PENDING_USER_PREFIX.length).trim();
+                const cut = text.indexOf("[User attached files]");
+                if (cut !== -1) text = text.slice(0, cut).trim();
+            }
+            text = text.trim();
+            if (text) lines.push({ role: m.role, at: turn.at || null, text });
+        }
+    }
+    return lines;
+}
+
 export function listArchivedSessionFiles(chatId) {
     const manifest = loadManifest(chatId);
     const root = conversationDir(chatId);
