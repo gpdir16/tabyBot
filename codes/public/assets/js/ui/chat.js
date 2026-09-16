@@ -767,7 +767,7 @@
         // URL 동기화: /a/<uuid>?m=&q= — 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
         try {
             const bot = id ? state.botByUuid(String(id)) : null;
-            if (!/^\/s\//.test(location.pathname) && !/^\/t(?:\/|$)/.test(location.pathname)) {
+            if (!/^\/s\//.test(location.pathname) && !/^\/t(?:\/|$)/.test(location.pathname) && !/^\/c\//.test(location.pathname)) {
                 const qs = new URLSearchParams();
                 if (o.params?.q) qs.set("q", o.params.q);
                 if (o.params?.m != null) qs.set("m", String(o.params.m));
@@ -836,6 +836,8 @@
 
     /* ── 헤더(봇 아바타/이름) ────────────────────────────────── */
     function refreshHeader() {
+        // 컴퓨터 뷰가 열려 있으면 헤더/타이틀은 그 페이지가 소유한다.
+        if (T.computerUI?.isOpen?.()) return;
         hdrAvatar.replaceChildren();
         if (T.todosUI?.isOpen?.()) {
             const name = t("todos");

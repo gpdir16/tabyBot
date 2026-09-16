@@ -20,7 +20,6 @@ ENV CAMOFOX_VERSION=${CAMOFOX_VERSION}
 ENV CAMOFOX_HOST=127.0.0.1
 ENV CAMOFOX_PORT=9377
 ENV CAMOFOX_AUTH_MODE=disabled
-ENV CAMOFOX_HEADLESS=true
 ENV CAMOFOX_HUMANIZE=true
 ENV CAMOFOX_PROFILES_DIR=/app/user/camofox/profiles
 ENV CAMOFOX_COOKIES_DIR=/app/user/camofox/cookies
@@ -72,6 +71,7 @@ RUN apt-get update \
         xterm \
         x11-apps \
         imagemagick \
+        tini \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/user \
@@ -80,10 +80,20 @@ RUN mkdir -p /app/user \
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 
+# 공유 X 디스플레이: 웹 "컴퓨터" 뷰가 이 화면을 스트리밍한다.
+# DISPLAY/CAMOFOX_HEADLESS는 런타임 전용이라 하단에 두어 앞 레이어 캐시를 보존한다.
+ENV DISPLAY=:99
+ENV CAMOFOX_HEADLESS=false
+# camofox의 유휴 정리는 API 액세스 기준 — 화면 조작(xdotool)은 API를 타지 않아
+# 쓰는 중에도 30분 만에 세션 만료/서버 종료가 일어난다. 봇 브라우저가 닫히지 않게 7일로.
+ENV CAMOFOX_IDLE_TIMEOUT_MS=3153600000000
+ENV CAMOFOX_IDLE_EXIT_TIMEOUT_MS=3153600000000
+ENV CAMOFOX_SESSION_TIMEOUT=3153600000000
+
 COPY codes ./codes
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["tini", "--", "docker-entrypoint.sh"]
 CMD ["start"]

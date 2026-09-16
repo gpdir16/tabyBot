@@ -144,6 +144,11 @@
 
         answerAsk: (askId, body) => request("/api/asks/" + enc(askId) + "/answer", { method: "POST", json: body }),
 
+        computerStatus: () => request("/api/computer/status"),
+        computerScreenStart: (geometry) => request("/api/computer/screen/start", { method: "POST", json: geometry ? { geometry } : {} }),
+        computerScreenStop: () => request("/api/computer/screen/stop", { method: "POST", json: {} }),
+        computerBrowserOpen: (agentId, url) => request("/api/computer/browser/open", { method: "POST", json: { agentId, url } }),
+
         authStatus: () => request("/api/auth/status"),
         startOauth: (kind) => request("/api/auth/" + enc(kind) + "/start", { method: "POST", json: {} }),
         cancelOauth: (kind) => request("/api/auth/" + enc(kind) + "/cancel", { method: "POST", json: {} }),

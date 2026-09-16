@@ -14,8 +14,11 @@ services:
             CAMOFOX_HOST: 127.0.0.1
             CAMOFOX_PORT: 9377
             CAMOFOX_AUTH_MODE: disabled
-            CAMOFOX_HEADLESS: "true"
+            CAMOFOX_HEADLESS: "false"
             CAMOFOX_HUMANIZE: "true"
+            CAMOFOX_IDLE_TIMEOUT_MS: "3153600000000"
+            CAMOFOX_IDLE_EXIT_TIMEOUT_MS: "3153600000000"
+            CAMOFOX_SESSION_TIMEOUT: "3153600000000"
             CAMOFOX_PROFILES_DIR: /app/user/camofox/profiles
             CAMOFOX_COOKIES_DIR: /app/user/camofox/cookies
             CAMOFOX_DOWNLOADS_DIR: /app/user/camofox/downloads

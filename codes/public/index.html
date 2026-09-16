@@ -14,6 +14,7 @@
         <link rel="apple-touch-icon" href="/assets/icons/icon-192-maskable.png" />
         <title>tabyBot</title>
         <link rel="stylesheet" href="assets/vendor/highlight-github-dark.min.css" />
+        <link rel="stylesheet" href="assets/vendor/xterm/xterm.css" />
         <link rel="stylesheet" href="assets/css/app.css" />
         <!-- 벤더 라이브러리: UMD/IIFE 전역(marked / DOMPurify / hljs). 모듈 스크립트보다 먼저 로드 -->
         <script src="assets/vendor/marked.umd.min.js"></script>
@@ -47,6 +48,39 @@
                     stroke-linecap="round"
                     stroke-linejoin="round"
                 />
+            </symbol>
+            <symbol id="i-keyboard" viewBox="0 0 24 24">
+                <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <path d="M7 9.5h.01M11 9.5h.01M15 9.5h.01M19 9.5h.01M7 13.5h.01M11 13.5h.01M15 13.5h.01M19 13.5h.01M8.5 16.5h7" />
+                </g>
+            </symbol>
+            <symbol id="i-cursor" viewBox="0 0 24 24">
+                <path
+                    d="M5.5 3.5 19 11.8l-6 .9 3.2 6.2-2.7 1.4-3.1-6.2-4.9 3.6z"
+                    fill="currentColor"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    stroke-linejoin="round"
+                />
+            </symbol>
+            <symbol id="i-touch" viewBox="0 0 24 24">
+                <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="3.4" />
+                    <path d="M12 2.8v3.2M12 18v3.2M2.8 12H6M18 12h3.2" />
+                </g>
+            </symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24">
+                <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 4.5v5.5h-5.5" />
+                    <path d="M20.5 15a8.8 8.8 0 1 1-2-9.3l3 3.3" />
+                </g>
+            </symbol>
+            <symbol id="i-monitor" viewBox="0 0 24 24">
+                <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2.5" y="4" width="19" height="13" rx="2" />
+                    <path d="M8.5 20.5h7M12 17v3.5" />
+                </g>
             </symbol>
             <symbol id="i-settings" viewBox="0 0 24 24">
                 <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
@@ -209,6 +243,9 @@
                     <div class="hd-name-wrap">
                         <span id="hdrName"></span>
                     </div>
+                    <button id="btnHdrComputer" class="btn-icon" data-i18n-tip="computerOpenTip" data-i18n-aria="computerOpenTip">
+                        <svg class="icon"><use href="#i-monitor" /></svg>
+                    </button>
                 </header>
 
                 <div id="scroller">
@@ -252,6 +289,9 @@
 
                 <!-- 설정 페이지: 채팅 뷰(#header/#scroller/#composerWrap)와 같은 계층의 라우트 뷰 -->
                 <section id="settingsPage" class="settings-page" hidden aria-labelledby="settingsTitle" tabindex="-1"></section>
+
+                <!-- 봇 컴퓨터 페이지(/c/<uuid>): 화면 스트림 + 터미널 -->
+                <section id="computerPage" class="computer-page" hidden aria-label="computer" tabindex="-1"></section>
             </main>
         </div>
 
@@ -281,6 +321,9 @@
         <script src="assets/js/ui/composer.js"></script>
         <script src="assets/js/ui/settings.js"></script>
         <script src="assets/js/ui/todos.js"></script>
+        <script src="assets/vendor/xterm/xterm.js"></script>
+        <script src="assets/vendor/xterm/xterm-addon-fit.js"></script>
+        <script src="assets/js/ui/computer.js"></script>
         <script src="assets/js/ui/onboarding.js"></script>
         <script src="assets/js/app.js"></script>
     </body>

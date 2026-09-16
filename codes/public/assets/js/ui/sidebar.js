@@ -215,7 +215,7 @@
     }
 
     function setMobileChatFromRoute() {
-        if (isMobile()) setMobileChat(/^(\/a\/|\/s\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
+        if (isMobile()) setMobileChat(/^(\/a\/|\/s\/|\/c\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
     }
 
     function setMobileOpen(open) {
