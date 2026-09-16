@@ -499,7 +499,7 @@ services:
             CAMOFOX_HOST: 127.0.0.1
             CAMOFOX_PORT: 9377
             CAMOFOX_AUTH_MODE: disabled
-            CAMOFOX_HEADLESS: "true"
+            CAMOFOX_HEADLESS: "false"
             CAMOFOX_HUMANIZE: "true"
             CAMOFOX_PROFILES_DIR: /app/user/camofox/profiles
             CAMOFOX_COOKIES_DIR: /app/user/camofox/cookies
