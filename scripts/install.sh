@@ -27,12 +27,13 @@ bootstrap_tty_installer() {
     fi
     exec env TABYBOT_INSTALL_REEXEC=1 bash "${tmp}" "$@" 0</dev/tty
 }
-bootstrap_tty_installer
+bootstrap_tty_installer "$@"
 
 REPO_OWNER="gpdir16"
 IMAGE_DEFAULT="ghcr.io/${REPO_OWNER}/tabybot:latest"
 REPO_URL="https://github.com/${REPO_OWNER}/tabyBot.git"
-REPO_BRANCH="${TABYBOT_REPO_BRANCH:-main}"
+# 빈 값이면 main()에서 .env의 저장값을 읽은 뒤 main으로 결정한다.
+REPO_BRANCH="${TABYBOT_REPO_BRANCH:-}"
 INSTALL_DIR="${TABYBOT_HOME:-${HOME}/.tabybot}"
 APP_DIR="${INSTALL_DIR}/app"
 USER_DATA_DIR="${INSTALL_DIR}/user"
@@ -43,6 +44,8 @@ CAMOFOX_VERSION="${CAMOFOX_VERSION:-2.4.7}"
 
 DOCKER_SHELL="docker"
 TABYBOT_LANG_RESOLVED=""
+# sudo/cron 등 USER가 비어 있는 환경에서도 set -u로 죽지 않게 한다.
+INSTALL_USER="${USER:-$(id -un 2>/dev/null || true)}"
 
 resolve_lang() {
     if [ -n "${TABYBOT_LANG_RESOLVED}" ]; then
@@ -74,6 +77,10 @@ Install or update tabyBot.
 
 Optional:
   TABYBOT_MODE=docker|local  (default: docker, or prompt on first install; set explicitly to switch on update)
+  TABYBOT_PORT=8999          (host port; container always listens on 8999)
+  TABYBOT_BIND=127.0.0.1     (host interface; 0.0.0.0 exposes on the LAN)
+  TABYBOT_WEB_TOKEN=...      (require a token for the web UI/API)
+  TABYBOT_REPO_BRANCH=main   (local-mode source branch; persisted for updates)
 Language: TABYBOT_LANG=ko|en  (default: en, or ko if LANG is Korean)
 EOF
 }
@@ -206,9 +213,9 @@ install_docker_linux() {
         if [ "$(id -u)" -eq 0 ]; then systemctl enable --now docker 2>/dev/null || true
         else sudo systemctl enable --now docker 2>/dev/null || true; fi
     fi
-    if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-        if ! id -nG "${USER}" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
-            sudo usermod -aG docker "${USER}" 2>/dev/null || true
+    if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && [ -n "${INSTALL_USER}" ]; then
+        if ! id -nG "${INSTALL_USER}" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+            sudo usermod -aG docker "${INSTALL_USER}" 2>/dev/null || true
         fi
     fi
 }
@@ -402,16 +409,17 @@ prepare_mode_switch() {
 
 ensure_systemd_linger() {
     [ "$(uname -s)" = Linux ] || return 0
+    [ -n "${INSTALL_USER}" ] || return 0
     command -v loginctl >/dev/null 2>&1 || return 0
-    if loginctl show-user "${USER}" -p Linger 2>/dev/null | grep -q 'Linger=yes'; then
+    if loginctl show-user "${INSTALL_USER}" -p Linger 2>/dev/null | grep -q 'Linger=yes'; then
         return 0
     fi
     if is_ko; then echo "==> 재부팅·로그아웃 후에도 실행되도록 linger 설정 중..."; else echo "==> Enabling systemd linger for reboot/logout survival..."; fi
-    loginctl enable-linger "${USER}" 2>/dev/null || {
+    loginctl enable-linger "${INSTALL_USER}" 2>/dev/null || {
         if is_ko; then
-            echo "⚠ linger 설정 실패 — 로그아웃 후 서비스가 중지될 수 있습니다: sudo loginctl enable-linger ${USER}"
+            echo "⚠ linger 설정 실패 — 로그아웃 후 서비스가 중지될 수 있습니다: sudo loginctl enable-linger ${INSTALL_USER}"
         else
-            echo "⚠ Could not enable linger — service may stop after logout: sudo loginctl enable-linger ${USER}"
+            echo "⚠ Could not enable linger — service may stop after logout: sudo loginctl enable-linger ${INSTALL_USER}"
         fi
     }
 }
@@ -495,7 +503,6 @@ services:
             TABYBOT_MODE: docker
             TABYBOT_HOME: "${install_dir_escaped}"
             TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
-            TABYBOT_PORT: \${TABYBOT_PORT:-8999}
             CAMOFOX_HOST: 127.0.0.1
             CAMOFOX_PORT: 9377
             CAMOFOX_AUTH_MODE: disabled
@@ -509,7 +516,7 @@ services:
             - tabybot-user:/app/user
         restart: unless-stopped
         ports:
-            - "\${TABYBOT_PORT:-8999}:8999"
+            - "\${TABYBOT_BIND:-127.0.0.1}:\${TABYBOT_PORT:-8999}:8999"
 
 volumes:
     tabybot-user:
@@ -517,10 +524,12 @@ EOF
 }
 
 write_env_quoted() {
+    # .env는 launchd에서 `set -a; . file`로 source되므로 ", $, ` 전부 이스케이프한다.
     local key="$1" value="$2"
     value="${value//\\/\\\\}"
     value="${value//\"/\\\"}"
     value="${value//\$/\\$}"
+    value="${value//\`/\\\`}"
     printf '%s="%s"\n' "${key}" "${value}"
 }
 
@@ -542,13 +551,15 @@ write_local_version() {
 write_env() {
     local mode="${1:-docker}"
     local version=""
-    local existing_web_token="" existing_port=""
+    local existing_web_token="" existing_port="" existing_bind=""
     umask 077
     if [ -f "${ENV_FILE}" ]; then
         existing_web_token="$(grep '^TABYBOT_WEB_TOKEN=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
         existing_web_token="$(strip_env_scalar "${existing_web_token}")"
         existing_port="$(grep '^TABYBOT_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
         existing_port="$(strip_env_scalar "${existing_port}")"
+        existing_bind="$(grep '^TABYBOT_BIND=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        existing_bind="$(strip_env_scalar "${existing_bind}")"
     fi
     if [ -n "${TABYBOT_WEB_TOKEN:-}" ]; then
         existing_web_token="${TABYBOT_WEB_TOKEN}"
@@ -556,6 +567,16 @@ write_env() {
     if [ -n "${TABYBOT_PORT:-}" ]; then
         existing_port="${TABYBOT_PORT}"
     fi
+    if [ -n "${TABYBOT_BIND:-}" ]; then
+        existing_bind="${TABYBOT_BIND}"
+    fi
+    # 포트는 숫자만 통과 — .env가 손상돼도 깨진 값을 다시 쓰지 않는다.
+    case "${existing_port}" in
+        ''|*[!0-9]*) existing_port="" ;;
+    esac
+    case "${existing_bind}" in
+        ''|*[!0-9A-Za-z.:-]*) existing_bind="" ;;
+    esac
     if [ "${mode}" = local ] && [ -f "${APP_DIR}/VERSION" ]; then
         version="$(tr -d '\n' <"${APP_DIR}/VERSION")"
     elif [ "${mode}" = local ] && [ -f "${ENV_FILE}" ]; then
@@ -594,6 +615,13 @@ write_env() {
         fi
         if [ -n "${existing_port}" ]; then
             printf 'TABYBOT_PORT=%s\n' "${existing_port}"
+        fi
+        if [ -n "${existing_bind}" ]; then
+            printf 'TABYBOT_BIND=%s\n' "${existing_bind}"
+        fi
+        # 로컬 설치의 소스 브랜치를 기억해 업데이트가 같은 브랜치를 따라가게 한다.
+        if [ -n "${REPO_BRANCH}" ] && [ "${REPO_BRANCH}" != "main" ]; then
+            printf 'TABYBOT_REPO_BRANCH=%s\n' "${REPO_BRANCH}"
         fi
     } >"${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
@@ -670,10 +698,15 @@ download_source_tarball() {
     tmp="$(mktemp -t tabybot-src.XXXXXX.tar.gz)"
     if is_ko; then echo "==> 소스 코드 받는 중..."; else echo "==> Downloading source..."; fi
     curl -fsSL "${url}" -o "${tmp}"
-    rm -rf "${APP_DIR}"
+    # 압축 해제가 성공한 뒤에만 기존 app을 지운다 — 네트워크/아카이브 실패가
+    # 설치본을 통째로 날리지 않게.
     mkdir -p "${INSTALL_DIR}"
-    tar -xzf "${tmp}" -C "${INSTALL_DIR}"
+    if ! tar -xzf "${tmp}" -C "${INSTALL_DIR}" 2>/dev/null; then
+        rm -f "${tmp}"
+        die "$(if is_ko; then echo "소스 압축 해제에 실패했습니다."; else echo "Failed to extract source archive."; fi)"
+    fi
     rm -f "${tmp}"
+    rm -rf "${APP_DIR}"
     extracted="$(find "${INSTALL_DIR}" -maxdepth 1 -mindepth 1 -type d -name 'tabyBot-*' | head -1)"
     [ -n "${extracted}" ] || die "$(if is_ko; then echo "소스 압축 해제에 실패했습니다."; else echo "Failed to extract source archive."; fi)"
     mv "${extracted}" "${APP_DIR}"
@@ -853,6 +886,13 @@ main() {
         usage
         exit 0
     fi
+
+    # 업데이트 시 이전 설치의 브랜치를 이어받는다 (환경 변수가 우선).
+    if [ -z "${REPO_BRANCH}" ] && [ -f "${ENV_FILE}" ]; then
+        REPO_BRANCH="$(grep '^TABYBOT_REPO_BRANCH=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        REPO_BRANCH="$(strip_env_scalar "${REPO_BRANCH}")"
+    fi
+    REPO_BRANCH="${REPO_BRANCH:-main}"
 
     local updating=false
     if is_installed; then

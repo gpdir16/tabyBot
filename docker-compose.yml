@@ -10,7 +10,6 @@ services:
             TABYBOT_HOME: ${TABYBOT_HOME:-}
             TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
             TABYBOT_WEB_TOKEN: ${TABYBOT_WEB_TOKEN:-}
-            TABYBOT_PORT: ${TABYBOT_PORT:-8999}
             CAMOFOX_HOST: 127.0.0.1
             CAMOFOX_PORT: 9377
             CAMOFOX_AUTH_MODE: disabled
@@ -26,8 +25,9 @@ services:
         # Persistent state (config, memory, MCP, scheduling). Defaults: codes/templates/user
         volumes:
             - tabybot-user:/app/user
+        # 호스트 측은 기본 loopback만 연다 — LAN에 열려면 TABYBOT_BIND=0.0.0.0 (+토큰 권장).
         ports:
-            - "${TABYBOT_PORT:-8999}:8999"
+            - "${TABYBOT_BIND:-127.0.0.1}:${TABYBOT_PORT:-8999}:8999"
         restart: unless-stopped
 
 volumes:

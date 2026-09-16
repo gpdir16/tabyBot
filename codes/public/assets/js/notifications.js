@@ -128,8 +128,10 @@
 
     function init() {
         void registerSw().then(() => {
-            const tk = localStorage.getItem("tabybot.web.token") || "";
-            if (tk && swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
+            try {
+                const tk = localStorage.getItem("tabybot.web.token") || "";
+                if (tk && swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
+            } catch {}
             if (enabled()) void ensurePush();
         });
         navigator.serviceWorker?.addEventListener?.("message", (ev) => {

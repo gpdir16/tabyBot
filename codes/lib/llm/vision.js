@@ -15,11 +15,21 @@ export function isVisionImageMime(mimeType) {
 
 const EXT_MIME = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
 
+// data URI로 인라인되는 이미지는 base64가 바이트의 ~1.4배 — 메모리와 요청 크기
+// 양쪽을 막기 위해 상한을 둔다. 큰 이미지는 경로만 남긴다.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 export function visionImagePart(imagePath, mime) {
     try {
         if (!imagePath || !fs.existsSync(imagePath)) return null;
         const stat = fs.statSync(imagePath);
         if (!stat.isFile() || !stat.size) return null;
+        if (stat.size > MAX_IMAGE_BYTES) {
+            return {
+                type: "text",
+                text: `[Image too large to send inline: ${path.basename(imagePath)} (${Math.round(stat.size / 1048576)} MB)]`,
+            };
+        }
         const useMime =
             String(mime || "image/png")
                 .toLowerCase()

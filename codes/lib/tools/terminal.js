@@ -1,4 +1,4 @@
-import { exec, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { loadAgentConfig } from "../config-loader.js";
 import { camofoxUser, camofoxEnv } from "../computer/camofox-user.js";
 import { USER_DIR, resolveAgentPath } from "../paths.js";
@@ -83,12 +83,12 @@ const MAX_BG_BUFFER = 200_000;
 const backgroundJobs = new Map();
 let nextJobId = 1;
 
-function appendTruncated(buf, text) {
+function appendTruncated(buf, text, limit = MAX_BG_BUFFER) {
     const s = String(text || "");
     if (!s) return buf;
     const next = (buf || "") + s;
-    if (next.length <= MAX_BG_BUFFER) return next;
-    return `${next.slice(0, MAX_BG_BUFFER)}\n…[truncated]`;
+    if (next.length <= limit) return next;
+    return `${next.slice(0, limit)}\n…[truncated]`;
 }
 
 function startBackgroundJob(command, cwd, env) {
@@ -118,7 +118,9 @@ function startBackgroundJob(command, cwd, env) {
         job.stderr = appendTruncated(job.stderr, d.toString());
     });
 
-    child.on("close", (code) => {
+    // close가 아니라 exit으로 상태를 본다 — 손자 프로세스가 파이프를 잡고 있어도
+    // 셸이 죽으면 잡 상태가 완료로 바뀐다(출력 수집은 파이프가 열린 동안 계속).
+    child.on("exit", (code) => {
         if (job.status === "killed") return; // bg_kill이 이미 상태를 확정함
         job.status = "completed";
         job.exitCode = code;
@@ -243,60 +245,86 @@ export async function executeTerminalTool(name, args, { signal, agentId } = {}) 
 
     const timeoutMs = agent.terminalTimeoutMs ?? 120_000;
 
+    // exec 대신 detached spawn: 자식이 자기 프로세스 그룹을 갖게 해서
+    // 타임아웃/중단 시 트리 전체를 죽인다. exec 콜백은 stdio EOF(close)를 기다려
+    // 파이프를 물고 있는 손자 프로세스가 있으면 영원히 resolve되지 않는다.
     return new Promise((resolve) => {
         let stoppedByUser = false;
-        const child = exec(
-            command,
-            {
-                cwd,
-                timeout: timeoutMs,
-                maxBuffer: maxChars * 2,
-                shell: "/bin/sh",
-                env,
-            },
-            (err, stdout, stderr) => {
-                signal?.removeEventListener("abort", onAbort);
-                const out = truncate(stdout || "", maxChars);
-                const errOut = truncate(stderr || "", maxChars);
-                const ok = !err;
-                const exitCode = err && typeof err.code === "number" ? err.code : ok ? 0 : 1;
-                if (stoppedByUser) {
-                    resolve({
-                        ok: false,
-                        cwd,
-                        aborted: true,
-                        exitCode: exitCode || child.exitCode || 1,
-                        stdout: out,
-                        stderr: errOut || "Stopped by user.",
-                    });
-                    return;
-                }
+        let timedOut = false;
+        let settled = false;
+        let stdout = "";
+        let stderr = "";
+        const cap = maxChars * 2;
+
+        const child = spawn("/bin/sh", ["-c", command], { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+        if (!child.pid) {
+            resolve({ ok: false, cwd, exitCode: 1, stdout: "", stderr: "Failed to spawn shell" });
+            return;
+        }
+
+        let graceTimer = null;
+        const cleanup = () => {
+            clearTimeout(timer);
+            clearTimeout(graceTimer);
+            signal?.removeEventListener("abort", onAbort);
+        };
+
+        const finish = (exitCode) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            const out = truncate(stdout, maxChars);
+            const errOut = truncate(stderr, maxChars);
+            if (stoppedByUser) {
+                resolve({ ok: false, cwd, aborted: true, exitCode: exitCode ?? 1, stdout: out, stderr: errOut || "Stopped by user." });
+                return;
+            }
+            if (timedOut) {
                 resolve({
-                    ok,
+                    ok: false,
                     cwd,
-                    exitCode,
+                    timedOut: true,
+                    exitCode: exitCode ?? 1,
                     stdout: out,
-                    stderr: errOut,
+                    stderr: errOut || `Timed out after ${timeoutMs}ms. Rerun with background=true for long-running commands.`,
                 });
-            },
-        );
+                return;
+            }
+            const ok = exitCode === 0;
+            resolve({ ok, cwd, exitCode: exitCode ?? 1, stdout: out, stderr: errOut });
+        };
+
+        const killTree = () => killProcessTree(child.pid);
 
         const onAbort = () => {
             stoppedByUser = true;
-            child.kill("SIGTERM");
+            killTree();
         };
 
-        signal?.addEventListener("abort", onAbort, { once: true });
+        const timer = setTimeout(() => {
+            timedOut = true;
+            killTree();
+        }, timeoutMs);
 
-        child.on("error", (err) => {
-            signal?.removeEventListener("abort", onAbort);
-            resolve({
-                ok: false,
-                cwd,
-                exitCode: err.code ?? 1,
-                stdout: "",
-                stderr: truncate(err.message || "", maxChars),
-            });
+        // 프로세스가 exit했는데 손자가 파이프를 물고 있어 close가 안 오는 경우에도
+        // 3초 유예 뒤 결과를 확정한다(모은 출력까지만 반환).
+        child.on("exit", (code) => {
+            graceTimer = setTimeout(() => finish(code), 3000);
+            graceTimer.unref?.();
         });
+        child.on("close", (code) => finish(code));
+        child.on("error", (err) => {
+            stderr = appendTruncated(stderr, err.message || String(err));
+            finish(err.code ?? 1);
+        });
+
+        child.stdout.on("data", (d) => {
+            stdout = appendTruncated(stdout, d.toString(), cap);
+        });
+        child.stderr.on("data", (d) => {
+            stderr = appendTruncated(stderr, d.toString(), cap);
+        });
+
+        signal?.addEventListener("abort", onAbort, { once: true });
     });
 }

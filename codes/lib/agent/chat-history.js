@@ -2,8 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { SESSION_DIR, USER_DIR } from "../paths.js";
 import { getAgentByUuid } from "../agents-store.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 
-import { STOP_BY_USER_HINT } from "./session.js";
+import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT, STOP_BY_USER_HINT } from "./session.js";
 
 const HISTORY_VERSION = 3;
 const MANIFEST_VERSION = 1;
@@ -14,10 +15,14 @@ export const RECOVERY_PROMPT =
 const INTERNAL_USER_HINTS = new Set([
     "You have enough tool output. Stop calling tools. Reply to the user in plain text now using results you already have.",
     STOP_BY_USER_HINT,
+    EMPTY_REPLY_HINT,
+    QUIET_EMPTY_HINT,
     RECOVERY_PROMPT,
 ]);
 
 const RECOVERABLE_TURN_STATUSES = new Set(["pending", "in_progress", "interrupted"]);
+// 새 턴 체크포인트가 거슬러 합쳐도 되는 상태 — interrupted는 복구 실행에서만 합친다.
+const PENDING_MERGE_STATUSES = new Set(["pending", "in_progress"]);
 
 export function conversationDir(chatId) {
     const agent = getAgentByUuid(chatId);
@@ -49,8 +54,7 @@ function readJson(filePath, fallback = null) {
 }
 
 function writeJson(filePath, data) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    writeJsonAtomic(filePath, data);
 }
 
 function nextSessionId(manifest) {
@@ -80,7 +84,18 @@ function ensureManifest(chatId) {
         return manifest;
     }
 
-    const sessionId = "s000001";
+    // 매니페스트가 깨졌을 때 기존 세션 파일을 덮어쓰지 않는다 — 디스크에 남은
+    // sNNNNNN.json 중 가장 큰 번호 다음으로 새 세션을 잡는다.
+    let maxSeq = 0;
+    try {
+        for (const name of fs.readdirSync(path.join(root, "sessions"))) {
+            const m = /^s(\d+)\.json$/.exec(name);
+            if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
+        }
+    } catch {
+        // sessions 디렉터리가 아직 없으면 첫 세션부터 시작한다.
+    }
+    const sessionId = `s${String(maxSeq + 1).padStart(6, "0")}`;
     const relFile = `sessions/${sessionId}.json`;
     const now = new Date().toISOString();
 
@@ -209,6 +224,19 @@ export function replaceChatHistory(chatId, turns) {
     writeActiveSessionData(chatId, turns);
 }
 
+// 압축 요약은 디스크(새 세션 첫 턴)와 진행 중 요청 양쪽에 같은 형태로 들어간다.
+export function compressedSummaryTurn(summary) {
+    return {
+        at: new Date().toISOString(),
+        messages: [
+            {
+                role: "system",
+                content: `## Earlier conversation (compressed summary — your own past context, not a user message)\n\n${summary.trim()}`,
+            },
+        ],
+    };
+}
+
 // After compression: archive full session on disk; active file keeps recent turns.
 // The compressed summary is stored as a system-message turn at the start of the new session.
 export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary) {
@@ -226,19 +254,7 @@ export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary)
         oldEntry.archiveReason = "context_compression";
     }
 
-    const summaryTurn = summary?.trim()
-        ? [
-              {
-                  at: now,
-                  messages: [
-                      {
-                          role: "system",
-                          content: `## Earlier conversation (compressed summary — your own past context, not a user message)\n\n${summary.trim()}`,
-                      },
-                  ],
-              },
-          ]
-        : [];
+    const summaryTurn = summary?.trim() ? [{ ...compressedSummaryTurn(summary), at: now }] : [];
     const cleanRecentTurns = recentTurns.filter(
         (t) =>
             !Array.isArray(t?.messages) ||
@@ -347,9 +363,19 @@ export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null }
 
     const turns = loadChatHistory(chatId);
     let targetIndex = turns.length - 1;
-    while (targetIndex > 0 && RECOVERABLE_TURN_STATUSES.has(turns[targetIndex - 1]?.status)) targetIndex -= 1;
+    // 복구 실행(baseMessages 있음)이 아니면 interrupted 턴까지 거슬러 합치지 않는다 —
+    // 이전 턴의 메시지가 새 턴 체크포인트로 교체되며 유실되는 것을 막기 위해서다.
+    const mergeable = Array.isArray(baseMessages) ? RECOVERABLE_TURN_STATUSES : PENDING_MERGE_STATUSES;
+    while (targetIndex > 0 && mergeable.has(turns[targetIndex - 1]?.status)) targetIndex -= 1;
     const target = turns[targetIndex];
     const messages = Array.isArray(baseMessages) ? [...baseMessages, ...turnMessages.map(cloneStoredMessage)] : turnMessages.map(cloneStoredMessage);
+    // 대기열(pending) 턴이 이 턴에 흡수되면 체크포인트가 메시지를 통째로 교체하므로
+    // 저장돼 있던 첨부 메타데이터를 새 유저 메시지로 옮겨 둔다.
+    const pendingAttachments = target?.messages?.[0]?.attachments;
+    if (Array.isArray(pendingAttachments) && pendingAttachments.length) {
+        const userMessage = messages.find((m) => m?.role === "user");
+        if (userMessage && !userMessage.attachments) userMessage.attachments = pendingAttachments;
+    }
     const checkpoint = {
         at: target?.at || new Date().toISOString(),
         status: "in_progress",
@@ -357,7 +383,7 @@ export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null }
         messages,
     };
 
-    if (target && RECOVERABLE_TURN_STATUSES.has(target.status)) turns[targetIndex] = checkpoint;
+    if (target && mergeable.has(target.status)) turns[targetIndex] = checkpoint;
     else turns.push(checkpoint);
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);
@@ -439,15 +465,33 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
         const pending = turns[turns.length - 1];
         const msgs = pending?.messages || [];
         if (msgs.length !== 1 || msgs[0]?.role !== "user") break;
-        const idx = incomingUsers.lastIndexOf(msgs[0].content);
+        const content = msgs[0].content;
+        if (typeof content !== "string") break;
+        // 빈 줄이 들어간 메시지는 합성 래퍼에서 여러 파트로 쪼개져 있으므로
+        // 인접 파트를 다시 이어 붙여서 pending 턴 원문과 맞는지 본다.
+        let idx = -1;
+        let span = 1;
+        for (let i = incomingUsers.length - 1; i >= 0; i -= 1) {
+            for (let len = 1; i + len <= incomingUsers.length; len += 1) {
+                if (incomingUsers.slice(i, i + len).join("\n\n") === content) {
+                    idx = i;
+                    span = len;
+                    break;
+                }
+                if (incomingUsers.slice(i, i + len).join("\n\n").length > content.length) break;
+            }
+            if (idx >= 0) break;
+        }
         if (idx < 0) break;
-        incomingUsers.splice(idx, 1);
+        incomingUsers.splice(idx, span);
         turns.pop();
     }
 
     const last = turns[turns.length - 1];
     // 복구 턴은 기존 체크포인트와 새 실행분을 하나의 완료 턴으로 확정한다.
-    if (last && (last.status === "in_progress" || last.status === "interrupted")) {
+    // interrupted 턴은 복구 실행(baseMessages 있음)에서만 확정 대상이다 — 새 턴이
+    // 미완료 이전 턴을 덮어쓰며 사용자 메시지를 지우는 것을 막는다.
+    if (last && (last.status === "in_progress" || (last.status === "interrupted" && Array.isArray(extra.baseMessages)))) {
         const completedMessages = Array.isArray(extra.baseMessages)
             ? [...extra.baseMessages.map(cloneStoredMessage), ...storedMessages]
             : storedMessages;

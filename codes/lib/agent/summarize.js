@@ -6,7 +6,7 @@ import {
     getContextLimit,
     getKeepRecentTokenBudget,
 } from "./context.js";
-import { loadChatHistory, replaceChatHistoryAfterCompression, turnToMessages } from "./chat-history.js";
+import { compressedSummaryTurn, loadChatHistory, replaceChatHistoryAfterCompression, turnToMessages } from "./chat-history.js";
 
 const COMPRESS_SYSTEM = `You compress chat transcripts for long-term context storage.
 
@@ -251,7 +251,10 @@ async function applyIntelligentCompression(
         replaceChatHistoryAfterCompression(chatId, recentHistory, summary);
     }
 
-    const rebuilt = buildWithHistory(latestUser, recentHistory, {
+    // 디스크에 저장된 요약을 진행 중인 요청에도 그대로 실어야
+    // 압축 직후 첫 응답이 요약 전 컨텍스트를 잃지 않는다.
+    const historyWithSummary = summary?.trim() ? [compressedSummaryTurn(summary), ...recentHistory] : recentHistory;
+    const rebuilt = buildWithHistory(latestUser, historyWithSummary, {
         modelMeta,
         attachments,
         runtimeInfo,

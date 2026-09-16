@@ -88,6 +88,8 @@
                 data = txt;
             }
         }
+        // 세션 중 401(토큰 변경/만료)은 토스트만으론 복구 불가 — 토큰 입력 화면을 띄운다.
+        if (res.status === 401) T.app?.handleUnauthorized?.();
         if (!res.ok) throw new ApiError(res.status, data);
         return data;
     }

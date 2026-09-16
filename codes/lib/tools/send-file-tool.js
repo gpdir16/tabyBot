@@ -30,7 +30,7 @@ export async function executeSendFileTool(_name, args, _ctx) {
         return { error: `file not found: ${filePath}` };
     }
     try {
-        const entry = registerProducedFile(filePath, args?.caption);
+        const entry = await registerProducedFile(filePath, args?.caption);
         return {
             ok: true,
             name: entry.name,

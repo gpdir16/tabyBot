@@ -1,5 +1,10 @@
 export const STOP_BY_USER_HINT = "The user pressed Stop. Stop immediately. Do not call more tools. Reply briefly with progress and what remains.";
 
+export const EMPTY_REPLY_HINT =
+    "Your previous assistant reply was empty. Reply to the user in plain text now. Summarize what you accomplished and answer their request.";
+
+export const QUIET_EMPTY_HINT = "If the user does not need a message, reply with ONLY __SILENT__. Do not narrate an empty check.";
+
 const sessions = new Map();
 
 export class AgentSession {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { USER_DIR } from "../paths.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 
 const CLIENT_ID = "Iv1.b507a08c87ecfe98";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
@@ -37,20 +38,15 @@ function loadStored() {
 }
 
 function saveStored(tokens) {
-    fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
-    fs.writeFileSync(
+    writeJsonAtomic(
         AUTH_FILE,
-        `${JSON.stringify(
-            {
-                githubAccessToken: tokens.githubAccessToken,
-                copilotAccessToken: tokens.copilotAccessToken,
-                expiresAt: tokens.expiresAt,
-                baseURL: tokens.baseURL,
-            },
-            null,
-            2,
-        )}\n`,
-        "utf8",
+        {
+            githubAccessToken: tokens.githubAccessToken,
+            copilotAccessToken: tokens.copilotAccessToken,
+            expiresAt: tokens.expiresAt,
+            baseURL: tokens.baseURL,
+        },
+        { mode: 0o600 },
     );
     try {
         fs.chmodSync(AUTH_FILE, 0o600);

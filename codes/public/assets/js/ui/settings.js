@@ -112,6 +112,9 @@
         returnPath = null;
         page.hidden = true;
         document.body.classList.remove("settings-route");
+        // OAuth 대기 중 페이지를 닫아도 폴링이 백그라운드로 계속 도는 걸 막는다.
+        // oauthPending은 유지 — 다시 열면 oauthSection이 폴링을 재개한다.
+        stopOauthPoll();
         openTab = null;
         modelsCache = null;
         modelsLoading = false;

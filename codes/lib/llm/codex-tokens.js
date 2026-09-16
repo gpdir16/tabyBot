@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { USER_DIR } from "../paths.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 
 const ISSUER = "https://auth.openai.com";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -63,7 +64,12 @@ export function saveCodexTokens(tokens) {
             expires_at: tokens.expiresAt,
         };
         if (tokens.accountId) data.account_id = tokens.accountId;
-        fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), "utf8");
+        writeJsonAtomic(AUTH_FILE, data, { mode: 0o600 });
+        try {
+            fs.chmodSync(AUTH_FILE, 0o600);
+        } catch {
+            // 일부 파일시스템에서는 chmod가 실패할 수 있음
+        }
     } catch {
         // best-effort
     }

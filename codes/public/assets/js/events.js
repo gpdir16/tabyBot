@@ -18,6 +18,9 @@
     let fallbackTimer = null;
     let polling = false;
     let pollCursor = 0;
+    // connect() 재진입 시 이전 fetch/폴링 루프가 stopped=false를 보고 되살아나
+    // 중복 스트림이 되지 않도록 세대 번호로 끊는다.
+    let generation = 0;
     const handledSeqs = new Set();
     let connectionStartedAt = 0;
     let receivedEvent = false;
@@ -202,11 +205,14 @@
             ctrl = null;
         }
         state.setConn("connecting");
-        void pollLoop();
+        void pollLoop(generation);
     }
 
-    async function pollLoop() {
-        while (polling && !stopped) {
+    async function pollLoop(gen) {
+        // 서버 다운 시 connection refused가 즉시 실패하므로 고정 500ms 폴링은
+        // 죽은 서버를 두드린다 — 실패하면 지수적으로 늘린다(최대 10초).
+        let delay = 500;
+        while (polling && !stopped && gen === generation) {
             try {
                 const result = await api.eventsPoll(pollCursor, pollCursor ? 0 : FRESH_LOAD_GAP_MS);
                 for (const event of result?.events || []) handle(event);
@@ -214,10 +220,13 @@
                     pollCursor = Number(result.cursor);
                 }
                 state.setConn("connected");
-            } catch (_) {
+                delay = 500;
+            } catch (err) {
                 state.setConn("disconnected");
+                if (err?.status === 401) T.app?.handleUnauthorized?.();
+                delay = Math.min(delay * 2, 10_000);
             }
-            if (polling && !stopped) await new Promise((resolve) => setTimeout(resolve, 500));
+            if (polling && !stopped && gen === generation) await new Promise((resolve) => setTimeout(resolve, delay));
         }
     }
 
@@ -278,18 +287,19 @@
         }, 5_000);
     }
 
-    async function startFetch() {
+    async function startFetch(gen) {
         usingFetch = true;
         lastSeen = Date.now();
         armWatchdog();
         schedulePollingFallback();
-        while (!stopped && !polling) {
+        while (!stopped && !polling && gen === generation) {
             ctrl = new AbortController();
             try {
                 const headers = { Accept: "text/event-stream" };
                 const tk = api.getToken();
                 if (tk) headers.Authorization = "Bearer " + tk;
                 const res = await fetch("/api/events", { headers, signal: ctrl.signal });
+                if (res.status === 401) T.app?.handleUnauthorized?.();
                 if (!res.ok || !res.body) throw new Error("sse status " + res.status);
 
                 state.setConn("connected");
@@ -320,9 +330,9 @@
                 }
                 // 서버가 스트림을 닫음 → 아래에서 백오프 후 재접속
             } catch (_) {
-                if (stopped) break;
+                if (stopped || gen !== generation) break;
             }
-            if (stopped || polling) break;
+            if (stopped || polling || gen !== generation) break;
             state.setConn("disconnected");
             await new Promise((r) => {
                 timer = setTimeout(r, backoff);
@@ -333,6 +343,7 @@
 
     function connect() {
         stopInternal();
+        const gen = generation;
         stopped = false;
         backoff = 1000;
         connectionStartedAt = Date.now();
@@ -342,11 +353,12 @@
             return;
         }
         state.setConn("connecting");
-        if (api.getToken()) startFetch();
+        if (api.getToken()) startFetch(gen);
         else startNative();
     }
 
     function stopInternal() {
+        generation += 1;
         stopped = true;
         polling = false;
         clearTimeout(fallbackTimer);

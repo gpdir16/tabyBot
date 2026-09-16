@@ -8,11 +8,12 @@ import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
 import { countMessagesTokens } from "./context.js";
 import { firstAgentId } from "../agents-store.js";
+import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
 function parseToolArgs(raw) {
     try {
-        return JSON.parse(raw || "{}");
+        return { ok: true, args: JSON.parse(raw || "{}") };
     } catch {
-        return {};
+        return { ok: false };
     }
 }
 
@@ -59,11 +60,6 @@ function buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallC
         deliveredAttachments: deliveredAttachmentsFromMessages(turnMessages),
     };
 }
-
-const EMPTY_REPLY_HINT =
-    "Your previous assistant reply was empty. Reply to the user in plain text now. Summarize what you accomplished and answer their request.";
-
-const QUIET_EMPTY_HINT = "If the user does not need a message, reply with ONLY __SILENT__. Do not narrate an empty check.";
 
 const SILENT_REPLY_TOKEN = "__SILENT__";
 
@@ -414,7 +410,6 @@ async function runAgentTurn(
                 break;
             }
 
-            injectPendingUserMessages(messages, session);
             if (shouldStop(session)) {
                 pushSkippedToolResults(messages, toolCalls, toolIndex);
                 return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
@@ -424,10 +419,18 @@ async function runAgentTurn(
 
             setStatus("tools", tc.function.name);
 
-            const args = parseToolArgs(tc.function.arguments);
+            const parsed = parseToolArgs(tc.function.arguments);
+            if (!parsed.ok) {
+                pushToolResult(messages, tc.id, {
+                    ok: false,
+                    error: `Tool arguments were not valid JSON for ${tc.function.name}; the call was not executed.`,
+                });
+                checkpointMessages(messages, contextBaseLength, onCheckpoint);
+                continue;
+            }
             toolCallCount += 1;
 
-            const result = await executeTool(tc.function.name, args, {
+            const result = await executeTool(tc.function.name, parsed.args, {
                 chatId,
                 sessionKey: resolvedSessionKey,
                 agentId: resolvedAgentId,

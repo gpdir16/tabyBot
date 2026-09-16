@@ -13,6 +13,10 @@
     let wasConnected = false;
     // 부트 재시도 중 이전 비동기 결과가 최신 화면을 덮지 않도록 한다.
     let bootToken = 0;
+    // 오프라인 복구 폴링과 401 프롬프트의 중복 방지 플래그.
+    let offlineTimer = 0;
+    let offlineDelay = 5000;
+    let authPromptOpen = false;
     // 키보드가 닫힌 상태의 visual viewport 최대 높이 (키보드 열림 감지 기준)
     let vvFullHeight = 0;
     // 이전 동기화 시점의 높이 (높이 변화 감지용)
@@ -136,12 +140,49 @@
         }
     });
 
+    // 세션 중 401: 서버 토큰이 바뀌었거나 저장 토큰이 지워졌다. 재인증 화면을 띄우고
+    // 성공하면 부트를 다시 시도한다. 연속 401이 프롬프트를 중복으로 띄우지 않게 가드.
+    function handleUnauthorized() {
+        if (authPromptOpen) return;
+        authPromptOpen = true;
+        T.onboarding.showToken(() => {
+            authPromptOpen = false;
+            boot();
+        });
+    }
+
+    // 서버 다운 후 복구 감지: 주기적으로 bootstrap을 두드려 성공하면 재부팅한다.
+    // 실패 시 지수 백오프(최대 30초)로 죽은 서버를 두드리지 않는다.
+    function scheduleOfflineRetry() {
+        clearTimeout(offlineTimer);
+        offlineTimer = setTimeout(async () => {
+            if (!state.state.offline) return;
+            try {
+                await T.api.bootstrap();
+            } catch (e) {
+                if (e instanceof T.api.ApiError && e.status === 401) {
+                    // 서버는 살아있다 — 오프라인이 아니라 인증 문제.
+                    state.state.offline = false;
+                    handleUnauthorized();
+                    return;
+                }
+                offlineDelay = Math.min(offlineDelay * 2, 30_000);
+                scheduleOfflineRetry();
+                return;
+            }
+            state.state.offline = false;
+            offlineDelay = 5000;
+            boot();
+        }, offlineDelay);
+    }
+
     function enterOffline(err) {
         // 오프라인은 온보딩과 무관: 마법사를 띄우지 않고 안내만 표시한다.
         state.state.offline = true;
         state.setConn("disconnected");
         T.i18n.init(null);
         T.toast.show("error", err ? T.api.errorText(err, t("offlineNote")) : t("offlineNote"));
+        if (location.protocol !== "file:") scheduleOfflineRetry();
     }
 
     /* ── URL 라우팅: /a/<uuid>(채팅) · /s/<탭>(설정 페이지) ── */
@@ -334,13 +375,16 @@
         renderRoute();
     });
 
-    // "/" → 컴포저 포커스. 입력 요소 내부에서는 무시.
+    // "/" → 컴포저 포커스. 입력 요소 내부와 채팅이 아닌 라우트(설정/할일/컴퓨터)에서는 무시.
     document.addEventListener("keydown", (e) => {
         const tag = document.activeElement?.tagName;
         const typing = tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable;
         if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            if (T.settingsUI.routeFromPath() || T.todosUI?.routeFromPath?.() || T.computerUI?.routeFromPath?.()) return;
+            const composer = document.getElementById("composerInput");
+            if (!composer || composer.offsetParent === null) return;
             e.preventDefault();
-            document.getElementById("composerInput")?.focus();
+            composer.focus();
         }
     });
 
@@ -364,5 +408,5 @@
 
     boot();
 
-    T.app = { applyTheme, retryBoot: boot, renderRoute, openSettings };
+    T.app = { applyTheme, retryBoot: boot, renderRoute, openSettings, handleUnauthorized };
 })((window.Taby = window.Taby || {}));

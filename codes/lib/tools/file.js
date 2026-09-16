@@ -17,6 +17,10 @@ function getMaxFileReadTokens(messages, modelMeta, model) {
 
 const fileReadCache = new Map();
 
+// file_read는 전체 파일을 메모리에 올리므로 상한을 둔다. 큰 파일은
+// terminal_run(sed/head/tail)으로 페이지 단위 읽기를 안내한다.
+const MAX_READ_BYTES = 8 * 1024 * 1024;
+
 function splitLines(text) {
     if (!text) return [];
     const lines = text.split("\n");
@@ -127,6 +131,12 @@ export async function executeFileRead(args, ctx) {
     if (!fs.existsSync(resolved)) return { error: "file not found", path: resolved };
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return { error: "not a file", path: resolved };
+    if (stat.size > MAX_READ_BYTES) {
+        return {
+            error: `file too large for file_read (${(stat.size / 1048576).toFixed(1)} MB > 8 MB). Use terminal_run with 'sed -n "START,ENDp" <path>' or head/tail to page through it.`,
+            path: resolved,
+        };
+    }
 
     const model = ctx.model || "gpt-4o-mini";
     const maxTokens = getMaxFileReadTokens(ctx.messages, ctx.modelMeta, model);

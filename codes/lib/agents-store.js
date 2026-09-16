@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { SESSION_DIR, USER_DIR } from "./paths.js";
+import { writeFileAtomic, writeJsonAtomic } from "./atomic-file.js";
 
 export const DEFAULT_AGENT_ID = "main";
 export const DEFAULT_AGENT_NAME = "tabyBot";
@@ -27,8 +28,7 @@ function readJson(filePath, fallback) {
 }
 
 function writeJson(filePath, data) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    writeJsonAtomic(filePath, data);
 }
 
 function newUuid() {
@@ -163,8 +163,7 @@ export function agentMemoryDir(id) {
 export function ensureAgentMemory(id) {
     const file = agentMemoryPath(id);
     if (!fs.existsSync(file)) {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, `# ${id} memory\n\n`, "utf8");
+        writeFileAtomic(file, `# ${id} memory\n\n`);
     }
     return file;
 }

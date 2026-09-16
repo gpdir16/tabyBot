@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import webpush from "web-push";
 import { USER_DIR } from "../paths.js";
+import { writeJsonAtomic } from "../atomic-file.js";
 import { getConversationMeta } from "./conversations.js";
 import { getAgent, getAgentByUuid } from "../agents-store.js";
 
@@ -25,7 +26,7 @@ function loadKeys() {
     ensureDir(DIR);
     const generated = webpush.generateVAPIDKeys();
     const keys = { publicKey: generated.publicKey, privateKey: generated.privateKey };
-    fs.writeFileSync(KEYS_FILE, `${JSON.stringify(keys, null, 2)}\n`);
+    writeJsonAtomic(KEYS_FILE, keys, { mode: 0o600 });
     return keys;
 }
 
@@ -45,7 +46,7 @@ export function getVapidPublicKey() {
 export function saveSubscription(sub) {
     if (!isValidSub(sub)) return false;
     ensureDir(SUBS_DIR);
-    fs.writeFileSync(subPath(sub.endpoint), `${JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys }, null, 2)}\n`);
+    writeJsonAtomic(subPath(sub.endpoint), { endpoint: sub.endpoint, keys: sub.keys });
     return true;
 }
 

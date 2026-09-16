@@ -636,6 +636,9 @@
 
         el.addEventListener("keydown", (e) => {
             if (e.metaKey && (e.key === "c" || e.key === "v" || e.key === "a" || e.key === "x")) return; // OS 단축키
+            // IME 조합 중엔 keydown이 중간 글자를 보낸다 — 조합 완료 후 input이 확정
+            // 문자를내므로 여기서도내면 중복 입력이 된다.
+            if (e.isComposing || e.key === "Process" || e.key === "Unidentified") return;
             const sym = KEYMAP[e.key];
             if (sym) {
                 sendScreen({ type: "key", key: sym, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey });
@@ -762,7 +765,13 @@
 
     /* ── 터미널(xterm.js) ─────────────────────────────────── */
     function ensureTerm() {
-        if (term) return;
+        if (term) return true;
+        // 벤더 xterm 에셋이 안 올라온 경우(캐시된 예전 index.html, 에셋 404 등)
+        // TypeError로 탭 전체가 죽지 않게 안내만 표시한다.
+        if (!window.Terminal || !window.FitAddon?.FitAddon) {
+            setMsg(termMsg, t("computerTerminalUnavailable"));
+            return false;
+        }
         const mono = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
         term = new window.Terminal({
             cursorBlink: true,
@@ -795,10 +804,11 @@
             } catch {}
         });
         termRo.observe(els.termHost);
+        return true;
     }
 
     function connectTerminal() {
-        ensureTerm();
+        if (!ensureTerm()) return;
         try {
             termFit.fit();
         } catch {}

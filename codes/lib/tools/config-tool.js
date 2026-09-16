@@ -1,16 +1,17 @@
 import { loadUserConfig, saveUserConfig } from "../config-loader.js";
-import { getCachedProviderThinkingMeta, normalizeThinkingLevel, normalizeNsfwLevel, NSFW_LEVELS } from "../user-settings.js";
+import { getCachedProviderThinkingMeta, normalizeThinkingLevel } from "../user-settings.js";
 import { restartUpdateScheduler } from "../update/scheduler.js";
 
-const ALLOWED_KEYS = new Set(["language", "thinkingLevel", "showReplyFooter", "updateCheckEnabled", "nsfwLevel"]);
+// nsfwLevel/approvalLevel은 에이전트가 스스로 완화할 수 없게 config_set에서 제외한다
+// (웹 설정에서만 변경 가능).
+const ALLOWED_KEYS = new Set(["language", "thinkingLevel", "showReplyFooter", "updateCheckEnabled"]);
 
 export const configToolDefinitions = [
     {
         type: "function",
         function: {
             name: "config_set",
-            description:
-                "Update non-secret runtime config. language, thinkingLevel (provider /models), showReplyFooter, updateCheckEnabled, nsfwLevel (strict/moderate/explicit).",
+            description: "Update non-secret runtime config. language, thinkingLevel (provider /models), showReplyFooter, updateCheckEnabled.",
             parameters: {
                 type: "object",
                 properties: {
@@ -18,12 +19,6 @@ export const configToolDefinitions = [
                     thinkingLevel: { type: "string", description: "Level from provider /models metadata" },
                     showReplyFooter: { type: "boolean" },
                     updateCheckEnabled: { type: "boolean" },
-                    nsfwLevel: {
-                        type: "string",
-                        enum: ["strict", "moderate", "explicit"],
-                        description:
-                            "strict = block all NSFW; moderate = indirect/suggestive allowed, explicit blocked (default); explicit = all NSFW allowed",
-                    },
                 },
             },
         },
@@ -63,14 +58,6 @@ export async function executeConfigTool(name, args) {
         config.updateCheckEnabled = Boolean(a.updateCheckEnabled);
         updated = true;
     }
-    if (a.nsfwLevel !== undefined) {
-        if (!NSFW_LEVELS.includes(normalizeNsfwLevel(a.nsfwLevel))) {
-            return { error: "nsfwLevel must be one of: strict, moderate, explicit" };
-        }
-        config.nsfwLevel = normalizeNsfwLevel(a.nsfwLevel);
-        updated = true;
-    }
-
     if (!updated) return { error: "No allowed fields provided" };
     saveUserConfig(config);
     if (a.updateCheckEnabled !== undefined) restartUpdateScheduler();
