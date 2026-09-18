@@ -29,11 +29,11 @@ ENV CAMOFOX_COOKIES_DIR=/app/user/camofox/cookies
 ENV CAMOFOX_DOWNLOADS_DIR=/app/user/camofox/downloads
 ENV CAMOFOX_TRACES_DIR=/app/user/camofox/traces
 
+# 스크린 스트림은 ImageMagick import → JPEG → WebSocket이라 x11vnc/websockify는 안 쓴다.
+# git/make/g++ 같은 범용 도구는 봇이 필요할 때 root로 apt-get install 할 수 있게 뺀다.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         xvfb \
-        x11vnc \
-        python3-websockify \
         libgtk-3-0 \
         libdbus-glib-1-2 \
         libxt6 \
@@ -67,21 +67,27 @@ RUN apt-get update \
         ca-certificates \
         curl \
         python3 \
-        git \
-        make \
-        g++ \
         xdotool \
         xterm \
         x11-apps \
         imagemagick \
         tini \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# camoufox-js postinstall이 브라우저를 $HOME/.cache에 받는다. HOME=/app/user는
+# 런타임에 볼륨이 마운트되는 경로라 이미지에 넣으면 그대로 가려진다 —
+# 볼륨 밖 /opt에 두고 심볼릭 링크로 연결한다(엔트리포인트가 없으면 다시 만든다).
 RUN mkdir -p /app/user \
-    && npm install --global "camofox-browser@${CAMOFOX_VERSION}"
+    && npm install --global "camofox-browser@${CAMOFOX_VERSION}" \
+    && npm cache clean --force \
+    && mv /app/user/.cache/camoufox /opt/camoufox \
+    && mkdir -p /app/user/.cache \
+    && ln -s /opt/camoufox /app/user/.cache/camoufox \
+    && rm -rf /tmp/camoufox-* /tmp/node-compile-cache
 
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 # 공유 X 디스플레이: 웹 "컴퓨터" 뷰가 이 화면을 스트리밍한다.
 # DISPLAY/CAMOFOX_HEADLESS는 런타임 전용이라 하단에 두어 앞 레이어 캐시를 보존한다.
