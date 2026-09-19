@@ -12,7 +12,8 @@ bootstrap_tty_installer() {
     if [ -t 0 ]; then
         return 0
     fi
-    if [ ! -r /dev/tty ] 2>/dev/null; then
+    # -r 테스트는 tty가 없는 샌드박스에서도 참이 될 수 있다 — 실제로 열어본다.
+    if ! (exec 3<>/dev/tty) 2>/dev/null; then
         echo "Error: This installer needs an interactive terminal." >&2
         exit 1
     fi
@@ -95,13 +96,18 @@ die() {
 }
 
 can_prompt_user() {
-    [ -r /dev/tty ] 2>/dev/null || [ -t 0 ]
+    # stdin 경로는 프롬프트 출력도 필요하므로 stdin/stdout 둘 다 터미널이어야 한다.
+    [ -t 0 ] && [ -t 1 ] && return 0
+    # -r/-w 테스트는 tty가 없는 샌드박스에서도 참이 될 수 있다 — 실제로 열어본다.
+    (exec 3<>/dev/tty) 2>/dev/null
 }
 
 say_user() {
-    if [ -w /dev/tty ] 2>/dev/null; then
-        printf '%s\n' "$@" >/dev/tty
-    else
+    # $( ) 캡처 안에서 불릴 때 stdout은 파이프다 — mode 같은 반환값을 오염시키지
+    # 않게 /dev/tty로 보내고, tty도 stdout도 터미널이 아니면 조용히 삼킨다.
+    if (exec 3<>/dev/tty) 2>/dev/null; then
+        printf '%s\n' "$@" >/dev/tty 2>/dev/null || true
+    elif [ -t 1 ]; then
         printf '%s\n' "$@"
     fi
 }
@@ -111,12 +117,13 @@ read_user_line() {
     local prompt="${2:-}"
     local line
 
-    if [ -r /dev/tty ] 2>/dev/null; then
-        [ -n "${prompt}" ] && printf '%s' "${prompt}" >/dev/tty
-        IFS= read -r line </dev/tty
+    if (exec 3<>/dev/tty) 2>/dev/null; then
+        if [ -n "${prompt}" ]; then printf '%s' "${prompt}" >/dev/tty 2>/dev/null || true; fi
+        IFS= read -r line </dev/tty 2>/dev/null || return 1
     elif [ -t 0 ]; then
-        [ -n "${prompt}" ] && printf '%s' "${prompt}"
-        IFS= read -r line
+        # stdout이 $( ) 캡처면 -t 1이 거짓 — 캡처 오염 없이 프롬프트를 삼킨다.
+        [ -n "${prompt}" ] && [ -t 1 ] && printf '%s' "${prompt}"
+        IFS= read -r line || return 1
     else
         return 1
     fi
@@ -284,7 +291,7 @@ is_installed() {
 read_install_mode() {
     if [ -f "${ENV_FILE}" ]; then
         local mode
-        mode="$(grep '^TABYBOT_MODE=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        mode="$(env_file_value TABYBOT_MODE)"
         mode="$(strip_env_scalar "${mode}" | tr '[:upper:]' '[:lower:]')"
         case "${mode}" in
             docker|local) printf '%s' "${mode}"; return 0 ;;
@@ -339,7 +346,10 @@ resolve_install_mode() {
     esac
 
     if [ "${updating}" = true ]; then
-        mode="$(read_install_mode)" || die "$(if is_ko; then echo "설치 정보를 찾을 수 없습니다."; else echo "Install metadata not found."; fi)"
+        # 설치 메타데이터가 깨진 경우 죽지 말고 새 설치처럼 물어본다.
+        if ! mode="$(read_install_mode)"; then
+            mode="$(prompt_install_mode)"
+        fi
         printf '%s' "${mode}"
         return 0
     fi
@@ -477,6 +487,15 @@ strip_env_scalar() {
     printf '%s' "${value}"
 }
 
+env_file_value() {
+    # grep은 매치가 없으면 1을 반환한다 — || true가 없으면 pipefail+set -e 때문에
+    # 키가 없을 때 스크립트가 아무 출력 없이 종료된다.
+    # 키가 여러 줄이면 마지막 것을 쓴다 (손편집된 .env 대비).
+    local key="$1"
+    [ -f "${ENV_FILE}" ] || return 0
+    grep "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
 expand_user_path() {
     local p
     p="$(trim_path "$1")"
@@ -554,11 +573,11 @@ write_env() {
     local existing_web_token="" existing_port="" existing_bind=""
     umask 077
     if [ -f "${ENV_FILE}" ]; then
-        existing_web_token="$(grep '^TABYBOT_WEB_TOKEN=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        existing_web_token="$(env_file_value TABYBOT_WEB_TOKEN)"
         existing_web_token="$(strip_env_scalar "${existing_web_token}")"
-        existing_port="$(grep '^TABYBOT_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        existing_port="$(env_file_value TABYBOT_PORT)"
         existing_port="$(strip_env_scalar "${existing_port}")"
-        existing_bind="$(grep '^TABYBOT_BIND=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        existing_bind="$(env_file_value TABYBOT_BIND)"
         existing_bind="$(strip_env_scalar "${existing_bind}")"
     fi
     if [ -n "${TABYBOT_WEB_TOKEN:-}" ]; then
@@ -580,7 +599,7 @@ write_env() {
     if [ "${mode}" = local ] && [ -f "${APP_DIR}/VERSION" ]; then
         version="$(tr -d '\n' <"${APP_DIR}/VERSION")"
     elif [ "${mode}" = local ] && [ -f "${ENV_FILE}" ]; then
-        version="$(grep '^TABYBOT_VERSION=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        version="$(env_file_value TABYBOT_VERSION)"
         version="$(strip_env_scalar "${version}")"
     fi
     {
@@ -889,7 +908,7 @@ main() {
 
     # 업데이트 시 이전 설치의 브랜치를 이어받는다 (환경 변수가 우선).
     if [ -z "${REPO_BRANCH}" ] && [ -f "${ENV_FILE}" ]; then
-        REPO_BRANCH="$(grep '^TABYBOT_REPO_BRANCH=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)"
+        REPO_BRANCH="$(env_file_value TABYBOT_REPO_BRANCH)"
         REPO_BRANCH="$(strip_env_scalar "${REPO_BRANCH}")"
     fi
     REPO_BRANCH="${REPO_BRANCH:-main}"
