@@ -25,9 +25,10 @@ services:
         # Persistent state (config, memory, MCP, scheduling). Defaults: codes/templates/user
         volumes:
             - tabybot-user:/app/user
-        # 호스트 측은 기본 loopback만 연다 — LAN에 열려면 TABYBOT_BIND=0.0.0.0 (+토큰 권장).
+        # 호스트 측은 기본으로 모든 인터페이스에 연다 — 이 머신만 쓰려면 TABYBOT_BIND=127.0.0.1.
+        # LAN에 열릴 때는 TABYBOT_WEB_TOKEN 설정을 권장.
         ports:
-            - "${TABYBOT_BIND:-127.0.0.1}:${TABYBOT_PORT:-8999}:8999"
+            - "${TABYBOT_BIND:-0.0.0.0}:${TABYBOT_PORT:-8999}:8999"
         restart: unless-stopped
 
 volumes:

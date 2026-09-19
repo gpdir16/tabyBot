@@ -23,7 +23,7 @@ services:
         volumes:
             - tabybot-user:/app/user
         ports:
-            - "${TABYBOT_BIND:-127.0.0.1}:${TABYBOT_PORT:-8999}:8999"
+            - "${TABYBOT_BIND:-0.0.0.0}:${TABYBOT_PORT:-8999}:8999"
         restart: unless-stopped
 
 volumes:

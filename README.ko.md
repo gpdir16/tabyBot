@@ -91,6 +91,8 @@ curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/instal
 
 나중에 tabyBot를 업데이트하려면 위 명령을 다시 실행하세요. 설정과 메모리는 유지된 상태로 업데이트됩니다.
 
+기본적으로 웹 UI는 모든 네트워크 인터페이스에서 수신하므로 같은 네트워크의 다른 기기에서도 `http://<LAN-IP>:8999`로 접속할 수 있습니다. 이 기기에서만 쓰려면 `TABYBOT_BIND=127.0.0.1`로 다시 설치하세요. 네트워크에 열어둘 때는 `TABYBOT_WEB_TOKEN`을 설정해 토큰을 요구하는 것을 권장합니다.
+
 #### 2. 웹 UI에서 설정
 
 1. 브라우저에서 `http://localhost:8999`를 여세요.

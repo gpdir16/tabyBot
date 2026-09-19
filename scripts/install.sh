@@ -79,8 +79,10 @@ Install or update tabyBot.
 Optional:
   TABYBOT_MODE=docker|local  (default: docker, or prompt on first install; set explicitly to switch on update)
   TABYBOT_PORT=8999          (host port; container always listens on 8999)
-  TABYBOT_BIND=127.0.0.1     (host interface; 0.0.0.0 exposes on the LAN)
-  TABYBOT_WEB_TOKEN=...      (require a token for the web UI/API)
+  TABYBOT_BIND=0.0.0.0       (host interface; default listens on all interfaces —
+                              use 127.0.0.1 for this machine only)
+  TABYBOT_WEB_TOKEN=...      (require a token for the web UI/API — recommended
+                              when binding 0.0.0.0)
   TABYBOT_REPO_BRANCH=main   (local-mode source branch; persisted for updates)
 Language: TABYBOT_LANG=ko|en  (default: en, or ko if LANG is Korean)
 EOF
@@ -554,7 +556,7 @@ services:
             - tabybot-user:/app/user
         restart: unless-stopped
         ports:
-            - "\${TABYBOT_BIND:-127.0.0.1}:\${TABYBOT_PORT:-8999}:8999"
+            - "\${TABYBOT_BIND:-0.0.0.0}:\${TABYBOT_PORT:-8999}:8999"
 
 volumes:
     tabybot-user:
@@ -589,7 +591,7 @@ write_local_version() {
 write_env() {
     local mode="${1:-docker}"
     local version=""
-    local existing_web_token="" existing_port="" existing_bind=""
+    local existing_web_token="" existing_port="" existing_bind="" existing_host=""
     umask 077
     if [ -f "${ENV_FILE}" ]; then
         existing_web_token="$(env_file_value TABYBOT_WEB_TOKEN)"
@@ -598,6 +600,8 @@ write_env() {
         existing_port="$(strip_env_scalar "${existing_port}")"
         existing_bind="$(env_file_value TABYBOT_BIND)"
         existing_bind="$(strip_env_scalar "${existing_bind}")"
+        existing_host="$(env_file_value TABYBOT_HOST)"
+        existing_host="$(strip_env_scalar "${existing_host}")"
     fi
     if [ -n "${TABYBOT_WEB_TOKEN:-}" ]; then
         existing_web_token="${TABYBOT_WEB_TOKEN}"
@@ -614,6 +618,18 @@ write_env() {
     esac
     case "${existing_bind}" in
         ''|*[!0-9A-Za-z.:-]*) existing_bind="" ;;
+    esac
+    # 로컬 모드에서 실제 리슨 주소는 TABYBOT_HOST다 — TABYBOT_BIND(도커용)도
+    # 동일 의미로 받아들이고, 둘 다 없으면 외부 접속이 되도록 0.0.0.0을 기본값으로 쓴다.
+    if [ -n "${TABYBOT_HOST:-}" ]; then
+        existing_host="${TABYBOT_HOST}"
+    elif [ -n "${TABYBOT_BIND:-}" ]; then
+        existing_host="${TABYBOT_BIND}"
+    elif [ -z "${existing_host}" ]; then
+        existing_host="${existing_bind}"
+    fi
+    case "${existing_host}" in
+        ''|*[!0-9A-Za-z.:-]*) existing_host="0.0.0.0" ;;
     esac
     if [ "${mode}" = local ] && [ -f "${APP_DIR}/VERSION" ]; then
         version="$(tr -d '\n' <"${APP_DIR}/VERSION")"
@@ -654,8 +670,10 @@ write_env() {
         if [ -n "${existing_port}" ]; then
             printf 'TABYBOT_PORT=%s\n' "${existing_port}"
         fi
-        if [ -n "${existing_bind}" ]; then
-            printf 'TABYBOT_BIND=%s\n' "${existing_bind}"
+        if [ "${mode}" = docker ]; then
+            printf 'TABYBOT_BIND=%s\n' "${existing_bind:-0.0.0.0}"
+        else
+            write_env_quoted TABYBOT_HOST "${existing_host}"
         fi
         # 로컬 설치의 소스 브랜치를 기억해 업데이트가 같은 브랜치를 따라가게 한다.
         if [ -n "${REPO_BRANCH}" ] && [ "${REPO_BRANCH}" != "main" ]; then
@@ -922,6 +940,67 @@ deploy_tabybot_docker() {
     verify_install docker || true
 }
 
+lan_ip() {
+    case "$(uname -s)" in
+        Darwin)
+            ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true
+            ;;
+        Linux)
+            # outbound 경로의 src가 실제 LAN 주소 — hostname -I는 docker 브리지 IP를
+            # 먼저 줄 수 있어 폴백으로만 쓴다.
+            ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1);exit}}' \
+                || hostname -I 2>/dev/null | awk 'NF {print $1; exit}' || true
+            ;;
+    esac
+}
+
+print_access_info() {
+    local mode="$1" port bind default_bind ip token primary secondary
+    port="$(env_file_value TABYBOT_PORT)"
+    port="$(strip_env_scalar "${port}")"
+    port="${port:-8999}"
+    if is_ko; then
+        echo "  브라우저에서 http://localhost:${port} 를 여세요."
+    else
+        echo "  Open http://localhost:${port} in your browser."
+    fi
+    if [ "${mode}" = local ]; then
+        default_bind="127.0.0.1"
+        primary="TABYBOT_HOST"
+        secondary="TABYBOT_BIND"
+    else
+        default_bind="0.0.0.0"
+        primary="TABYBOT_BIND"
+        secondary="TABYBOT_HOST"
+    fi
+    bind="$(env_file_value "${primary}")"
+    bind="$(strip_env_scalar "${bind}")"
+    if [ -z "${bind}" ]; then
+        bind="$(env_file_value "${secondary}")"
+        bind="$(strip_env_scalar "${bind}")"
+    fi
+    bind="${bind:-${default_bind}}"
+    case "${bind}" in
+        127.*|localhost|::1) return 0 ;;
+        0.0.0.0|::|"")
+            ip="$(lan_ip)" ;;
+        *)
+            ip="${bind}" ;;
+    esac
+    if [ -n "${ip}" ]; then
+        if is_ko; then echo "  외부 접속: http://${ip}:${port}"; else echo "  LAN access: http://${ip}:${port}"; fi
+    fi
+    token="$(env_file_value TABYBOT_WEB_TOKEN)"
+    token="$(strip_env_scalar "${token}")"
+    if [ -z "${token}" ]; then
+        if is_ko; then
+            echo "  ⚠ 외부 접속이 열려 있습니다(${bind}). 같은 네트워크의 누구나 접근할 수 있으니 TABYBOT_WEB_TOKEN 설정을 권장합니다."
+        else
+            echo "  ⚠ Reachable from your network (${bind}) with no token. Set TABYBOT_WEB_TOKEN to require one."
+        fi
+    fi
+}
+
 main() {
     resolve_lang
     local image="${TABYBOT_IMAGE:-${IMAGE_DEFAULT}}"
@@ -966,12 +1045,9 @@ main() {
     if [ "${updating}" = true ]; then
         if is_ko; then echo "완료. tabyBot 실행 중 (${mode})."; else echo "Done. tabyBot is running (${mode})."; fi
     else
-        if is_ko; then
-            echo "설치 완료 (${mode}). 브라우저에서 http://localhost:8999 를 여세요."
-        else
-            echo "Install complete (${mode}). Open http://localhost:8999 in your browser."
-        fi
+        if is_ko; then echo "설치 완료 (${mode})."; else echo "Install complete (${mode})."; fi
     fi
+    print_access_info "${mode}"
 }
 
 main "$@"
