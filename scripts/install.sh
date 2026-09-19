@@ -188,13 +188,19 @@ start_docker_daemon() {
 
 wait_for_docker() {
     local waited=0 max=180
-    if is_ko; then echo "==> Docker가 준비될 때까지 기다리는 중..."; else echo "==> Waiting for Docker..."; fi
+    if is_ko; then printf '==> Docker가 준비될 때까지 기다리는 중'; else printf '==> Waiting for Docker'; fi
     while [ "${waited}" -lt "${max}" ]; do
-        docker_daemon_ok && return 0
+        if docker_daemon_ok; then
+            printf '\n'
+            return 0
+        fi
         sleep 3
         waited=$((waited + 3))
+        printf '.'
+        [ $((waited % 30)) -eq 0 ] && printf ' %ds' "${waited}"
         [ $((waited % 15)) -eq 0 ] && start_docker_daemon
     done
+    printf '\n'
     if is_ko; then
         die "Docker가 준비되지 않았습니다. Docker Desktop을 연 뒤 다시 실행하세요."
     else
@@ -435,27 +441,40 @@ ensure_systemd_linger() {
 }
 
 verify_install() {
-    local mode="$1"
+    local mode="$1" waited=0 max=20 running=false
     local index_pattern
-    sleep 2
     index_pattern="$(regex_escape "${APP_DIR}/codes/index.js")"
-    if [ "${mode}" = local ]; then
-        case "$(uname -s)" in
-            Darwin)
-                launchctl print "gui/$(id -u)/${LAUNCHD_LABEL}" >/dev/null 2>&1 && return 0
-                ;;
-            Linux)
-                systemctl --user is-active --quiet tabybot.service 2>/dev/null && return 0
-                ;;
-        esac
-        if pgrep -f "${index_pattern}" >/dev/null 2>&1; then
+    if is_ko; then printf '==> 실행 상태 확인 중'; else printf '==> Confirming startup'; fi
+    while [ "${waited}" -lt "${max}" ]; do
+        running=false
+        if [ "${mode}" = local ]; then
+            case "$(uname -s)" in
+                Darwin)
+                    if launchctl print "gui/$(id -u)/${LAUNCHD_LABEL}" >/dev/null 2>&1; then
+                        running=true
+                    fi
+                    ;;
+                Linux)
+                    if systemctl --user is-active --quiet tabybot.service 2>/dev/null; then
+                        running=true
+                    fi
+                    ;;
+            esac
+            if [ "${running}" = false ] && pgrep -f "${index_pattern}" >/dev/null 2>&1; then
+                running=true
+            fi
+        elif docker_daemon_ok && ${DOCKER_SHELL} ps --filter name=tabybot --format '{{.Names}}' 2>/dev/null | grep -qx tabybot; then
+            running=true
+        fi
+        if [ "${running}" = true ]; then
+            printf '\n'
             return 0
         fi
-    else
-        if docker_daemon_ok && ${DOCKER_SHELL} ps --filter name=tabybot --format '{{.Names}}' 2>/dev/null | grep -qx tabybot; then
-            return 0
-        fi
-    fi
+        sleep 2
+        waited=$((waited + 2))
+        printf '.'
+    done
+    printf '\n'
     if is_ko; then
         echo "⚠ tabyBot가 아직 실행 중이 아닐 수 있습니다. 로그: ${INSTALL_DIR}/logs/"
         [ -f "${INSTALL_DIR}/logs/stderr.log" ] && tail -n 5 "${INSTALL_DIR}/logs/stderr.log" 2>/dev/null || true
@@ -653,7 +672,8 @@ pull_image() {
     if is_ko; then echo "==> 설치 파일 받는 중..."; else echo "==> Downloading tabyBot..."; fi
 
     while [ "${attempt}" -le "${max_attempts}" ]; do
-        if ${compose} -f "${COMPOSE_FILE}" pull 2>/dev/null; then
+        # pull 출력을 그대로 보여준다 — 오래 걸리는 다운로드가 멈춘 것처럼 보이지 않게.
+        if ${compose} -f "${COMPOSE_FILE}" pull; then
             return 0
         fi
         if [ "${attempt}" -lt "${max_attempts}" ]; then
@@ -716,7 +736,12 @@ download_source_tarball() {
     url="https://github.com/${REPO_OWNER}/tabyBot/archive/refs/heads/${REPO_BRANCH}.tar.gz"
     tmp="$(mktemp -t tabybot-src.XXXXXX.tar.gz)"
     if is_ko; then echo "==> 소스 코드 받는 중..."; else echo "==> Downloading source..."; fi
-    curl -fsSL "${url}" -o "${tmp}"
+    # tty에서는 진행 표시줄을 보여준다 — 다운로드가 오래 걸릴 때 멈춰 보이지 않게.
+    if [ -t 2 ]; then
+        curl -fL --progress-bar "${url}" -o "${tmp}"
+    else
+        curl -fsSL "${url}" -o "${tmp}"
+    fi
     # 압축 해제가 성공한 뒤에만 기존 app을 지운다 — 네트워크/아카이브 실패가
     # 설치본을 통째로 날리지 않게.
     mkdir -p "${INSTALL_DIR}"
@@ -734,7 +759,7 @@ download_source_tarball() {
 update_local_source() {
     if [ -d "${APP_DIR}/.git" ] && command -v git >/dev/null 2>&1; then
         if is_ko; then echo "==> 소스 코드 업데이트 중..."; else echo "==> Updating source..."; fi
-        git -C "${APP_DIR}" fetch origin "${REPO_BRANCH}" 2>/dev/null || git -C "${APP_DIR}" fetch origin 2>/dev/null || true
+        git -C "${APP_DIR}" fetch origin "${REPO_BRANCH}" || git -C "${APP_DIR}" fetch origin || true
         git -C "${APP_DIR}" reset --hard "origin/${REPO_BRANCH}" 2>/dev/null \
             || git -C "${APP_DIR}" reset --hard "origin/main" 2>/dev/null \
             || git -C "${APP_DIR}" pull --ff-only 2>/dev/null \
@@ -750,7 +775,7 @@ update_local_source() {
     if command -v git >/dev/null 2>&1; then
         if is_ko; then echo "==> 저장소 클론 중..."; else echo "==> Cloning repository..."; fi
         rm -rf "${APP_DIR}"
-        git clone --depth 1 --branch "${REPO_BRANCH}" "${REPO_URL}" "${APP_DIR}" 2>/dev/null \
+        git clone --depth 1 --branch "${REPO_BRANCH}" "${REPO_URL}" "${APP_DIR}" \
             || git clone --depth 1 "${REPO_URL}" "${APP_DIR}"
         return 0
     fi
