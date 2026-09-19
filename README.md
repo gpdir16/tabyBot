@@ -91,6 +91,8 @@ curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/instal
 
 To update tabyBot later, run the same command again. Settings and memory are kept.
 
+By default the web UI listens on all interfaces, so other devices on your network can reach it at `http://<your-LAN-IP>:8999`. To restrict it to this machine only, reinstall with `TABYBOT_BIND=127.0.0.1`. When it is open to the network, setting `TABYBOT_WEB_TOKEN` is recommended so the UI requires a token.
+
 #### 2. Set up in the web UI
 
 1. Open `http://localhost:8999` in a browser.
