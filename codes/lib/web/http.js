@@ -1,4 +1,4 @@
-// 의존성 없는 최소 HTTP 라우터: JSON API, SSE, 정적 파일 서빙, 선택적 토큰 인증.
+// 의존성 없는 최소 HTTP 라우터: JSON API, SSE, 정적 파일 서빙, 선택적 세션 인증.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -32,12 +32,26 @@ function compilePattern(pattern) {
     return { regex: new RegExp(`^${source}$`), keys };
 }
 
-export function createRouter({ publicDir, token = "" }) {
+// auth: { enabled() → 세션 요구 여부, verify(token) → 세션 유효 여부,
+//         publicPaths[] → 인증 없이 열어둘 /api 경로(로그인 등) }
+export function createRouter({ publicDir, auth = {} }) {
     const routes = [];
+    const authEnabled = typeof auth.enabled === "function" ? auth.enabled : () => false;
+    const verifyToken = typeof auth.verify === "function" ? auth.verify : () => false;
+    const publicApi = new Set(Array.isArray(auth.publicPaths) ? auth.publicPaths : []);
 
     function add(method, pattern, handler) {
         const { regex, keys } = compilePattern(pattern);
         routes.push({ method, regex, keys, handler });
+    }
+
+    // 세션 토큰 추출: Authorization Bearer → x-tabybot-token 헤더 → ?token= 쿼리.
+    function presentedToken(url, req) {
+        const header = req.headers.authorization || "";
+        if (header.startsWith("Bearer ")) return header.slice(7).trim();
+        const alt = req.headers["x-tabybot-token"];
+        if (alt) return String(alt);
+        return url.searchParams.get("token") || "";
     }
 
     function authorized(url, req) {
@@ -45,16 +59,15 @@ export function createRouter({ publicDir, token = "" }) {
         if (url.pathname === "/sw.js" || url.pathname === "/manifest.webmanifest" || url.pathname.startsWith("/assets/icons/")) {
             return true;
         }
-        if (!token) return true;
-        // 토큰 모드에서도 정적 셸(HTML/JS/CSS)은 공개한다 — 토큰 입력 화면 자체가
+        if (!authEnabled()) return true;
+        // 인증 모드에서도 정적 셸(HTML/JS/CSS)은 공개한다 — 로그인 화면 자체가
         // 이 파일들로 로드된다. 데이터와 액션은 전부 /api/ 아래라 계속 보호된다.
         if ((req.method === "GET" || req.method === "HEAD") && !url.pathname.startsWith("/api/")) {
             return true;
         }
-        const header = req.headers.authorization || "";
-        if (header === `Bearer ${token}`) return true;
-        if (req.headers["x-tabybot-token"] === token) return true;
-        return url.searchParams.get("token") === token;
+        if (publicApi.has(url.pathname)) return true;
+        const presented = presentedToken(url, req);
+        return presented ? verifyToken(presented) : false;
     }
 
     function sendJson(res, status, body) {
@@ -242,7 +255,9 @@ export function createRouter({ publicDir, token = "" }) {
                 res,
                 params,
                 query: Object.fromEntries(url.searchParams),
+                token: presentedToken(url, req),
                 json: () => readJsonBody(req),
+                sendJson: (status, body) => sendJson(res, status, body),
                 json200: (body) => sendJson(res, 200, body),
                 json400: (error) => sendJson(res, 400, { error }),
                 json404: () => sendJson(res, 404, { error: "not_found" }),

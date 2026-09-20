@@ -81,8 +81,6 @@ Optional:
   TABYBOT_PORT=8999          (host port; container always listens on 8999)
   TABYBOT_BIND=0.0.0.0       (host interface; default listens on all interfaces —
                               use 127.0.0.1 for this machine only)
-  TABYBOT_WEB_TOKEN=...      (require a token for the web UI/API — recommended
-                              when binding 0.0.0.0)
   TABYBOT_REPO_BRANCH=main   (local-mode source branch; persisted for updates)
 Language: TABYBOT_LANG=ko|en  (default: en, or ko if LANG is Korean)
 EOF
@@ -539,7 +537,6 @@ services:
         image: ${image}
         container_name: tabybot
         environment:
-            TABYBOT_WEB_TOKEN: \${TABYBOT_WEB_TOKEN:-}
             TABYBOT_MODE: docker
             TABYBOT_HOME: "${install_dir_escaped}"
             TABYBOT_DOCKER_SHELL: \${TABYBOT_DOCKER_SHELL:-docker}
@@ -591,20 +588,15 @@ write_local_version() {
 write_env() {
     local mode="${1:-docker}"
     local version=""
-    local existing_web_token="" existing_port="" existing_bind="" existing_host=""
+    local existing_port="" existing_bind="" existing_host=""
     umask 077
     if [ -f "${ENV_FILE}" ]; then
-        existing_web_token="$(env_file_value TABYBOT_WEB_TOKEN)"
-        existing_web_token="$(strip_env_scalar "${existing_web_token}")"
         existing_port="$(env_file_value TABYBOT_PORT)"
         existing_port="$(strip_env_scalar "${existing_port}")"
         existing_bind="$(env_file_value TABYBOT_BIND)"
         existing_bind="$(strip_env_scalar "${existing_bind}")"
         existing_host="$(env_file_value TABYBOT_HOST)"
         existing_host="$(strip_env_scalar "${existing_host}")"
-    fi
-    if [ -n "${TABYBOT_WEB_TOKEN:-}" ]; then
-        existing_web_token="${TABYBOT_WEB_TOKEN}"
     fi
     if [ -n "${TABYBOT_PORT:-}" ]; then
         existing_port="${TABYBOT_PORT}"
@@ -663,9 +655,6 @@ write_env() {
             if [ -n "${version}" ]; then
                 printf 'TABYBOT_VERSION=%s\n' "${version}"
             fi
-        fi
-        if [ -n "${existing_web_token}" ]; then
-            write_env_quoted TABYBOT_WEB_TOKEN "${existing_web_token}"
         fi
         if [ -n "${existing_port}" ]; then
             printf 'TABYBOT_PORT=%s\n' "${existing_port}"
@@ -955,7 +944,7 @@ lan_ip() {
 }
 
 print_access_info() {
-    local mode="$1" port bind default_bind ip token primary secondary
+    local mode="$1" port bind default_bind ip primary secondary
     port="$(env_file_value TABYBOT_PORT)"
     port="$(strip_env_scalar "${port}")"
     port="${port:-8999}"
@@ -965,7 +954,7 @@ print_access_info() {
         echo "  Open http://localhost:${port} in your browser."
     fi
     if [ "${mode}" = local ]; then
-        default_bind="127.0.0.1"
+        default_bind="0.0.0.0"
         primary="TABYBOT_HOST"
         secondary="TABYBOT_BIND"
     else
@@ -990,14 +979,10 @@ print_access_info() {
     if [ -n "${ip}" ]; then
         if is_ko; then echo "  외부 접속: http://${ip}:${port}"; else echo "  LAN access: http://${ip}:${port}"; fi
     fi
-    token="$(env_file_value TABYBOT_WEB_TOKEN)"
-    token="$(strip_env_scalar "${token}")"
-    if [ -z "${token}" ]; then
-        if is_ko; then
-            echo "  ⚠ 외부 접속이 열려 있습니다(${bind}). 같은 네트워크의 누구나 접근할 수 있으니 TABYBOT_WEB_TOKEN 설정을 권장합니다."
-        else
-            echo "  ⚠ Reachable from your network (${bind}) with no token. Set TABYBOT_WEB_TOKEN to require one."
-        fi
+    if is_ko; then
+        echo "  ⚠ 외부 접속이 열려 있습니다(${bind}). 첫 접속 화면에서 계정을 만들어 로그인을 요구하는 걸 권장합니다."
+    else
+        echo "  ⚠ Reachable from your network (${bind}). Create an account on the first-visit screen to require sign-in."
     fi
 }
 

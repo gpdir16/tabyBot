@@ -126,12 +126,18 @@
         return choice.outcome === "accepted";
     }
 
+    // 로그인/로그아웃으로 세션 토큰이 바뀌면 SW 쪽 보관 토큰도 맞춘다
+    // (알림 클릭시 여는 URL, pushsubscriptionchange 재구독에 쓰인다).
+    function syncAuth() {
+        try {
+            const tk = localStorage.getItem("tabybot.web.token") || "";
+            if (swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
+        } catch (_) {}
+    }
+
     function init() {
         void registerSw().then(() => {
-            try {
-                const tk = localStorage.getItem("tabybot.web.token") || "";
-                if (tk && swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
-            } catch {}
+            syncAuth();
             if (enabled()) void ensurePush();
         });
         navigator.serviceWorker?.addEventListener?.("message", (ev) => {
@@ -161,6 +167,7 @@
         show,
         setOn,
         enabled,
+        syncAuth,
         canInstall: () => Boolean(deferredInstall) && !isStandalone(),
         promptInstall,
     };

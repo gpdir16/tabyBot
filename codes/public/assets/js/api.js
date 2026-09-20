@@ -1,6 +1,6 @@
 /* tabyBot 웹 클라이언트 — REST 클라이언트.
-   TABYBOT_WEB_TOKEN 설정 시 모든 요청에 Authorization: Bearer 헤더.
-   토큰은 localStorage('tabybot.web.token')에 보관. */
+   계정이 있으면 모든 요청에 Authorization: Bearer <세션 토큰> 헤더.
+   세션 토큰은 localStorage('tabybot.web.token')에 보관. */
 (function (T) {
     "use strict";
 
@@ -102,6 +102,12 @@
         setToken,
 
         bootstrap: () => request("/api/bootstrap"),
+
+        accountState: () => request("/api/account/state"),
+        accountSetup: (b) => request("/api/account/setup", { method: "POST", json: b }),
+        accountLogin: (b) => request("/api/account/login", { method: "POST", json: b }),
+        accountLogout: () => request("/api/account/logout", { method: "POST", json: {} }),
+        accountUpdate: (b) => request("/api/account", { method: "PUT", json: b }),
 
         conversations: () => request("/api/conversations"),
         conversation: (id) => request("/api/conversations/" + enc(id)),

@@ -7,7 +7,6 @@ services:
             TABYBOT_MODE: docker
             TABYBOT_HOME: ${TABYBOT_HOME:-}
             TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
-            TABYBOT_WEB_TOKEN: ${TABYBOT_WEB_TOKEN:-}
             CAMOFOX_HOST: 127.0.0.1
             CAMOFOX_PORT: 9377
             CAMOFOX_AUTH_MODE: disabled
