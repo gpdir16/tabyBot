@@ -48,6 +48,7 @@ import * as conversationsStore from "./conversations.js";
 import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLOAD_BYTES, UploadTooLargeError, EmptyUploadError } from "./files.js";
 import { subscribe, emit, eventsSince, currentSeq } from "./bus.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
+import * as accountAuth from "./auth.js";
 import { createRouter } from "./http.js";
 import { registerComputerRoutes, initComputerWs, handleComputerUpgrade, purgeAgentComputer } from "./computer.js";
 import { dispatchMessage, recoverInterruptedTurns, stopConversation } from "./turns.js";
@@ -57,12 +58,17 @@ import { cancelQueuedAgentWork } from "../agent-queue.js";
 import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
 const PUBLIC_DIR = path.join(CODES_DIR, "public");
-const WEB_TOKEN = process.env.TABYBOT_WEB_TOKEN?.trim() || "";
+// 계정이 만들어져 있으면 세션 인증이 켜진다 — 계정이 없으면 열려 있다(첫 방문에 생성 유도).
+const AUTH = {
+    enabled: () => accountAuth.hasAccount(),
+    verify: (token) => Boolean(accountAuth.resolveSession(token)),
+    publicPaths: ["/api/account/state", "/api/account/login", "/api/account/setup"],
+};
 // 도커 안에서는 항상 8999로 듣는다 — 호스트 포트는 compose 매핑이 담당한다
 // (TABYBOT_PORT를 컨테이너에 주입하면 커스텀 포트에서 매핑이 깨진다).
 const PORT = isDockerRuntime() ? 8999 : Number(process.env.TABYBOT_PORT || 8999);
-// 기본은 loopback만 연다. LAN 노출이 필요하면 TABYBOT_HOST=0.0.0.0으로 명시한다.
-const HOST = process.env.TABYBOT_HOST?.trim() || (isDockerRuntime() ? "0.0.0.0" : "127.0.0.1");
+// 기본은 모든 인터페이스에 연다. 이 머신만 쓰려면 TABYBOT_HOST=127.0.0.1로 명시한다.
+const HOST = process.env.TABYBOT_HOST?.trim() || "0.0.0.0";
 
 const PROVIDER_LABELS = {
     default: "OpenAI",
@@ -167,6 +173,18 @@ async function startOauthLogin(kind) {
     return { userCode: flow.userCode, deviceUrl: flow.deviceUrl };
 }
 
+// 로그인 스로틀의 출발지 키. X-Forwarded-For는 loopback 프록시(터널/로컬 리버스
+// 프록시)에서 온 요청에만 신뢰한다 — LAN에서 직접 오는 요청이 헤더를 조작해
+// 남의 IP인 척하며 스로틀을 회피/유도하는 걸 막는다.
+function clientKey(req) {
+    const remote = String(req.socket?.remoteAddress || "");
+    const localProxy = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+    const xff = String(req.headers["x-forwarded-for"] || "")
+        .split(",")[0]
+        .trim();
+    return (localProxy && xff) || remote || "unknown";
+}
+
 function publicAgent(a) {
     const meta = conversationsStore.getConversationMeta(a.uuid);
     return {
@@ -245,7 +263,7 @@ function buildSettingsPayload() {
 }
 
 export function startWebServer() {
-    const router = createRouter({ publicDir: PUBLIC_DIR, token: WEB_TOKEN });
+    const router = createRouter({ publicDir: PUBLIC_DIR, auth: AUTH });
     router.setSseSubscribe(subscribe);
     router.setSeqNow(currentSeq);
 
@@ -258,8 +276,62 @@ export function startWebServer() {
             configured: isConfigReady(),
             language: config.language || "en",
             agentName: firstAgent()?.name || DEFAULT_AGENT_NAME,
-            authRequired: Boolean(WEB_TOKEN),
+            authRequired: accountAuth.hasAccount(),
+            account: accountAuth.accountInfo()?.username || null,
         });
+    });
+
+    // ---- 계정(웹 UI 로그인/세션) ----
+    // state/login/setup은 publicPaths로 인증 없이 열린다 — 클라이언트가
+    // 로그인/계정 생성/앱 진입 중 어떤 화면을 띄울지 이 응답으로 결정한다.
+    router.add("GET", "/api/account/state", (ctx) => {
+        const has = accountAuth.hasAccount();
+        const authed = has ? Boolean(accountAuth.resolveSession(ctx.token)) : true;
+        const info = authed ? accountAuth.accountInfo() : null;
+        ctx.json200({
+            hasAccount: has,
+            authed,
+            username: info?.username || null,
+            createdAt: info?.createdAt || null,
+            sessionCount: info?.sessions ?? null,
+        });
+    });
+
+    router.add("POST", "/api/account/setup", async (ctx) => {
+        const body = await ctx.json();
+        const result = accountAuth.createAccount({ username: body.username, password: body.password });
+        if (result.error === "account_exists") return ctx.json409("account_exists");
+        if (result.error) return ctx.json400(result.error);
+        const session = accountAuth.createSession();
+        ctx.json200({ ok: true, username: result.account.username, ...session });
+    });
+
+    router.add("POST", "/api/account/login", async (ctx) => {
+        const body = await ctx.json();
+        const result = await accountAuth.login({ key: clientKey(ctx.req), username: body.username, password: body.password });
+        if (result.error === "too_many_attempts") {
+            ctx.res.setHeader("Retry-After", String(result.retryAfter));
+            return ctx.sendJson(429, { error: "too_many_attempts", retryAfter: result.retryAfter });
+        }
+        if (result.error) return ctx.json400(result.error);
+        ctx.json200({ ok: true, username: result.account.username, ...result.session });
+    });
+
+    router.add("POST", "/api/account/logout", (ctx) => {
+        accountAuth.revokeSession(ctx.token);
+        ctx.json200({ ok: true });
+    });
+
+    router.add("PUT", "/api/account", async (ctx) => {
+        const body = await ctx.json();
+        const result = accountAuth.updateAccount({
+            currentPassword: body.currentPassword,
+            username: body.username,
+            password: body.password,
+            keepToken: ctx.token,
+        });
+        if (result.error) return ctx.json400(result.error);
+        ctx.json200({ ok: true, account: result.account });
     });
 
     // ---- 실시간 이벤트 (SSE) ----
@@ -694,7 +766,7 @@ export function startWebServer() {
     registerComputerRoutes(router);
 
     const server = http.createServer((req, res) => router.handle(req, res));
-    initComputerWs(WEB_TOKEN);
+    initComputerWs(AUTH);
     server.on("upgrade", (req, socket, head) => {
         try {
             handleComputerUpgrade(req, socket, head);
@@ -703,7 +775,7 @@ export function startWebServer() {
         }
     });
     server.listen(PORT, HOST, () => {
-        console.log(`tabyBot: web UI ready at http://${HOST}:${PORT}${WEB_TOKEN ? " (token required)" : ""}`);
+        console.log(`tabyBot: web UI ready at http://${HOST}:${PORT}${accountAuth.hasAccount() ? " (account required)" : ""}`);
         if (isConfigReady()) recoverInterruptedTurns();
     });
     return server;

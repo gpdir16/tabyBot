@@ -2680,8 +2680,8 @@ body.todos-route #btnAttach {
     gap: var(--sp-3);
 }
 
-/* 401 토큰 입력(풀페이지 중앙) */
-.onb-token {
+/* 로그인/계정 생성(풀페이지 중앙) */
+.onb-auth {
     margin: auto;
     width: 100%;
     max-width: 380px;
@@ -2689,19 +2689,90 @@ body.todos-route #btnAttach {
     flex-direction: column;
     gap: var(--sp-3);
 }
-.onb-token .onb-title {
+.onb-auth .onb-title {
     margin-top: 0;
 }
-.onb-token .btn {
-    margin-top: var(--sp-2);
+.onb-auth .btn {
     min-height: 46px;
+}
+.onb-auth .btn.ghost.warn,
+.onb-auth .btn.ghost.warn:hover:not(:disabled) {
+    color: var(--warning);
+}
+/* "인증 없이 사용" 확인 모달 — 온보딩 페이지(90) 위, 토스트(300) 아래 */
+.onb-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-5);
+    /* 순수 검정 배경 위에서는 --scrim(rgba(0,0,0,.48))이 보이지 않으므로
+       backdrop-filter의 brightness로 뒤 내용을 딤하고 블러한다. */
+    background: rgba(10, 10, 14, 0.35);
+    backdrop-filter: blur(12px) brightness(0.55);
+    -webkit-backdrop-filter: blur(12px) brightness(0.55);
+    animation: onbModalScrim var(--dur-1) var(--ease);
+}
+.onb-modal-card {
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-5);
+    background: var(--surface);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-pop);
+    animation: onbModalIn var(--dur-2) var(--ease);
+}
+.onb-modal-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--fs-l);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--warning);
+}
+.onb-modal-title .icon {
+    width: 17px;
+    height: 17px;
+    flex: none;
+}
+.onb-modal-text {
+    font-size: var(--fs-m);
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+.onb-modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-2);
+}
+.onb-modal-actions .btn {
+    width: 100%;
+    min-height: 44px;
+}
+@keyframes onbModalScrim {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes onbModalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(6px);
+    }
 }
 .onb-error {
     min-height: 18px;
     font-size: var(--fs-s);
     color: var(--danger);
 }
-.onb-token-input {
+.onb-auth-input {
     height: 46px;
 }
 

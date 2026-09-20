@@ -6,7 +6,7 @@
     "use strict";
 
     const { state } = T;
-    const t = (k) => T.i18n.t(k);
+    const t = (k, v) => T.i18n.t(k, v);
 
     const page = document.getElementById("settingsPage");
 
@@ -23,15 +23,16 @@
     let modelFilter = "";
     let providerChoice = null;
     let keyEditing = false; // 저장된 API 키를 다시 입력하는 중인지
+    let credsEditing = null; // 계정 편집 중인 항목 — "username" | "password" | null
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "provider", "model", "agents"];
+    const TABS = ["general", "provider", "model", "account", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
     function routeFromPath() {
-        const m = /^\/s\/(general|provider|model|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
+        const m = /^\/s\/(general|provider|model|account|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
         if (!m) return null;
         const tab = m[1];
         let agentId = null;
@@ -77,6 +78,7 @@
         editingAgent = agent;
         armDelete = null;
         keyEditing = false;
+        credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
         const wasChatOpen = document.body.classList.contains("mobile-chat");
         T.todosUI?.hide?.();
@@ -201,6 +203,7 @@
             tabBtn("general", t("general")),
             tabBtn("provider", t("provider")),
             tabBtn("model", t("model")),
+            tabBtn("account", t("account")),
             T.h("hr", { class: "divider" }),
             ...agents.map(agentNavBtn),
             T.h("button", {
@@ -219,6 +222,7 @@
         if (openTab === "general") buildGeneral(body);
         else if (openTab === "provider") buildProvider(body);
         else if (openTab === "model") buildModel(body);
+        else if (openTab === "account") buildAccount(body);
         else buildAgents(body);
 
         page.append(head, T.h("div", { class: "sp-main" }, [nav, body]));
@@ -427,6 +431,207 @@
             ]),
         );
 
+        body.append(sec);
+    }
+
+    /* ── 계정 탭 ─────────────────────────────────────────── */
+    function accountField(labelText, ...kids) {
+        return T.h("div", { class: "field" }, [fieldLabel(labelText), ...kids]);
+    }
+
+    function accountInput(type, label, autocomplete) {
+        const el = T.h("input", { class: "input", type, "aria-label": label, autocomplete, spellcheck: "false" });
+        el.addEventListener("keydown", (e) => e.stopPropagation());
+        return el;
+    }
+
+    function buildAccount(body) {
+        const acct = state.state.account || {};
+        const sec = T.h("div", { class: "set-section" });
+        const err = T.h("p", { class: "onb-error hidden", role: "alert" });
+        const setErr = (msg) => {
+            err.textContent = msg || "";
+            err.classList.toggle("hidden", !msg);
+        };
+        const editor = T.h("div", { class: "agent-editor" });
+        sec.append(editor);
+
+        if (!acct.hasAccount) {
+            // 아직 계정이 없다 — 만들면 다음 접속부터 로그인이 필요해진다.
+            editor.append(T.h("p", { class: "set-desc", text: t("authNoAccountDesc") }));
+            const u = accountInput("text", t("authUsername"), "username");
+            const p = accountInput("password", t("authPassword"), "new-password");
+            const c = accountInput("password", t("authPasswordConfirm"), "new-password");
+            editor.append(
+                accountField(t("authUsername"), u),
+                accountField(t("authPassword"), p),
+                accountField(t("authPasswordConfirm"), c),
+                err,
+                T.h("div", { class: "editor-actions" }, [
+                    T.h("button", {
+                        class: "btn primary",
+                        text: t("authCreate"),
+                        async onclick() {
+                            const username = u.value.trim();
+                            if (!username || !p.value) {
+                                setErr(t("authRequired"));
+                                return;
+                            }
+                            if (p.value !== c.value) {
+                                setErr(t("authPasswordMismatch"));
+                                return;
+                            }
+                            this.disabled = true;
+                            try {
+                                const r = await T.api.accountSetup({ username, password: p.value });
+                                T.api.setToken(r.token);
+                                T.notifications?.syncAuth?.();
+                                state.state.account = { ...state.state.account, hasAccount: true, authed: true, username: r.username };
+                                T.toast.show("info", t("authCreated"));
+                                build();
+                            } catch (e) {
+                                this.disabled = false;
+                                setErr(T.onboarding.authErrorText(e));
+                            }
+                        },
+                    }),
+                ]),
+            );
+            body.append(sec);
+            return;
+        }
+
+        const cancelBtn = T.h("button", {
+            class: "btn ghost",
+            text: t("cancel"),
+            onclick() {
+                credsEditing = null;
+                build();
+            },
+        });
+        const saveBtn = (validate, makePayload) =>
+            T.h("button", {
+                class: "btn primary",
+                text: t("save"),
+                async onclick() {
+                    const v = validate();
+                    if (v) {
+                        setErr(v);
+                        return;
+                    }
+                    this.disabled = true;
+                    try {
+                        const r = await T.api.accountUpdate(makePayload());
+                        state.state.account = {
+                            ...state.state.account,
+                            hasAccount: true,
+                            authed: true,
+                            username: r.account?.username || acct.username,
+                        };
+                        credsEditing = null;
+                        T.toast.show("info", t("authSaved"));
+                        build();
+                    } catch (e) {
+                        this.disabled = false;
+                        setErr(T.onboarding.authErrorText(e));
+                    }
+                },
+            });
+
+        if (credsEditing === "username") {
+            // 이름 변경 — 현재 비밀번호로 본인 확인.
+            const u = accountInput("text", t("authUsername"), "username");
+            u.value = acct.username || "";
+            const cur = accountInput("password", t("authCurrentPassword"), "current-password");
+            editor.append(
+                accountField(t("authUsername"), u),
+                accountField(t("authCurrentPassword"), cur),
+                err,
+                T.h("div", { class: "editor-actions" }, [
+                    saveBtn(
+                        () => (!u.value.trim() || !cur.value ? t("authRequired") : null),
+                        () => ({ currentPassword: cur.value, username: u.value.trim() }),
+                    ),
+                    cancelBtn,
+                ]),
+            );
+        } else if (credsEditing === "password") {
+            // 비밀번호 변경 — 현재 비밀번호 + 새 비밀번호 확인.
+            const cur = accountInput("password", t("authCurrentPassword"), "current-password");
+            const np = accountInput("password", t("authNewPassword"), "new-password");
+            const nc = accountInput("password", t("authPasswordConfirm"), "new-password");
+            editor.append(
+                accountField(t("authCurrentPassword"), cur),
+                accountField(t("authNewPassword"), np),
+                accountField(t("authPasswordConfirm"), nc),
+                err,
+                T.h("div", { class: "editor-actions" }, [
+                    saveBtn(
+                        () => (!cur.value || !np.value || !nc.value ? t("authRequired") : np.value !== nc.value ? t("authPasswordMismatch") : null),
+                        () => ({ currentPassword: cur.value, password: np.value }),
+                    ),
+                    cancelBtn,
+                ]),
+            );
+        } else {
+            // 저장된 계정 정보 — 라벨 아래 읽기 전용 입력칸, 변경할 항목마다 별도의 변경 버튼.
+            const loc = { ko: "ko-KR", ja: "ja-JP" }[T.i18n.getLang()] || "en-US";
+            const ro = (label, value, type = "text") => {
+                const el = accountInput(type, label, "off");
+                el.readOnly = true;
+                el.tabIndex = -1;
+                el.value = value || "";
+                return el;
+            };
+            const editBtn = (which) =>
+                T.h("button", {
+                    class: "btn ghost",
+                    text: t("authEdit"),
+                    onclick() {
+                        credsEditing = which;
+                        build();
+                    },
+                });
+            editor.append(
+                accountField(t("authUsername"), T.h("div", { class: "key-row" }, [ro(t("authUsername"), acct.username), editBtn("username")])),
+            );
+            if (acct.createdAt) {
+                const d = new Date(acct.createdAt);
+                if (!isNaN(d))
+                    editor.append(
+                        accountField(
+                            t("authCreatedAt"),
+                            ro(t("authCreatedAt"), d.toLocaleDateString(loc, { year: "numeric", month: "long", day: "numeric" })),
+                        ),
+                    );
+            }
+            if (typeof acct.sessionCount === "number") {
+                editor.append(accountField(t("authSessions"), ro(t("authSessions"), t("authSessionCount", { n: acct.sessionCount }))));
+            }
+            editor.append(
+                accountField(
+                    t("authPassword"),
+                    T.h("div", { class: "key-row" }, [ro(t("authPassword"), "********", "password"), editBtn("password")]),
+                ),
+                T.h("hr", { class: "divider" }),
+                T.h("div", { class: "editor-actions" }, [
+                    T.h("button", {
+                        class: "btn ghost",
+                        text: t("authLogout"),
+                        async onclick() {
+                            this.disabled = true;
+                            try {
+                                await T.api.accountLogout();
+                            } catch (_) {}
+                            T.api.setToken("");
+                            T.notifications?.syncAuth?.();
+                            state.state.account = { hasAccount: true, authed: false, username: null };
+                            T.app?.handleUnauthorized?.();
+                        },
+                    }),
+                ]),
+            );
+        }
         body.append(sec);
     }
 

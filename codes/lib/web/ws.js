@@ -177,16 +177,24 @@ class WsConn {
     }
 }
 
-function authorized(url, req, token) {
-    if (!token) return true;
+function presentedToken(url, req) {
     const header = req.headers.authorization || "";
-    if (header === `Bearer ${token}`) return true;
-    if (req.headers["x-tabybot-token"] === token) return true;
-    return url.searchParams.get("token") === token;
+    if (header.startsWith("Bearer ")) return header.slice(7).trim();
+    const alt = req.headers["x-tabybot-token"];
+    if (alt) return String(alt);
+    return url.searchParams.get("token") || "";
+}
+
+// auth: { enabled() → 세션 요구 여부, verify(token) → 세션 유효 여부 }
+function authorized(url, req, auth) {
+    if (!auth || typeof auth.enabled !== "function" || !auth.enabled()) return true;
+    if (typeof auth.verify !== "function") return false;
+    const presented = presentedToken(url, req);
+    return presented ? auth.verify(presented) : false;
 }
 
 // 경로 접두사 → 핸들러(conn, req, url). 매칭 안 되면 소켓을 닫는다.
-export function createWsServer({ token = "" } = {}) {
+export function createWsServer({ auth = {} } = {}) {
     const routes = [];
 
     function add(pathPrefix, handler) {
@@ -196,7 +204,7 @@ export function createWsServer({ token = "" } = {}) {
     function handleUpgrade(req, socket, head) {
         const url = new URL(req.url || "/", "http://localhost");
         const hit = routes.find((r) => url.pathname.startsWith(r.pathPrefix));
-        if (!hit || !authorized(url, req, token)) {
+        if (!hit || !authorized(url, req, auth)) {
             socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
             socket.destroy();
             return;

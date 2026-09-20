@@ -463,8 +463,8 @@ export function registerComputerRoutes(router) {
     });
 }
 
-export function initComputerWs(token) {
-    wsServer = createWsServer({ token });
+export function initComputerWs(auth) {
+    wsServer = createWsServer({ auth });
     wsServer.add("/ws/computer/screen", (conn, req, url) => void handleScreenConn(conn, url));
     wsServer.add("/ws/computer/terminal", (conn, req, url) => handleTerminalConn(conn, url));
     return wsServer;

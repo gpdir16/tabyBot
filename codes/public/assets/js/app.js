@@ -140,12 +140,12 @@
         }
     });
 
-    // 세션 중 401: 서버 토큰이 바뀌었거나 저장 토큰이 지워졌다. 재인증 화면을 띄우고
-    // 성공하면 부트를 다시 시도한다. 연속 401이 프롬프트를 중복으로 띄우지 않게 가드.
+    // 세션 중 401: 세션이 만료됐거나 다른 기기에서 비밀번호가 바뀌었다. 로그인 화면을
+    // 띄우고 성공하면 부트를 다시 시도한다. 연속 401이 프롬프트를 중복으로 띄우지 않게 가드.
     function handleUnauthorized() {
         if (authPromptOpen) return;
         authPromptOpen = true;
-        T.onboarding.showToken(() => {
+        T.onboarding.showAuth("login", () => {
             authPromptOpen = false;
             boot();
         });
@@ -246,6 +246,26 @@
 
         const token = ++bootToken;
         try {
+            // 계정 게이트: 계정이 없으면 생성 화면(건너뛰기 가능),
+            // 있고 세션이 무효면 로그인 화면을 먼저 띄운다.
+            try {
+                const acct = await T.api.accountState();
+                if (token !== bootToken) return;
+                if (acct) {
+                    state.state.account = acct;
+                    if (!acct.hasAccount && !T.onboarding.setupSkipped()) {
+                        T.onboarding.showAuth("setup", () => boot());
+                        return;
+                    }
+                    if (acct.hasAccount && !acct.authed) {
+                        handleUnauthorized();
+                        return;
+                    }
+                }
+            } catch (_) {
+                /* account/state 실패는 bootstrap이 같은 오류로 처리한다 */
+            }
+
             const bs = await T.api.bootstrap();
             if (token !== bootToken) return;
             state.state.bootstrap = bs;
@@ -321,7 +341,7 @@
         } catch (e) {
             if (token !== bootToken) return;
             if (e instanceof T.api.ApiError && e.status === 401) {
-                T.onboarding.showToken(() => boot());
+                handleUnauthorized();
                 return;
             }
             enterOffline(e);
