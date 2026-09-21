@@ -2207,6 +2207,12 @@ body.todos-route #btnAttach {
     margin-top: 2px;
     line-height: 1.4;
 }
+.set-warn {
+    font-size: var(--fs-xs);
+    color: var(--warning);
+    margin: var(--sp-1) 0 var(--sp-2);
+    line-height: 1.4;
+}
 .divider {
     border: 0;
     border-top: 1px solid var(--border);

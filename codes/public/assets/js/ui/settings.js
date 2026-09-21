@@ -28,11 +28,11 @@
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "provider", "model", "account", "agents"];
+    const TABS = ["general", "provider", "model", "account", "selfimprovement", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
     function routeFromPath() {
-        const m = /^\/s\/(general|provider|model|account|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
+        const m = /^\/s\/(general|provider|model|account|selfimprovement|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
         if (!m) return null;
         const tab = m[1];
         let agentId = null;
@@ -204,6 +204,7 @@
             tabBtn("provider", t("provider")),
             tabBtn("model", t("model")),
             tabBtn("account", t("account")),
+            tabBtn("selfimprovement", t("selfImprovement")),
             T.h("hr", { class: "divider" }),
             ...agents.map(agentNavBtn),
             T.h("button", {
@@ -223,6 +224,7 @@
         else if (openTab === "provider") buildProvider(body);
         else if (openTab === "model") buildModel(body);
         else if (openTab === "account") buildAccount(body);
+        else if (openTab === "selfimprovement") buildSelfImprovement(body);
         else buildAgents(body);
 
         page.append(head, T.h("div", { class: "sp-main" }, [nav, body]));
@@ -325,6 +327,27 @@
             T.h("div", { class: "set-row" }, [
                 T.h("div", {}, [T.h("div", { class: "set-label", text: t("language") })]),
                 T.h("div", { class: "select-wrap" }, [langSel, T.icon("chevron")]),
+            ]),
+        );
+
+        // 시간대 — 스케줄(체크인·스윕·투두) 기준. 비우면 서버 시간대(도커는 UTC).
+        const tzs =
+            typeof Intl.supportedValuesOf === "function"
+                ? Intl.supportedValuesOf("timeZone")
+                : ["Asia/Seoul", "Asia/Tokyo", "UTC", "America/New_York", "America/Los_Angeles", "Europe/London", "Europe/Berlin"];
+        sec.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("timezone") }),
+                settingSelect(
+                    presetOptions(
+                        [{ value: "", label: t("tzServerDefault") }, ...tzs.map((z) => ({ value: z, label: z }))],
+                        s.timezone || "",
+                        s.timezone || "",
+                    ),
+                    s.timezone || "",
+                    (v) => put({ timezone: v }),
+                    t("timezone"),
+                ),
             ]),
         );
 
@@ -1207,6 +1230,174 @@
             T.h("div", { class: "set-label", text: t("manualModel") }),
             T.h("div", { class: "set-control" }, [input]),
         ]);
+    }
+
+    /* ── 자기 개선 탭: 백그라운드 자동화(체크인·드림 스윕·세션 리뷰) ──
+       전부 선택형 — cron 문법이나 숫자 단위를 사용자에게 요구하지 않는다.
+       세부 값(idleMin·maxOpsPerRun·timezone 등)은 config 파일로만 조정한다. */
+    function siRow(label, control) {
+        return T.h("div", { class: "set-row" }, [T.h("div", { class: "set-label", text: label }), T.h("div", { class: "set-control" }, [control])]);
+    }
+
+    // 현재 값이 프리셋에 없으면 그대로 보여주는 임시 옵션을 뒤에 붙인다.
+    function presetOptions(presets, currentValue, currentLabel) {
+        const opts = presets.slice();
+        if (currentValue !== undefined && currentValue !== "" && !opts.some((o) => o.value === currentValue)) {
+            opts.push({ value: currentValue, label: currentLabel });
+        }
+        return opts;
+    }
+
+    function buildSelfImprovement(body) {
+        const s = state.state.settings;
+        if (!s) {
+            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+            return;
+        }
+        const si = s.selfImprovement || {};
+        const d = si.dreaming || {};
+        const r = si.review || {};
+        const p = si.proactive || {};
+        const putSi = (section, patch) => put({ selfImprovement: { [section]: patch } });
+
+        const sec = T.h("div", { class: "set-section" });
+        sec.append(T.h("div", { class: "set-warn", text: t("siUsageWarn") }));
+
+        // 자동 체크인
+        sec.append(fieldLabel(t("siProactive")));
+        sec.append(T.h("div", { class: "set-desc", text: t("siProactiveDesc") }));
+        sec.append(
+            siRow(
+                t("siEnabled"),
+                switchEl(p.enabled, (v) => putSi("proactive", { enabled: v }), t("siEnabled")),
+            ),
+        );
+        sec.append(
+            siRow(
+                t("siInterval"),
+                settingSelect(
+                    presetOptions(
+                        [
+                            { value: "60", label: t("siEvery1h") },
+                            { value: "180", label: t("siEvery3h") },
+                            { value: "360", label: t("siEvery6h") },
+                            { value: "720", label: t("siEvery12h") },
+                        ],
+                        String(p.intervalMin ?? 360),
+                        `${p.intervalMin}min`,
+                    ),
+                    String(p.intervalMin ?? 360),
+                    (v) => putSi("proactive", { intervalMin: Number(v) }),
+                    t("siInterval"),
+                ),
+            ),
+        );
+        sec.append(
+            siRow(
+                t("siActiveHours"),
+                settingSelect(
+                    presetOptions(
+                        [
+                            { value: "0-24", label: t("siHoursAll") },
+                            { value: "8-23", label: t("siHoursFull") },
+                            { value: "9-18", label: t("siHoursDay") },
+                            { value: "18-23", label: t("siHoursEvening") },
+                        ],
+                        `${p.activeStartHour ?? 8}-${p.activeEndHour ?? 23}`,
+                        `${p.activeStartHour ?? 8}–${p.activeEndHour ?? 23}h`,
+                    ),
+                    `${p.activeStartHour ?? 8}-${p.activeEndHour ?? 23}`,
+                    (v) => {
+                        const [sh, eh] = v.split("-").map(Number);
+                        putSi("proactive", { activeStartHour: sh, activeEndHour: eh });
+                    },
+                    t("siActiveHours"),
+                ),
+            ),
+        );
+        sec.append(
+            siRow(
+                t("siIdle"),
+                settingSelect(
+                    presetOptions(
+                        [
+                            { value: "15", label: t("siIdle15") },
+                            { value: "30", label: t("siIdle30") },
+                            { value: "60", label: t("siIdle60") },
+                        ],
+                        String(p.idleMin ?? 30),
+                        `${p.idleMin}min`,
+                    ),
+                    String(p.idleMin ?? 30),
+                    (v) => putSi("proactive", { idleMin: Number(v) }),
+                    t("siIdle"),
+                ),
+            ),
+        );
+
+        sec.append(T.h("hr", { class: "divider" }));
+
+        // 드림 스윕
+        sec.append(fieldLabel(t("siDreaming")));
+        sec.append(T.h("div", { class: "set-desc", text: t("siDreamingDesc") }));
+        sec.append(
+            siRow(
+                t("siEnabled"),
+                switchEl(d.enabled, (v) => putSi("dreaming", { enabled: v }), t("siEnabled")),
+            ),
+        );
+        sec.append(
+            siRow(
+                t("siSchedule"),
+                settingSelect(
+                    presetOptions(
+                        [
+                            { value: "0 */6 * * *", label: t("siSched6h") },
+                            { value: "0 4 * * *", label: t("siSchedDaily") },
+                            { value: "0 4 * * 0", label: t("siSchedWeekly") },
+                        ],
+                        d.cron || "0 4 * * *",
+                        String(d.cron || ""),
+                    ),
+                    d.cron || "0 4 * * *",
+                    (v) => putSi("dreaming", { cron: v }),
+                    t("siSchedule"),
+                ),
+            ),
+        );
+
+        sec.append(T.h("hr", { class: "divider" }));
+
+        // 세션 리뷰
+        sec.append(fieldLabel(t("siReview")));
+        sec.append(T.h("div", { class: "set-desc", text: t("siReviewDesc") }));
+        sec.append(
+            siRow(
+                t("siEnabled"),
+                switchEl(r.enabled, (v) => putSi("review", { enabled: v }), t("siEnabled")),
+            ),
+        );
+        sec.append(
+            siRow(
+                t("siReviewLevel"),
+                settingSelect(
+                    presetOptions(
+                        [
+                            { value: "3", label: t("siRevSmall") },
+                            { value: "5", label: t("siRevMid") },
+                            { value: "10", label: t("siRevLarge") },
+                        ],
+                        String(r.minToolCalls ?? 5),
+                        String(r.minToolCalls ?? 5),
+                    ),
+                    String(r.minToolCalls ?? 5),
+                    (v) => putSi("review", { minToolCalls: Number(v) }),
+                    t("siReviewLevel"),
+                ),
+            ),
+        );
+
+        body.append(sec);
     }
 
     function buildAgents(body) {

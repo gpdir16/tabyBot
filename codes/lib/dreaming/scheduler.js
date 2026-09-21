@@ -1,7 +1,8 @@
 import cron from "node-cron";
-import { loadAgentConfig } from "../config-loader.js";
 import { scheduleWork } from "../agent-queue.js";
+import { getDreamingConfig } from "../self-improvement.js";
 import { isUserIdle, DEFAULT_IDLE_REQUIRED_MS } from "../user-activity.js";
+import { isValidTimeZone, defaultTimeZone } from "../scheduling/time.js";
 import { runDreamSweep } from "./sweep.js";
 
 let task = null;
@@ -10,11 +11,15 @@ let sweepRunning = false;
 let sweepPending = false;
 
 function idleRequiredMs() {
-    const m = loadAgentConfig().dreaming?.idleMin;
+    const m = getDreamingConfig().idleMin;
     return Number.isFinite(m) ? m * 60_000 : DEFAULT_IDLE_REQUIRED_MS;
 }
 
 function queueSweep(trigger) {
+    if (getDreamingConfig().enabled === false) {
+        sweepPending = false;
+        return;
+    }
     if (sweepRunning) return;
     if (!isUserIdle(idleRequiredMs())) {
         sweepPending = true;
@@ -29,8 +34,13 @@ function queueSweep(trigger) {
         });
 }
 
+// 재진입 가능: 설정이 바뀌면 다시 호출해 크론을 재설정한다.
 export function startDreamingScheduler() {
-    const cfg = loadAgentConfig().dreaming || {};
+    if (task) {
+        task.stop();
+        task = null;
+    }
+    const cfg = getDreamingConfig();
     if (cfg.enabled === false) {
         console.log("tabyBot: dreaming disabled");
         return;
@@ -41,15 +51,16 @@ export function startDreamingScheduler() {
         console.warn(`tabyBot: invalid dreaming.cron "${cfg.cron}", using "0 4 * * *"`);
     }
 
-    if (task) task.stop();
-    task = cron.schedule(expr, () => queueSweep("cron"), { scheduled: true });
+    // 도커는 시스템 시간이 UTC라 시스템 기본값에만 맡기면 "새벽 4시"가 엉뚱한 시각이 된다.
+    const tz = isValidTimeZone(cfg.timezone) ? cfg.timezone : defaultTimeZone();
+    task = cron.schedule(expr, () => queueSweep("cron"), { scheduled: true, timezone: tz });
     if (!idleTimer) {
         idleTimer = setInterval(() => {
             if (sweepPending) queueSweep("idle-deferred");
         }, 60_000);
         idleTimer.unref?.();
     }
-    console.log(`tabyBot: dream sweep scheduled (${expr})`);
+    console.log(`tabyBot: dream sweep scheduled (${expr}, ${tz})`);
 }
 
 export function runDreamSweepNow(trigger = "manual") {

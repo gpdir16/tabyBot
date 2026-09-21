@@ -19,6 +19,9 @@ import {
     pollGithubCopilotDeviceFlow,
 } from "../llm/github-copilot-tokens.js";
 import { NSFW_LEVELS, normalizeNsfwLevel, APPROVAL_LEVELS, normalizeApprovalLevel } from "../user-settings.js";
+import { getDreamingConfig, getProactiveConfig, getReviewConfig, applySelfImprovementPatch } from "../self-improvement.js";
+import { startDreamingScheduler } from "../dreaming/scheduler.js";
+import { isValidTimeZone } from "../scheduling/time.js";
 import {
     listAgents,
     addAgent,
@@ -238,6 +241,7 @@ function buildSettingsPayload() {
     return {
         language: config.language || "en",
         languages: ["en", "ko", "ja"],
+        timezone: config.timezone || "",
         thinkingLevel: normalizeThinkingLevel(config.thinkingLevel, pid),
         thinkingLevels: levels.map((value) => ({ value, label: thinkingLevelLabel(config.language || "en", value) })),
         showReplyFooter: config.showReplyFooter !== false,
@@ -259,6 +263,11 @@ function buildSettingsPayload() {
         },
         providers: presets,
         agents: listAgents().map(publicAgent),
+        selfImprovement: {
+            dreaming: getDreamingConfig(),
+            review: getReviewConfig(),
+            proactive: getProactiveConfig(),
+        },
     };
 }
 
@@ -522,8 +531,21 @@ export function startWebServer() {
         if (patch.showReplyFooter !== undefined) config.showReplyFooter = Boolean(patch.showReplyFooter);
         if (patch.updateCheckEnabled !== undefined) config.updateCheckEnabled = Boolean(patch.updateCheckEnabled);
         if (patch.onboardingDismissed !== undefined) config.onboardingDismissed = Boolean(patch.onboardingDismissed);
+        if (patch.timezone !== undefined) {
+            const tz = String(patch.timezone || "").trim();
+            if (tz && !isValidTimeZone(tz)) return ctx.json400("invalid_timezone");
+            if (tz) config.timezone = tz;
+            else delete config.timezone;
+        }
         if (patch.nsfwLevel !== undefined) config.nsfwLevel = normalizeNsfwLevel(patch.nsfwLevel);
         if (patch.approvalLevel !== undefined) config.approvalLevel = normalizeApprovalLevel(patch.approvalLevel);
+
+        let selfImprovementChanged = false;
+        if (patch.selfImprovement !== undefined) {
+            const err = applySelfImprovementPatch((config.selfImprovement = config.selfImprovement || {}), patch.selfImprovement);
+            if (err) return ctx.json400(err);
+            selfImprovementChanged = true;
+        }
 
         if (patch.provider !== undefined && typeof patch.provider === "object") {
             config.provider = config.provider || {};
@@ -579,6 +601,8 @@ export function startWebServer() {
 
         saveUserConfig(config);
         if (patch.updateCheckEnabled !== undefined) restartUpdateScheduler();
+        // proactive는 매 틱 설정을 다시 읽으므로 재시작 불필요. dreaming 크론은 재등록이 필요하다(시간대 포함).
+        if (selfImprovementChanged || patch.timezone !== undefined) startDreamingScheduler();
         // 프론트가 부분 객체로 상태를 덮어쓰지 않도록 항상 전체 스냅샷을 돌려준다.
         ctx.json200(buildSettingsPayload());
     });
