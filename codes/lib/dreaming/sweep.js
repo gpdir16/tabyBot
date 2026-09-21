@@ -5,7 +5,7 @@ import { agentMemoryPath, listAgents } from "../agents-store.js";
 import { extractSessionTextLines } from "../agent/chat-history.js";
 import { createLlmClient } from "../llm/client.js";
 import { writeFileAtomic } from "../atomic-file.js";
-import { loadAgentConfig } from "../config-loader.js";
+import { getDreamingConfig } from "../self-improvement.js";
 import { appendDreamDiary, dreamBackupDir, loadDreamingState, saveDreamingState } from "./state.js";
 
 const MEMORY_PATH = path.join(USER_DIR, "memory.md");
@@ -377,7 +377,7 @@ function describeOp(op) {
 }
 
 export async function runDreamSweep({ trigger = "cron" } = {}) {
-    const cfg = loadAgentConfig().dreaming || {};
+    const cfg = getDreamingConfig();
     const maxOps = Number.isFinite(cfg.maxOpsPerRun) ? cfg.maxOpsPerRun : 5;
     const now = new Date();
     const state = loadDreamingState();

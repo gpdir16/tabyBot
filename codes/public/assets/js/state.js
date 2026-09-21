@@ -341,13 +341,19 @@
         emit("settings", s);
     }
 
-    // 낙관적 병합(provider는 1단계 깊이 병합)
+    // 낙관적 병합(provider는 1단계, selfImprovement는 섹션까지 2단계 깊이 병합)
     function mergeSettingsLocal(patch) {
         if (!state.settings || !patch) return;
         const next = Object.assign({}, state.settings);
         for (const k in patch) {
             if (k === "provider" && next.provider && typeof patch[k] === "object") {
                 next.provider = Object.assign({}, next.provider, patch[k]);
+            } else if (k === "selfImprovement" && next.selfImprovement && typeof patch[k] === "object") {
+                const merged = Object.assign({}, next.selfImprovement);
+                for (const sec in patch[k]) {
+                    if (patch[k][sec] && typeof patch[k][sec] === "object") merged[sec] = Object.assign({}, merged[sec], patch[k][sec]);
+                }
+                next.selfImprovement = merged;
             } else {
                 next[k] = patch[k];
             }

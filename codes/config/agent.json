@@ -18,7 +18,7 @@
     },
     "proactive": {
         "enabled": true,
-        "intervalMin": 60,
+        "intervalMin": 360,
         "activeStartHour": 8,
         "activeEndHour": 23,
         "idleMin": 30
