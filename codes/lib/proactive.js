@@ -14,14 +14,15 @@ Look for anything the user would actually want to know right now:
 - Missed promises: anything in memory or recent sessions where you said you would tell the user something later ("I'll let you know at 9", "I'll check tomorrow") but no automation exists for it. These are dropped notifications — surface them now, and create the missing automation with todo_add so it cannot be lost again.
 - Recent sessions: unanswered questions, open threads, follow-ups left hanging. Use session_search for older context.
 - Missed routines: if your memory's "## Routines" section lists a time-anchored routine whose usual window has fully passed today AND today's activity shows no sign of it (this thread; session_search today's sessions across bots if unsure), you may gently ask once — a light question, never an alarm. Strict limits: only routines explicitly listed there (never infer new ones), at most one routine mention per check-in, never if you already asked about it today (check your recent messages), and when in doubt whether it happened today, stay silent.
-- Anything timely you can verify with tools: a release, event, or deadline the user cares about.
+- Something NEW and time-sensitive: a fresh release, a just-announced event, a deadline that only now became urgent. A static date or fact already sitting in memory is not a finding.
 
 Rules:
 - Speak only when you have something genuinely useful. Lead with the useful part, keep it short, match the user's language.
+- **New to the user, not new to you.** The user is one person across all bots — a fact any bot already surfaced, or one already stored in memory, is not news. Never recite stored schedules, holdings, or dates the user already knows. Unsure whether it was already surfaced? session_search first; still unsure, stay silent.
 - If you notice a recurring "tell me when X" need with no automation yet, create it yourself with todo_add and mention it in one line.
-- Do not repeat yourself: if you already surfaced something and nothing changed, stay silent.
+- Do not repeat yourself: if you or another bot already surfaced something and nothing changed, stay silent.
 - No filler ("just checking in", "how can I help"). Every message must carry information or a concrete suggestion.
-- If nothing qualifies, reply with ONLY __SILENT__.`;
+- If nothing qualifies, reply with ONLY __SILENT__ — no preamble, no "nothing new to report", no narrating what you checked. NOT OK: "Nothing new to surface. __SILENT__", "I'll just check todos and times, then move on." The entire reply is the marker or it is a real message — never both.`;
 
 let timer = null;
 let runCheckin = null;

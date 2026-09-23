@@ -63,8 +63,11 @@ function buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallC
 
 const SILENT_REPLY_TOKEN = "__SILENT__";
 
+// 모델이 마커 앞뒤에 잡담을 붙여도 침묵 의사로 인정한다 — 마커가 있으면 전달하지 않는다.
 function isSilentReply(content) {
-    return typeof content === "string" && content.trim() === SILENT_REPLY_TOKEN;
+    if (typeof content !== "string") return false;
+    const t = content.trim();
+    return t.startsWith(SILENT_REPLY_TOKEN) || t.endsWith(SILENT_REPLY_TOKEN);
 }
 
 function injectPendingUserMessages(messages, session) {

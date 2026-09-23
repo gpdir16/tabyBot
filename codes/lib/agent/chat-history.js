@@ -164,6 +164,13 @@ export function isInternalStoredMessage(message) {
     return message?.role === "user" && INTERNAL_USER_HINTS.has(message.content);
 }
 
+// 모델이 __SILENT__ 마커를 메시지 앞/뒤에 붙인 경우도 침묵 의사로 인정한다 —
+// 정확히 일치하지 않아서 잡담이 사용자에게 배달되는 것을 막는다.
+export function isSilentMarkedText(text) {
+    const t = typeof text === "string" ? text.trim() : "";
+    return t.startsWith("__SILENT__") || t.endsWith("__SILENT__");
+}
+
 export function stripMarkdownForPreview(text) {
     let s = String(text || "");
     if (!s) return "";
@@ -185,7 +192,7 @@ function previewTextFromMessage(message) {
     if (!message || (message.role !== "user" && message.role !== "assistant")) return "";
     if (isInternalStoredMessage(message)) return "";
     if (typeof message.content !== "string") return "";
-    if (message.role === "assistant" && message.content.trim() === "__SILENT__") return "";
+    if (message.role === "assistant" && isSilentMarkedText(message.content)) return "";
     if (message.role === "user" && message.content.includes("[tabybot-scheduled]")) return "";
     const cut = message.content.indexOf("[User attached files]");
     const text = cut === -1 ? message.content : message.content.slice(0, cut).trim();
@@ -523,7 +530,7 @@ export function extractSessionTextLines(turns) {
             if (isInternalStoredMessage(m)) continue;
             let text = m.content;
             if (m.role === "assistant") {
-                if (text.trim() === "__SILENT__") continue;
+                if (isSilentMarkedText(text)) continue;
             } else {
                 if (text.includes("[tabybot-scheduled]")) continue;
                 if (text.startsWith(PENDING_USER_PREFIX)) text = text.slice(PENDING_USER_PREFIX.length).trim();

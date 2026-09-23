@@ -302,11 +302,8 @@
         const c = conv(id);
         const hadLive = !!c.live;
         const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
-        // 중간 과정 텍스트(툴 호출 전 코멘트)도 턴에 함께 남긴다.
-        // 서버 히스토리(새로고침 시 표시)와 동일하게 유지하기 위함.
-        const inter = ((c.live && c.live.intermediate) || [])
-            .map((t) => ({ role: "assistant", content: t }))
-            .filter((m) => m.content && m.content.trim());
+        // 중간 과정 텍스트(툴 호출 전 코멘트)는 라이브에서만 보여준다 —
+        // 서버 히스토리(toDisplayTurns)와 동일하게 툴 호출이 딸린 발화는 턴에 남기지 않는다.
         c.live = null;
         if (silent) {
             emit("live", { id });
@@ -316,14 +313,14 @@
         // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
         // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
         const finalText = String(text || fallback || "");
-        if (finalText || inter.length || attachments.length) {
+        if (finalText || attachments.length) {
             const last = c.turns[c.turns.length - 1];
             const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
             const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === finalText;
             if (!already) {
                 c.turns.push({
                     at: new Date().toISOString(),
-                    messages: [...inter, ...(finalText ? [{ role: "assistant", content: finalText }] : [])],
+                    messages: [...(finalText ? [{ role: "assistant", content: finalText }] : [])],
                     stats: stats || null,
                     attachments,
                 });

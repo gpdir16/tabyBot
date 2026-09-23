@@ -497,6 +497,12 @@
     }
 
     /* ── 렌더 ───────────────────────────────────────────────── */
+    // __SILENT__ 마커가 앞/뒤에 붙은 발화도 침묵 판정으로 본다(서버 toDisplayTurns와 동일 규칙).
+    function isSilentMarked(text) {
+        const s = String(text || "").trim();
+        return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
+    }
+
     function normalizeTurn(turn) {
         return {
             at: turn.at,
@@ -511,6 +517,7 @@
                     isParts,
                     imageUrl: m.imageUrl || null,
                     attachments: m.attachments || null,
+                    hasToolCalls: Array.isArray(m.tool_calls) && m.tool_calls.length > 0,
                 };
             }),
         };
@@ -534,14 +541,22 @@
         for (const turn of c.turns) {
             const messages = turn.messages || [];
             let lastAssistant = -1;
+            let lastAssistantText = "";
             messages.forEach((message, index) => {
-                if (message.role === "assistant") lastAssistant = index;
+                if (message.role === "assistant") {
+                    lastAssistant = index;
+                    const text = typeof message.content === "string" ? message.content.trim() : "";
+                    if (text) lastAssistantText = text;
+                }
             });
+            // 침묵으로 끝난 턴의 중간 발화는 사용자용이 아니었으므로 숨긴다(서버 toDisplayTurns와 동일).
+            const endedSilent = isSilentMarked(lastAssistantText);
             messages.forEach((m, index) => {
                 flat.push({
                     m,
                     stats: turn.stats,
                     attachments: index === lastAssistant ? turn.attachments || [] : [],
+                    endedSilent,
                 });
             });
         }
@@ -549,8 +564,13 @@
         // 라이브에서는 툴 카드로 표시되므로 새로고침 화면과의 일관성을 위해 제외.
         const visible = flat.filter((f) => {
             if (f.m.role === "tool") return false;
-            const text = typeof f.m.content === "string" ? f.m.content : "";
-            if (f.m.role === "assistant" && text.trim() === "__SILENT__") return false;
+            const text = typeof f.m.content === "string" ? f.m.content.trim() : "";
+            if (f.m.role === "assistant") {
+                // 툴 호출이 딸린 발화는 작업 중간 단계 — 라이브에서만 보이고 기록엔 남기지 않는다.
+                if (f.m.hasToolCalls) return false;
+                if (!text && !(f.m.attachments || []).length) return false;
+                if (f.endedSilent || isSilentMarked(text)) return false;
+            }
             if (f.m.role === "user" && text.includes("[tabybot-scheduled]")) return false;
             return true;
         });

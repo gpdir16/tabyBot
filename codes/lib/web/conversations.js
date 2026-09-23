@@ -4,7 +4,14 @@ import path from "node:path";
 import { writeJsonAtomic } from "../atomic-file.js";
 import { firstAgentId, getAgentByUuid, listAgents } from "../agents-store.js";
 import { isAgentSessionRunning } from "../agent/session.js";
-import { RECOVERY_PROMPT, conversationDir, loadChatHistory, previewSnippetFromTurns, stripMarkdownForPreview } from "../agent/chat-history.js";
+import {
+    RECOVERY_PROMPT,
+    conversationDir,
+    isSilentMarkedText,
+    loadChatHistory,
+    previewSnippetFromTurns,
+    stripMarkdownForPreview,
+} from "../agent/chat-history.js";
 
 function manifestPath(id) {
     const dir = conversationDir(id);
@@ -119,13 +126,24 @@ function publicUserMessage(message) {
 function toDisplayTurns(rawTurns) {
     const turns = [];
     for (const turn of rawTurns || []) {
+        const rawMessages = turn?.messages || [];
+        // 침묵 마커로 끝난 턴은 중간 발화도 사용자용이 아니었다는 모델 자체 판정 — 전부 숨긴다.
+        const lastAssistantText = [...rawMessages].reverse().find((m) => m?.role === "assistant" && String(m.content || "").trim())?.content;
+        const endedSilent = isSilentMarkedText(lastAssistantText);
         const messages = [];
-        for (const m of turn?.messages || []) {
+        for (const m of rawMessages) {
             // 도구 호출/결과 프레임은 라이브 카드로만 보여준다. 히스토리에는 최종 텍스트만.
             if (m?.role === "tool") continue;
-            if (m?.role === "assistant" && String(m.content || "").trim() === "__SILENT__") continue;
+            if (m?.role === "assistant") {
+                const text = String(m.content || "").trim();
+                // 툴 호출이 딸린 발화는 작업 중간 단계 — 라이브에서만 보이고 기록엔 남기지 않는다.
+                if (Array.isArray(m.tool_calls) && m.tool_calls.length) continue;
+                if (!text && !m.attachments?.length) continue;
+                if (endedSilent || isSilentMarkedText(text)) continue;
+                messages.push(m?.attachments ? publicUserMessage(m) : m);
+                continue;
+            }
             if (m?.role === "user" && typeof m.content === "string" && m.content.includes("[tabybot-scheduled]")) continue;
-            if (m?.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length && !String(m.content || "").trim()) continue;
             if (m?.role !== "user" || typeof m.content !== "string") {
                 messages.push(m?.attachments ? publicUserMessage(m) : m);
                 continue;
