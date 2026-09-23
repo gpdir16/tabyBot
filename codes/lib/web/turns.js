@@ -7,6 +7,7 @@ import {
     checkpointChatTurn,
     hasRecoverableChatTurn,
     isInternalStoredMessage,
+    isSilentMarkedText,
     lastChatTurnMessages,
     markChatTurnInterrupted,
     prepareChatTurnRecovery,
@@ -59,7 +60,7 @@ function isUnremarkableAutoTurn(result) {
                 if (name && !OBSERVATION_TOOLS.has(name)) return false;
             }
             const text = typeof m.content === "string" ? m.content.trim() : "";
-            if (text && text !== "__SILENT__") return false;
+            if (text && !isSilentMarkedText(text)) return false;
         }
     }
     return true;
