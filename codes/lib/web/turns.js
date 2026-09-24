@@ -297,7 +297,7 @@ ${isJob ? `Scheduled job` : `Agent todo`} "${item.title}"${when}. This is an aut
 Task:
 ${body}
 
-Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"). If there is nothing to tell the user, reply with ONLY __SILENT__ — the entire message.`;
+Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"), and do not post progress updates mid-run ("checking the page", "it loaded, extracting now"). Like a coworker, report only the finished job. Speak mid-task only for a finding that cannot wait. If there is nothing to tell the user, reply with ONLY __SILENT__ as the entire message. __SILENT__ voids only the message containing it, so to suppress text you should not have sent mid-run, end that same message with __SILENT__; earlier messages stay sent.`;
 }
 
 // 능동 체크인: 봇의 메인 스레드에서 조용히 깨어 할 말이 있을 때만 게시한다.

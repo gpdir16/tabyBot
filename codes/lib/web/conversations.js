@@ -127,20 +127,18 @@ function toDisplayTurns(rawTurns) {
     const turns = [];
     for (const turn of rawTurns || []) {
         const rawMessages = turn?.messages || [];
-        // 침묵 마커로 끝난 턴은 중간 발화도 사용자용이 아니었다는 모델 자체 판정 — 전부 숨긴다.
-        const lastAssistantText = [...rawMessages].reverse().find((m) => m?.role === "assistant" && String(m.content || "").trim())?.content;
-        const endedSilent = isSilentMarkedText(lastAssistantText);
         const messages = [];
         for (const m of rawMessages) {
-            // 도구 호출/결과 프레임은 라이브 카드로만 보여준다. 히스토리에는 최종 텍스트만.
+            // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
             if (m?.role === "tool") continue;
             if (m?.role === "assistant") {
                 const text = String(m.content || "").trim();
-                // 툴 호출이 딸린 발화는 작업 중간 단계 — 라이브에서만 보이고 기록엔 남기지 않는다.
-                if (Array.isArray(m.tool_calls) && m.tool_calls.length) continue;
                 if (!text && !m.attachments?.length) continue;
-                if (endedSilent || isSilentMarkedText(text)) continue;
-                messages.push(m?.attachments ? publicUserMessage(m) : m);
+                // 침묵 마커는 그 메시지 하나만 숨긴다 — 이미 보낸 중간 발화까지 소급 회수하지 않는다.
+                if (isSilentMarkedText(text)) continue;
+                // tool_calls 인자 페이로드는 화면용이 아니다 — 발화 텍스트만 남기고 벗겨 낸다.
+                const { tool_calls: _toolCalls, ...pub } = m;
+                messages.push(pub?.attachments ? publicUserMessage(pub) : pub);
                 continue;
             }
             if (m?.role === "user" && typeof m.content === "string" && m.content.includes("[tabybot-scheduled]")) continue;
