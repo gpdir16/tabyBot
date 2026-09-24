@@ -25,6 +25,7 @@
     let keyEditing = false; // 저장된 API 키를 다시 입력하는 중인지
     let credsEditing = null; // 계정 편집 중인 항목 — "username" | "password" | null
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
+    let advOpen = null; // 에이전트 편집기의 고급 설정 펼침. null이면 페르소나 유무로 초기화
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
@@ -77,6 +78,7 @@
         openTab = tab;
         editingAgent = agent;
         armDelete = null;
+        advOpen = null;
         keyEditing = false;
         credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
@@ -1127,6 +1129,7 @@
             modelsLoading = false;
             modelsFailedKey = null;
             if (openTab === "model") build();
+            else if (openTab === "agents") rebuildIfIdle();
         } catch (err) {
             if (req !== modelsReq) return;
             modelsLoading = false;
@@ -1413,8 +1416,26 @@
         body.append(agentEditor(agent));
     }
 
+    // 저장 시점에 값을 읽는 셀렉트. 즉시 PUT하는 settingSelect와 달리 ref를 돌려준다.
+    function editorSelect(options, current, aria) {
+        const sel = T.h("select", { "aria-label": aria });
+        for (const o of options) {
+            const opt = T.h("option", { value: o.value, text: o.label });
+            if (o.value === current) opt.selected = true;
+            sel.append(opt);
+        }
+        sel.addEventListener("keydown", (e) => e.stopPropagation());
+        return sel;
+    }
+
+    function selectWrap(sel) {
+        return T.h("div", { class: "select-wrap" }, [sel, T.icon("chevron")]);
+    }
+
     function agentEditor(agent) {
         const isNew = !agent;
+        const s = state.state.settings || {};
+        const provider = s.provider || {};
         const editor = T.h("div", { class: "agent-editor" });
 
         const name = T.h("input", {
@@ -1431,11 +1452,119 @@
             ]),
         );
 
-        editor.append(fieldLabel(t("persona")));
+        // 모델. 비워 두면 전역 모델. 목록은 모델 탭과 같은 캐시(modelsCache)를 쓴다.
+        const mKey = modelsKey(provider);
+        const cacheReady = modelsCache && modelsCache.key === mKey;
+        if (!cacheReady && !modelsLoading && modelsFailedKey !== mKey) void loadModels(provider);
+        const globalModelLabel = (cacheReady && modelsCache.models.find((m) => m.id === provider.model)?.label) || provider.model;
+        const modelOpts = [{ value: "", label: t("agentInherit") + (globalModelLabel ? ` (${globalModelLabel})` : "") }];
+        if (cacheReady) for (const m of modelsCache.models) modelOpts.push({ value: m.id, label: m.label || m.id });
+        const modelSel = editorSelect(presetOptions(modelOpts, agent?.model || "", agent?.model || ""), agent?.model || "", t("model"));
+        editor.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("model") }),
+                T.h("div", { class: "set-control" }, [selectWrap(modelSel)]),
+            ]),
+        );
+
+        // 사고 수준. 비워 두면 전역 값.
+        let thinkingSel = null;
+        if (Array.isArray(s.thinkingLevels) && s.thinkingLevels.length) {
+            const globalThinkingLabel = s.thinkingLevels.find((l) => l.value === s.thinkingLevel)?.label || s.thinkingLevel;
+            const opts = [
+                { value: "", label: t("agentInherit") + (globalThinkingLabel ? ` (${globalThinkingLabel})` : "") },
+                ...s.thinkingLevels.map((l) => ({ value: l.value, label: l.label || l.value })),
+            ];
+            thinkingSel = editorSelect(
+                presetOptions(opts, agent?.thinkingLevel || "", agent?.thinkingLevel || ""),
+                agent?.thinkingLevel || "",
+                t("thinkingLevel"),
+            );
+            editor.append(
+                T.h("div", { class: "set-row" }, [
+                    T.h("div", { class: "set-label", text: t("thinkingLevel") }),
+                    T.h("div", { class: "set-control" }, [selectWrap(thinkingSel)]),
+                ]),
+            );
+        }
+
+        // 아바타 색상. "자동"이면 id 해시로 정한다.
+        let colorChoice = agent?.colorChoice || "";
+        const palette =
+            Array.isArray(s.agentColors) && s.agentColors.length
+                ? s.agentColors
+                : ["#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ff9f0a", "#32d74b", "#64d2ff"];
+        const swatches = T.h("div", { class: "agent-colors" });
+        const syncSwatches = () => {
+            swatches.querySelectorAll(".color-swatch").forEach((el) => {
+                const on = (el.dataset.color || "") === colorChoice;
+                el.classList.toggle("selected", on);
+                el.setAttribute("aria-pressed", String(on));
+            });
+        };
+        swatches.append(
+            T.h("button", {
+                type: "button",
+                class: "color-swatch auto",
+                dataset: { color: "" },
+                text: t("agentColorAuto"),
+                "aria-pressed": "false",
+                onclick() {
+                    colorChoice = "";
+                    syncSwatches();
+                },
+            }),
+        );
+        for (const c of palette) {
+            swatches.append(
+                T.h("button", {
+                    type: "button",
+                    class: "color-swatch",
+                    dataset: { color: c },
+                    style: `background:${c}`,
+                    "aria-label": c,
+                    "aria-pressed": "false",
+                    onclick() {
+                        colorChoice = c;
+                        syncSwatches();
+                    },
+                }),
+            );
+        }
+        syncSwatches();
+        editor.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("agentColor") }),
+                T.h("div", { class: "set-control" }, [swatches]),
+            ]),
+        );
+
+        // 고급 설정. 페르소나는 선택 사항이므로 여기 접어둔다.
+        if (advOpen === null) advOpen = Boolean(agent?.persona?.trim());
         const persona = T.h("textarea", { class: "textarea", placeholder: t("personaPlaceholder"), "aria-label": t("persona") });
         persona.value = agent ? agent.persona || "" : "";
         persona.addEventListener("keydown", (e) => e.stopPropagation());
-        editor.append(persona);
+        const advPanel = T.h("div", { class: "adv-panel" }, [
+            fieldLabel(t("persona")),
+            persona,
+            T.h("div", { class: "set-desc", text: t("personaDesc") }),
+        ]);
+        advPanel.hidden = !advOpen;
+        const advBtn = T.h(
+            "button",
+            {
+                type: "button",
+                class: "adv-toggle",
+                "aria-expanded": String(advOpen),
+                onclick() {
+                    advOpen = !advOpen;
+                    advBtn.setAttribute("aria-expanded", String(advOpen));
+                    advPanel.hidden = !advOpen;
+                },
+            },
+            [T.icon("chevron", "icon-sm"), T.h("span", { text: t("advanced") })],
+        );
+        editor.append(T.h("hr", { class: "divider" }), advBtn, advPanel);
 
         const actions = T.h("div", { class: "editor-actions" });
         const saveBtn = T.h("button", {
@@ -1448,10 +1577,17 @@
                     return;
                 }
                 saveBtn.disabled = true;
+                const body = {
+                    name: n,
+                    persona: persona.value,
+                    model: modelSel.value,
+                    color: colorChoice,
+                };
+                if (thinkingSel) body.thinkingLevel = thinkingSel.value;
                 try {
                     let r;
-                    if (isNew) r = await T.api.createAgent({ name: n, persona: persona.value });
-                    else r = await T.api.updateAgent(agent.id, { name: n, persona: persona.value });
+                    if (isNew) r = await T.api.createAgent(body);
+                    else r = await T.api.updateAgent(agent.id, body);
                     if (r && Array.isArray(r.agents)) {
                         state.mergeSettingsLocal({ agents: r.agents });
                         state.setBots(r.agents);
@@ -1472,13 +1608,17 @@
                             ? t("nameRequired")
                             : reason === "name_too_long"
                               ? t("nameTooLong")
-                              : reason === "persona_required"
-                                ? t("personaRequired")
-                                : reason === "persona_too_long"
-                                  ? t("personaTooLong")
-                                  : reason === "too_many"
-                                    ? t("lastBotTooltip")
-                                    : "";
+                              : reason === "persona_too_long"
+                                ? t("personaTooLong")
+                                : reason === "model_too_long"
+                                  ? t("modelTooLong")
+                                  : reason === "invalid_thinking_level"
+                                    ? t("invalidThinkingLevel")
+                                    : reason === "invalid_color"
+                                      ? t("invalidColor")
+                                      : reason === "too_many"
+                                        ? t("lastBotTooltip")
+                                        : "";
                     T.toast.show("error", detail ? `${t("saveFailed")}: ${detail}` : T.api.errorText(err, t("saveFailed")));
                 }
             },
