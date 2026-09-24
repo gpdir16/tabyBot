@@ -151,3 +151,15 @@ curl -sS -X POST "http://127.0.0.1:9377/tabs/$TAB_ID/navigate" \
 - Macro coverage is larger than CLI engine coverage.
 - CLI `reddit` and API `@reddit_search` are not identical URLs (`/search` vs `/search.json`).
 - If macro expansion fails, `/tabs/:tabId/navigate` can still use direct `url` when provided.
+
+---
+
+## 7) Raw HTTP search (no browser)
+
+When only quick result links/snippets are needed — e.g. finding a URL before opening it — DuckDuckGo's HTML endpoint works over plain `curl` in `terminal_run`, no browser tab:
+
+```bash
+curl -sS -A "Mozilla/5.0" "https://html.duckduckgo.com/html/?q=<urlencoded query>"
+```
+
+Prefer this over Google scraping (consent walls/bot blocks). For interactive browsing or result clicking, use `camofox search --engine duckduckgo` instead.
