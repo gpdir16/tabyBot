@@ -2593,6 +2593,77 @@ body.todos-route #btnAttach {
     flex-direction: column;
     gap: var(--sp-3);
 }
+/* 고급 설정 접기/펼치기 */
+.adv-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.adv-toggle:hover {
+    color: var(--text);
+}
+.adv-toggle .icon {
+    transition: transform var(--dur-1) var(--ease);
+    transform: rotate(-90deg);
+}
+.adv-toggle[aria-expanded="true"] .icon {
+    transform: rotate(0deg);
+}
+.adv-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+.adv-panel[hidden] {
+    display: none;
+}
+/* 봇 아바타 색상 스와치 */
+.agent-colors {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+.color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    padding: 0;
+    cursor: pointer;
+    transition:
+        transform var(--dur-1) var(--ease),
+        border-color var(--dur-1) var(--ease);
+}
+.color-swatch:hover {
+    transform: scale(1.12);
+}
+.color-swatch.selected {
+    border-color: var(--text);
+}
+.color-swatch.auto {
+    width: auto;
+    height: 24px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-pill);
+    border: 1px dashed var(--border-strong);
+    background: none;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+}
+.color-swatch.auto.selected {
+    border-style: solid;
+    border-color: var(--text);
+    color: var(--text);
+}
 .editor-actions {
     display: flex;
     gap: var(--sp-2);

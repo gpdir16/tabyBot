@@ -13,6 +13,7 @@ const AGENTS_ROOT = path.join(USER_DIR, "agents");
 const MAX_AGENTS = 20;
 const MAX_NAME = 32;
 const MAX_PERSONA = 500;
+const MAX_MODEL = 128;
 const MAX_ID = 24;
 
 const TOPIC_COLORS = [7322096, 16766590, 13338331, 9367192, 16749490, 16478047];
@@ -135,13 +136,38 @@ export function normalizeAgentName(name) {
 }
 
 export function normalizeAgentPersona(persona) {
-    const trimmed = String(persona || "").trim();
-    if (!trimmed || trimmed === "-" || trimmed === "—") return { error: "persona_required" };
+    let trimmed = String(persona || "").trim();
+    if (trimmed === "-" || trimmed === "—") trimmed = "";
     if (trimmed.length > MAX_PERSONA) return { error: "persona_too_long", max: MAX_PERSONA };
     return { persona: trimmed };
 }
 
-const AVATAR_COLORS = ["#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ff9f0a", "#32d74b", "#64d2ff"];
+// 빈 문자열은 "전역 설정을 따른다"는 뜻. 선택형 오버라이드 공통 규칙.
+export function normalizeAgentModel(model) {
+    const trimmed = String(model || "").trim();
+    if (trimmed.length > MAX_MODEL) return { error: "model_too_long", max: MAX_MODEL };
+    return { model: trimmed };
+}
+
+export function normalizeAgentThinkingLevel(value) {
+    const v = String(value || "")
+        .trim()
+        .toLowerCase();
+    if (!v) return { thinkingLevel: "" };
+    if (!/^[a-z]+$/.test(v)) return { error: "invalid_thinking_level" };
+    return { thinkingLevel: v };
+}
+
+export function normalizeAgentColor(value) {
+    const v = String(value || "")
+        .trim()
+        .toLowerCase();
+    if (!v) return { color: "" };
+    if (!/^#[0-9a-f]{6}$/.test(v)) return { error: "invalid_color" };
+    return { color: v };
+}
+
+export const AVATAR_COLORS = ["#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ff9f0a", "#32d74b", "#64d2ff"];
 export function agentColor(id) {
     let hash = 0;
     for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
@@ -172,11 +198,17 @@ export function canAddAgent() {
     return listAgents().length < MAX_AGENTS;
 }
 
-export function addAgent({ name, persona }) {
+export function addAgent({ name, persona, model, thinkingLevel, color }) {
     const named = normalizeAgentName(name);
     if (named.error) return named;
     const person = normalizeAgentPersona(persona);
     if (person.error) return person;
+    const mod = normalizeAgentModel(model);
+    if (mod.error) return mod;
+    const thinking = normalizeAgentThinkingLevel(thinkingLevel);
+    if (thinking.error) return thinking;
+    const col = normalizeAgentColor(color);
+    if (col.error) return col;
     if (!canAddAgent()) return { error: "too_many", max: MAX_AGENTS };
 
     const store = loadAgentsStore();
@@ -189,6 +221,9 @@ export function addAgent({ name, persona }) {
         uuid: newUuid(),
         name: named.name,
         persona: person.persona,
+        model: mod.model,
+        thinkingLevel: thinking.thinkingLevel,
+        color: col.color,
         createdAt: new Date().toISOString(),
     };
     store.agents.push(agent);
@@ -211,6 +246,21 @@ export function updateAgent(id, patch) {
         const person = normalizeAgentPersona(patch.persona);
         if (person.error) return person;
         current.persona = person.persona;
+    }
+    if (patch.model !== undefined) {
+        const mod = normalizeAgentModel(patch.model);
+        if (mod.error) return mod;
+        current.model = mod.model;
+    }
+    if (patch.thinkingLevel !== undefined) {
+        const thinking = normalizeAgentThinkingLevel(patch.thinkingLevel);
+        if (thinking.error) return thinking;
+        current.thinkingLevel = thinking.thinkingLevel;
+    }
+    if (patch.color !== undefined) {
+        const col = normalizeAgentColor(patch.color);
+        if (col.error) return col;
+        current.color = col.color;
     }
     store.agents[idx] = current;
     saveAgentsStore(store);

@@ -1,5 +1,5 @@
 import { getMergedProvider, loadAgentConfig, loadUserConfig } from "../config-loader.js";
-import { createLlmClient } from "../llm/client.js";
+import { createLlmClient, applyAgentOverrides } from "../llm/client.js";
 import { assistantMessageToPlain } from "../llm/messages.js";
 import { executeTool, getAllToolDefinitions, toolResultContent } from "./tool-registry.js";
 import { buildToolResultContent } from "../llm/vision.js";
@@ -7,7 +7,7 @@ import { extractTurnMessages } from "./chat-history.js";
 import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
 import { countMessagesTokens } from "./context.js";
-import { firstAgentId } from "../agents-store.js";
+import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
 function parseToolArgs(raw) {
     try {
@@ -222,7 +222,15 @@ async function runAgentTurn(
     } = {},
 ) {
     clearFileReadCache();
-    let llm = await createLlmClient();
+    const resolvedSessionKey = sessionKey || chatId;
+    const resolvedAgentId = agentId || firstAgentId();
+    // 봇별 오버라이드. 모델과 사고 수준은 client 생성 시 적용한다.
+    const agent = getAgent(resolvedAgentId) || firstAgent();
+    const agentOverrides = {
+        model: agent?.model?.trim() || "",
+        thinkingLevel: agent?.thinkingLevel || "",
+    };
+    let llm = await createLlmClient(agentOverrides);
     let activeProviderKey = providerKey(llm.provider);
     const agentConfig = loadAgentConfig();
     const setStatus = (phase, detail = null) => onStatusPhase?.(phase, detail);
@@ -230,8 +238,6 @@ async function runAgentTurn(
     const maxToolCalls = agentConfig.maxToolCallsPerTurn ?? 20;
     const maxEmptyReplyRetries = agentConfig.maxEmptyReplyRetries ?? 8;
     const modelCallCountRef = { value: 0 };
-    const resolvedSessionKey = sessionKey || chatId;
-    const resolvedAgentId = agentId || firstAgentId();
 
     const runtimeInfo = {
         model: llm.provider.model,
@@ -264,10 +270,10 @@ async function runAgentTurn(
     const partialTextRef = { value: null };
 
     for (let round = 0; round < maxRounds; round++) {
-        const configuredProvider = getMergedProvider(loadUserConfig());
+        const configuredProvider = applyAgentOverrides(getMergedProvider(loadUserConfig()), agentOverrides);
         const configuredProviderKey = providerKey(configuredProvider);
         if (configuredProviderKey !== activeProviderKey) {
-            llm = await createLlmClient();
+            llm = await createLlmClient(agentOverrides);
             activeProviderKey = providerKey(llm.provider);
             visionSupport = Boolean(llm.modelMeta?.supportsVision);
         }

@@ -31,6 +31,7 @@ import {
     firstAgent,
     DEFAULT_AGENT_NAME,
     getAgent,
+    AVATAR_COLORS,
 } from "../agents-store.js";
 import {
     acceptHandoff,
@@ -195,7 +196,10 @@ function publicAgent(a) {
         uuid: a.uuid,
         name: a.name,
         persona: a.persona,
-        color: agentColor(a.id),
+        model: a.model || "",
+        thinkingLevel: a.thinkingLevel || "",
+        color: a.color || agentColor(a.id),
+        colorChoice: a.color || "",
         createdAt: a.createdAt ?? null,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
     };
@@ -263,6 +267,7 @@ function buildSettingsPayload() {
         },
         providers: presets,
         agents: listAgents().map(publicAgent),
+        agentColors: AVATAR_COLORS,
         selfImprovement: {
             dreaming: getDreamingConfig(),
             review: getReviewConfig(),
@@ -659,14 +664,26 @@ export function startWebServer() {
 
     router.add("POST", "/api/agents", async (ctx) => {
         const body = await ctx.json();
-        const result = addAgent({ name: body.name, persona: body.persona });
+        const result = addAgent({
+            name: body.name,
+            persona: body.persona,
+            model: body.model,
+            thinkingLevel: body.thinkingLevel,
+            color: body.color,
+        });
         if (result.error) return ctx.json400(result.error);
         ctx.json200({ agents: listAgents().map(publicAgent), agent: publicAgent(result.agent) });
     });
 
     router.add("PATCH", "/api/agents/:id", async (ctx) => {
         const body = await ctx.json();
-        const result = storeUpdateAgent(ctx.params.id, { name: body.name, persona: body.persona });
+        const result = storeUpdateAgent(ctx.params.id, {
+            name: body.name,
+            persona: body.persona,
+            model: body.model,
+            thinkingLevel: body.thinkingLevel,
+            color: body.color,
+        });
         if (result.error) return ctx.json400(result.error);
         ctx.json200({ agents: listAgents().map(publicAgent), agent: publicAgent(result.agent) });
     });
