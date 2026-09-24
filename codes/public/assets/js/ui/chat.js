@@ -602,7 +602,6 @@
                     isParts,
                     imageUrl: m.imageUrl || null,
                     attachments: m.attachments || null,
-                    hasToolCalls: Array.isArray(m.tool_calls) && m.tool_calls.length > 0,
                 };
             }),
         };
@@ -643,6 +642,7 @@
             messages.forEach((m, index) => {
                 flat.push({
                     m,
+                    turn,
                     stats: turn.stats,
                     attachments: index === lastAssistant ? turn.attachments || [] : [],
                     endedSilent,
@@ -655,8 +655,6 @@
             if (f.m.role === "tool") return false;
             const text = typeof f.m.content === "string" ? f.m.content.trim() : "";
             if (f.m.role === "assistant") {
-                // 툴 호출이 딸린 발화는 작업 중간 단계 — 라이브에서만 보이고 기록엔 남기지 않는다.
-                if (f.m.hasToolCalls) return false;
                 if (!text && !(f.m.attachments || []).length) return false;
                 if (f.endedSilent || isSilentMarked(text)) return false;
             }
@@ -664,8 +662,13 @@
             return true;
         });
         let lastA = -1;
+        // 통계 푸터는 턴의 마지막 보이는 assistant 버블에만 단다 — 중간 발화마다 달리지 않게.
+        const lastOfTurn = new Map();
         visible.forEach((f, i) => {
-            if (f.m.role === "assistant") lastA = i;
+            if (f.m.role === "assistant") {
+                lastA = i;
+                lastOfTurn.set(f.turn, i);
+            }
         });
 
         visible.forEach((f, i) => {
@@ -675,7 +678,7 @@
                 el = buildUserMessage(text, f.m.imageUrl, false, f.m.attachments);
             } else {
                 el = buildAssistant(f.m.content || "", {
-                    stats: f.stats,
+                    stats: lastOfTurn.get(f.turn) === i ? f.stats : null,
                     attachments: f.attachments,
                     allowRegen: i === lastA && !c.live,
                 });
