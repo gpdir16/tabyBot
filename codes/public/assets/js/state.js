@@ -302,8 +302,9 @@
         const c = conv(id);
         const hadLive = !!c.live;
         const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
-        // 중간 과정 텍스트(툴 호출 전 코멘트)는 라이브에서만 보여준다 —
-        // 서버 히스토리(toDisplayTurns)와 동일하게 툴 호출이 딸린 발화는 턴에 남기지 않는다.
+        // 중간 과정 발화(툴 호출 전 코멘트)도 메신저 기록에 남긴다 —
+        // 라이브에서 이미 보여준 말을 완료 시점에 지우지 않는다.
+        const intermediate = c.live ? c.live.intermediate : [];
         c.live = null;
         if (silent) {
             emit("live", { id });
@@ -313,14 +314,19 @@
         // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
         // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
         const finalText = String(text || fallback || "");
-        if (finalText || attachments.length) {
+        const spoken = [
+            ...intermediate.map((t) => ({ role: "assistant", content: t })),
+            ...(finalText ? [{ role: "assistant", content: finalText }] : []),
+        ];
+        if (spoken.length || attachments.length) {
             const last = c.turns[c.turns.length - 1];
             const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
-            const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === finalText;
+            const tail = spoken.length ? spoken[spoken.length - 1].content : null;
+            const already = tail != null && lastMsg && lastMsg.role === "assistant" && lastMsg.content === tail;
             if (!already) {
                 c.turns.push({
                     at: new Date().toISOString(),
-                    messages: [...(finalText ? [{ role: "assistant", content: finalText }] : [])],
+                    messages: spoken,
                     stats: stats || null,
                     attachments,
                 });
