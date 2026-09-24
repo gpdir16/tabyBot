@@ -81,13 +81,19 @@ self.addEventListener("push", (event) => {
         }
     }
     event.waitUntil(
-        self.registration.showNotification(data.title || "tabyBot", {
-            body: data.body || "",
-            tag: data.tag || "tabybot",
-            icon: "/assets/icons/icon-192.png",
-            badge: "/assets/icons/icon-192.png",
-            data: { url: data.url || "/" },
-        }),
+        self.clients
+            .matchAll({ type: "window", includeUncontrolled: true })
+            .catch(() => [])
+            .then((list) => {
+                if (list.some((c) => c.visibilityState === "visible")) return;
+                return self.registration.showNotification(data.title || "tabyBot", {
+                    body: data.body || "",
+                    tag: data.tag || "tabybot",
+                    icon: "/assets/icons/icon-192.png",
+                    badge: "/assets/icons/icon-192.png",
+                    data: { url: data.url || "/" },
+                });
+            }),
     );
 });
 

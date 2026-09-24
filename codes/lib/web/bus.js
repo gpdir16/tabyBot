@@ -44,6 +44,5 @@ export function emit(event) {
             // 개별 구독자(SSE 연결) 실패가 다른 구독자에 영향 주지 않도록 무시
         }
     }
-    // SSE 수신자가 없으면 웹 푸시로 전달한다(브라우저가 닫혀 있을 때).
-    void maybePush(event, { liveClients: subscribers.size }).catch(() => {});
+    void maybePush(event).catch(() => {});
 }
