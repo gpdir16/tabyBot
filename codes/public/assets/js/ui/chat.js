@@ -18,17 +18,102 @@
     let pinnedBottom = true;
     let rafPending = false;
     let liveEls = null; // 현재 대화의 라이브 블록 참조
+    let renderedId = null; // 스레드에 그려진 대화 id — 스크롤 메모리 키
+    const scrollMem = new Map(); // convId → { top, midx, dy, pinned } — 대화별 스크롤 위치
+    let memRaf = 0;
 
     /* ── 스크롤 ─────────────────────────────────────────────── */
+    // 채팅 스레드가 #scroller의 내용으로 보이는가.
+    // 설정(/s)·컴퓨터(/c)는 스크롤러를 display:none으로 숨기고(위치가 리셋된다),
+    // 할일(/t)은 같은 스크롤러를 할일 페이지가 쓴다 — 그 사이 스크롤은 채팅 위치가 아니다.
+    function chatVisible() {
+        const b = document.body.classList;
+        return !b.contains("settings-route") && !b.contains("todos-route") && !b.contains("computer-route");
+    }
+
     scroller.addEventListener("scroll", () => {
+        if (!chatVisible()) return; // 다른 페이지가 스크롤러를 쓰는 동안의 스크롤은 무시
         pinnedBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 64;
         updateJump();
+        // 위치 기록은 프레임당 한 번 — 스크롤 이벤트는 연속으로 쏟아진다.
+        if (memRaf || !renderedId) return;
+        memRaf = requestAnimationFrame(() => {
+            memRaf = 0;
+            if (chatVisible() && renderedId) scrollMem.set(renderedId, captureScroll());
+        });
     });
     jump.addEventListener("click", () => scrollToBottom(true));
 
+    // 마크다운 이미지(.md img)는 크기가 정해져 있지 않아 로드되며 내용을 밀어낸다.
+    // 하단 고정 중이면 따라간다. (load는 버블링하지 않아 캡처 단계에서 잡는다)
+    thread.addEventListener(
+        "load",
+        (e) => {
+            if (e.target instanceof HTMLImageElement && pinnedBottom) scrollToBottom(false);
+        },
+        true,
+    );
+
     function scrollToBottom(smooth) {
-        scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
         pinnedBottom = true;
+        if (chatVisible()) {
+            scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+        } else if (renderedId) {
+            // 숨겨진 동안의 하단 이동 의도 — 다시 보일 때 복원된다.
+            scrollMem.set(renderedId, { pinned: true });
+        }
+        updateJump();
+    }
+
+    // 현재 스크롤 위치를 복원용 메모리로 캡처한다.
+    // 뷰포트 상단(--hdr-h 아래)에 걸린 메시지를 앵커로 기억해 두면
+    // 이미지 로딩 등으로 높이가 달려져도 같은 메시지 위치를 복원할 수 있다.
+    function captureScroll() {
+        if (!chatVisible()) return (renderedId && scrollMem.get(renderedId)) || { pinned: pinnedBottom };
+        if (pinnedBottom) return { pinned: true };
+        const mem = { top: scroller.scrollTop, midx: null, dy: 0, pinned: false };
+        const rect = scroller.getBoundingClientRect();
+        const padTop = parseFloat(getComputedStyle(scroller).paddingTop) || 0;
+        const line = rect.top + padTop;
+        const cx = rect.left + rect.width / 2;
+        // 행 사이 간격에 포인트가 걸릴 수 있으므로 아래로 조금씩 더 파본다.
+        for (const probe of [2, 30, 90]) {
+            const y = line + probe;
+            if (y > rect.bottom - 4) break;
+            const hit = document.elementFromPoint(cx, y);
+            const row = hit && hit.closest ? hit.closest(".msg-row[data-midx]") : null;
+            if (row) {
+                mem.midx = row.dataset.midx;
+                mem.dy = row.getBoundingClientRect().top - line;
+                break;
+            }
+        }
+        return mem;
+    }
+
+    function restoreScroll(mem) {
+        if (!chatVisible()) {
+            // 숨겨진 스크롤러에 쓰면 위치가 리셋되거나 다른 페이지를 밀어버린다.
+            // 의도만 메모리에 남기고, 다시 보일 때 아래 MutationObserver가 복원한다.
+            if (renderedId) scrollMem.set(renderedId, mem && !mem.pinned ? mem : { pinned: true });
+            return;
+        }
+        if (!mem || mem.pinned) {
+            scrollToBottom(false);
+            return;
+        }
+        let placed = false;
+        if (mem.midx != null) {
+            const el = thread.querySelector(`[data-midx="${mem.midx}"]`);
+            if (el) {
+                const padTop = parseFloat(getComputedStyle(scroller).paddingTop) || 0;
+                const want = scroller.getBoundingClientRect().top + padTop + mem.dy;
+                scroller.scrollTop += el.getBoundingClientRect().top - want;
+                placed = true;
+            }
+        }
+        if (!placed) scroller.scrollTop = mem.top || 0;
+        pinnedBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 64;
         updateJump();
     }
     function updateJump() {
@@ -523,8 +608,11 @@
         };
     }
 
-    function renderConversation() {
+    // mem === undefined: 같은 대화 재렌더 — 지금 위치 유지. null: 하단으로. 객체: 그 위치로 복원.
+    function renderConversation(mem) {
+        const keep = mem === undefined ? captureScroll() : mem;
         liveEls = null;
+        renderedId = state.state.currentId;
         if (bubbleRo) bubbleRo.disconnect();
         thread.textContent = "";
         const c = state.currentConv();
@@ -534,6 +622,7 @@
 
         if (!c) {
             refreshHeader();
+            restoreScroll(keep);
             return;
         }
 
@@ -606,7 +695,7 @@
         if (c.live) mountLive(c.live);
 
         refreshHeader();
-        scrollToBottom(false);
+        restoreScroll(keep);
         requestAnimationFrame(() => fitBubblesIn(thread));
     }
 
@@ -678,7 +767,7 @@
             liveEls.asksEl.classList.toggle("hidden", !live.asks.length);
         }
 
-        if (pinnedBottom) scroller.scrollTop = scroller.scrollHeight;
+        if (pinnedBottom) scrollToBottom(false);
         updateJump();
         fitBubbleRadius(liveEls.bubble);
     }
@@ -815,7 +904,8 @@
             }
         }
         if (open._token !== token) return; // 로드 중 다른 대화로 전환됨
-        renderConversation();
+        // 그 대화에서 마지막으로 보던 위치로 돌아간다. 기억이 없으면 하단.
+        renderConversation(id != null ? scrollMem.get(String(id)) || null : null);
 
         // 1회성 파라미터 적용: 특정 메시지 이동(m)
         if (o.params?.m != null) {
@@ -924,13 +1014,22 @@
             liveEls = null;
             renderConversation();
             refreshHeader();
-            if (pinnedBottom) scrollToBottom(false);
         });
 
         T.i18n.onChange(() => {
             renderConversation();
         });
         window.addEventListener("resize", () => fitBubblesIn(thread));
+        // 다른 라우트가 채팅을 가렸다가 놓는 순간을 감지한다. display:none으로
+        // 숨겨진 스크롤러는 위치가 리셋되고 할일 페이지는 같은 스크롤러를 쓰므로,
+        // 다시 보이는 시점에 마지막으로 기억한 위치를 복원한다.
+        let chatShown = chatVisible();
+        new MutationObserver(() => {
+            const shown = chatVisible();
+            if (shown === chatShown) return;
+            chatShown = shown;
+            if (shown) restoreScroll(renderedId ? scrollMem.get(renderedId) : null);
+        }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
         // 숨김 복귀 시 버퍼된 스트림을 즉시 반영
         document.addEventListener("visibilitychange", () => {
             if (!document.hidden) {
