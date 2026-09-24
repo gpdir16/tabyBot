@@ -118,9 +118,7 @@ function payloadFor(event) {
     return null;
 }
 
-export async function maybePush(event, { liveClients = 0 } = {}) {
-    // 열린 탭이 있으면 SSE/페이지 알림이 담당한다.
-    if (liveClients > 0) return;
+export async function maybePush(event) {
     const payload = payloadFor(event);
     if (!payload) return;
 
@@ -128,7 +126,7 @@ export async function maybePush(event, { liveClients = 0 } = {}) {
     const body = JSON.stringify(payload);
     const opts = {
         vapidDetails: {
-            subject: "mailto:tabybot@localhost",
+            subject: "https://github.com/gpdir16/tabyBot",
             publicKey: keys.publicKey,
             privateKey: keys.privateKey,
         },
@@ -141,7 +139,11 @@ export async function maybePush(event, { liveClients = 0 } = {}) {
                 await webpush.sendNotification(sub, body, opts);
             } catch (err) {
                 const status = err?.statusCode;
-                if (status === 404 || status === 410) removeSubscription(sub);
+                if (status === 404 || status === 410 || status === 401 || status === 403) {
+                    removeSubscription(sub);
+                } else {
+                    console.warn("[push] send failed:", status || "", err?.message || err);
+                }
             }
         }),
     );

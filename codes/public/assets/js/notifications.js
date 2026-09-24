@@ -48,6 +48,20 @@
             const cfg = await T.api.pushConfig();
             if (!cfg || !cfg.publicKey) return;
             let sub = await swReg.pushManager.getSubscription();
+            if (sub?.options?.applicationServerKey) {
+                const cur = new Uint8Array(sub.options.applicationServerKey);
+                const want = urlBase64ToUint8Array(cfg.publicKey);
+                const same = cur.length === want.length && cur.every((b, i) => b === want[i]);
+                if (!same) {
+                    try {
+                        await T.api.pushUnsubscribe(sub.toJSON());
+                    } catch (_) {}
+                    try {
+                        await sub.unsubscribe();
+                    } catch (_) {}
+                    sub = null;
+                }
+            }
             if (!sub) {
                 sub = await swReg.pushManager.subscribe({
                     userVisibleOnly: true,
