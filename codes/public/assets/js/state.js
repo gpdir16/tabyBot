@@ -201,13 +201,19 @@
         return c;
     }
 
+    // 침묵 마커가 붙은 발화는 사용자용이 아니다 — 버블로 굳히거나 기록에 남기지 않고 버린다.
+    function isSilentMarkedText(t) {
+        const s = typeof t === "string" ? t.trim() : "";
+        return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
+    }
+
     function applyStatus(id, phase, detail, elapsedMs) {
         const c = ensureLive(id);
         if (phase) c.live.phase = phase;
         // 새 라운드(툴 실행) 진입 시점에 이전 라운드 텍스트를 중간 과정 버블로 굳힌다.
         // 새로고침 시 서버 히스토리에 남는 중간 assistant 메시지와 동일하게 보이도록 한다.
         if (phase === "tools" && c.live.text.trim()) {
-            c.live.intermediate.push(c.live.text);
+            if (!isSilentMarkedText(c.live.text)) c.live.intermediate.push(c.live.text);
             c.live.text = "";
         }
         c.live.detail = detail || "";
@@ -304,16 +310,33 @@
         const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
         // 중간 과정 발화(툴 호출 전 코멘트)도 메신저 기록에 남긴다 —
         // 라이브에서 이미 보여준 말을 완료 시점에 지우지 않는다.
-        const intermediate = c.live ? c.live.intermediate : [];
+        const intermediate = (c.live ? c.live.intermediate : []).filter((t) => !isSilentMarkedText(t));
         c.live = null;
         if (silent) {
+            // 침묵 마커는 마지막 답변 한 개만 숨긴다 — 이미 보여준 중간 발화는
+            // 회수하지 않고 그대로 메신저 기록에 남긴다.
+            if (intermediate.length) {
+                const last = c.turns[c.turns.length - 1];
+                const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
+                const tail = intermediate[intermediate.length - 1];
+                const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === tail;
+                if (!already) {
+                    c.turns.push({
+                        at: new Date().toISOString(),
+                        messages: intermediate.map((t) => ({ role: "assistant", content: t })),
+                        stats: stats || null,
+                        attachments,
+                    });
+                }
+            }
             emit("live", { id });
             emit("turn_done", { id, hadLive });
             return;
         }
         // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
         // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
-        const finalText = String(text || fallback || "");
+        const rawFinal = String(text || fallback || "");
+        const finalText = isSilentMarkedText(rawFinal) ? "" : rawFinal;
         const spoken = [
             ...intermediate.map((t) => ({ role: "assistant", content: t })),
             ...(finalText ? [{ role: "assistant", content: finalText }] : []),
