@@ -126,10 +126,31 @@
             case "ask_resolved":
                 state.applyAskResolved(msg.conversationId, msg.askId, msg.answer);
                 break;
-            case "notice":
-                T.toast.show(msg.level === "warn" || msg.level === "error" ? msg.level : "info", msg.text || "");
+            case "notice": {
+                // action이 실린 알림은 눌렀을 때 해당 동작을 실행한다(확인 용도).
+                const onTap =
+                    msg.action?.kind === "compress_sessions"
+                        ? () => {
+                              void T.api
+                                  .compressAllSessions(msg.action.chatIds)
+                                  .then((r) => {
+                                      const n = Number(r?.compressed) || 0;
+                                      const f = Number(r?.failed) || 0;
+                                      if (f) T.toast.show("warn", T.i18n.t("compressAllPartial", { n, f }));
+                                      else if (!n) T.toast.show("info", T.i18n.t("compressAllNone"));
+                                      else T.toast.show("info", T.i18n.t("compressAllDone", { n }));
+                                  })
+                                  .catch((err) => T.toast.show("error", T.api.errorText(err, T.i18n.t("compressAllFailed"))));
+                          }
+                        : undefined;
+                T.toast.show(msg.level === "warn" || msg.level === "error" ? msg.level : "info", msg.text || "", onTap);
                 // 대화 턴이 있는 알림(스케줄 등)은 turn_done이 담당한다.
                 if (!msg.conversationId) notifyIncoming(null, msg.text || "", "notice");
+                break;
+            }
+            case "sessions_compress":
+                // 압축 진행 상태를 설정 스냅샷에 반영 — 설정 탭의 버튼이 다시 그려진다.
+                state.mergeSettingsLocal({ sessionsCompressing: !!msg.running });
                 break;
             case "oauth_done":
                 state.emit("oauth_done", { kind: msg.kind, ok: !!msg.ok, detail: msg.detail || "" });

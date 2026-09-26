@@ -16,6 +16,7 @@
     let mobileFromList = false; // 모바일 목록 화면에서 열었는지
     let editingAgent = null; // 에이전트 페이지 id ('__new__' = 추가)
     let armDelete = null; // 삭제 확인 2단계 버튼 상태
+    let armCompressAll = false; // 전체 세션 압축 확인 2단계 버튼 상태
     let modelsCache = null; // { key, models }
     let modelsLoading = false;
     let modelsFailedKey = null;
@@ -26,6 +27,7 @@
     let credsEditing = null; // 계정 편집 중인 항목 — "username" | "password" | null
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
     let advOpen = null; // 에이전트 편집기의 고급 설정 펼침. null이면 페르소나 유무로 초기화
+    let modelAdvOpen = false; // 모델 탭의 고급 설정 펼침
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
@@ -78,7 +80,9 @@
         openTab = tab;
         editingAgent = agent;
         armDelete = null;
+        armCompressAll = false;
         advOpen = null;
+        modelAdvOpen = false;
         keyEditing = false;
         credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
@@ -833,6 +837,103 @@
                 ]),
             );
         }
+
+        sec.append(T.h("hr", { class: "divider" }));
+
+        // 고급 — 컨텍스트 한도와 모델 전환 시 오염 방지 옵션
+        const mAdvPanel = T.h("div", { class: "adv-panel" });
+        mAdvPanel.hidden = !modelAdvOpen;
+        const mAdvBtn = T.h(
+            "button",
+            {
+                type: "button",
+                class: "adv-toggle",
+                "aria-expanded": String(modelAdvOpen),
+                onclick() {
+                    modelAdvOpen = !modelAdvOpen;
+                    mAdvBtn.setAttribute("aria-expanded", String(modelAdvOpen));
+                    mAdvPanel.hidden = !modelAdvOpen;
+                },
+            },
+            [T.icon("chevron", "icon-sm"), T.h("span", { text: t("advanced") })],
+        );
+
+        // 컨텍스트 채움 한도 — 이 비율부터 오래된 대화를 요약으로 압축한다.
+        // 옵션에는 현재 모델 윈도우 기준 실제 압축 시작 토큰 수를 함께 표시한다.
+        const ctxPct = Number(s.contextTriggerPercent) || 75;
+        const ctxWindow = Number(s.contextWindow) || 128000;
+        const ctxLabel = (n) => `${n}% (~${Math.round((ctxWindow * Number(n)) / 100).toLocaleString()})`;
+        mAdvPanel.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("ctxFillLimit") }),
+                settingSelect(
+                    presetOptions(
+                        (Array.isArray(s.contextTriggerOptions) && s.contextTriggerOptions.length
+                            ? s.contextTriggerOptions
+                            : [50, 60, 70, 75, 80, 85, 90]
+                        ).map((n) => ({ value: String(n), label: ctxLabel(n) })),
+                        String(ctxPct),
+                        ctxLabel(ctxPct),
+                    ),
+                    String(ctxPct),
+                    (v) => put({ contextTriggerPercent: Number(v) }),
+                    t("ctxFillLimit"),
+                ),
+            ]),
+            T.h("div", { class: "set-desc", text: t("ctxFillLimitDesc") }),
+        );
+
+        // 모델이 바뀌면 모든 봇의 세션 압축 여부를 물어본다(실행은 사용자 확인 후).
+        mAdvPanel.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("compressOnModelChange") }),
+                switchEl(s.compressOnModelChange, (v) => put({ compressOnModelChange: v }), t("compressOnModelChange")),
+            ]),
+            T.h("div", { class: "set-desc", text: t("compressOnModelChangeDesc") }),
+        );
+
+        // 모든 봇의 세션 즉시 압축 — 모델 전환 전 컨텍스트 오염 방지.
+        // 기록 재작성 + LLM 호출이 드는 작업이므로 2단계 확인을 거친다.
+        // 진행 상태(sessionsCompressing)는 서버가 SSE로 알려 새로고침해도 유지된다.
+        const compressing = Boolean(s.sessionsCompressing);
+        const compressAllBtn = T.h("button", {
+            class: "btn ghost" + (armCompressAll ? " danger" : ""),
+            text: compressing ? t("compressing") : armCompressAll ? t("compressAllConfirm") : t("compressAllNow"),
+            disabled: compressing,
+            onclick() {
+                if (compressing) return;
+                if (!armCompressAll) {
+                    armCompressAll = true;
+                    compressAllBtn.classList.add("danger");
+                    compressAllBtn.textContent = t("compressAllConfirm");
+                    return;
+                }
+                armCompressAll = false;
+                compressAllBtn.disabled = true;
+                compressAllBtn.textContent = t("compressing");
+                T.api
+                    .compressAllSessions()
+                    .then((r) => {
+                        const n = Number(r?.compressed) || 0;
+                        const f = Number(r?.failed) || 0;
+                        if (f) T.toast.show("warn", t("compressAllPartial", { n, f }));
+                        else if (!n) T.toast.show("info", t("compressAllNone"));
+                        else T.toast.show("info", t("compressAllDone", { n }));
+                    })
+                    .catch((err) => {
+                        T.toast.show("error", T.api.errorText(err, t("compressAllFailed")));
+                    });
+            },
+        });
+        mAdvPanel.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("compressAllNow") }),
+                T.h("div", { class: "set-control" }, [compressAllBtn]),
+            ]),
+            T.h("div", { class: "set-desc", text: t("compressAllNowDesc") }),
+        );
+
+        sec.append(mAdvBtn, mAdvPanel);
 
         body.append(sec);
     }

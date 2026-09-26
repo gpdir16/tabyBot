@@ -132,6 +132,8 @@
 
         getSettings: () => request("/api/settings"),
         putSettings: (patch) => request("/api/settings", { method: "PUT", json: patch }),
+        compressAllSessions: (chatIds) =>
+            request("/api/sessions/compress-all", { method: "POST", json: Array.isArray(chatIds) && chatIds.length ? { chatIds } : {} }),
 
         agents: () => request("/api/agents"),
         createAgent: (b) => request("/api/agents", { method: "POST", json: b }),

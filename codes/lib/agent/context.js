@@ -13,6 +13,7 @@ import {
     getApprovalLevel,
     buildApprovalPolicyText,
     approvalPolicyLabel,
+    normalizeContextTriggerPercent,
 } from "../user-settings.js";
 import { formatTodosForPrompt } from "../todos/store.js";
 import { estimateContentTokens } from "../llm/vision.js";
@@ -192,7 +193,8 @@ export function getContextWindow(modelMeta) {
 
 export function getCompressTriggerTokens(modelMeta) {
     const agent = loadAgentConfig();
-    const pct = agent.contextCompressTriggerPercent ?? 75;
+    // 사용자 설정(설정 → 모델 → 고급)이 우선, 없으면 agent.json 기본값을 쓴다.
+    const pct = normalizeContextTriggerPercent(loadUserConfig().contextTriggerPercent, agent.contextCompressTriggerPercent ?? 75);
     return Math.floor((getContextWindow(modelMeta) * pct) / 100);
 }
 
