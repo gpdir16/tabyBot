@@ -42,6 +42,27 @@ export function getApprovalLevel(config = loadUserConfig()) {
     return normalizeApprovalLevel(config.approvalLevel);
 }
 
+// 컨텍스트 윈도우의 몇 %가 찼을 때 오래된 대화를 요약으로 압축할지.
+// UI에는 프리셋 드롭다운으로 노출하고, 실제 값은 10–95 범위로 정규화한다.
+export const CONTEXT_TRIGGER_PRESETS = [50, 60, 70, 75, 80, 85, 90];
+const DEFAULT_CONTEXT_TRIGGER_PERCENT = 75;
+
+export function normalizeContextTriggerPercent(value, fallback = DEFAULT_CONTEXT_TRIGGER_PERCENT) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.min(95, Math.max(10, Math.round(n)));
+}
+
+export function getContextTriggerPercent(config = loadUserConfig()) {
+    return normalizeContextTriggerPercent(config.contextTriggerPercent);
+}
+
+// 모델이 바뀔 때 모든 봇의 세션 압축 여부를 물어볼지 — 확인 시에만 압축해
+// 이전 모델의 원문 맥락이 새 모델로 넘어가는 컨텍스트 오염을 막는다.
+export function getCompressOnModelChange(config = loadUserConfig()) {
+    return config.compressOnModelChange === true;
+}
+
 export function approvalPolicyLabel(level) {
     return {
         user: "ask the user every time",

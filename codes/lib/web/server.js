@@ -8,6 +8,7 @@ import { loadUserConfig, saveUserConfig, getMergedProvider, loadProviderConfig }
 import { getConfigIssue, isConfigReady } from "../onboarding.js";
 import { getRunningVersion } from "../update/store.js";
 import { fetchProviderModels } from "../llm/models.js";
+import { loadModelMeta, ensureModelMeta } from "../llm/model-meta.js";
 import { fetchGithubCopilotRoutingModels } from "../llm/github-copilot-client.js";
 import { normalizeThinkingLevel, thinkingLevelLabel, getProviderThinkingMeta } from "../thinking-levels.js";
 import { hasCodexAuth, clearCodexTokens, startDeviceFlow, pollDeviceFlow } from "../llm/codex-tokens.js";
@@ -18,7 +19,18 @@ import {
     startGithubCopilotDeviceFlow,
     pollGithubCopilotDeviceFlow,
 } from "../llm/github-copilot-tokens.js";
-import { NSFW_LEVELS, normalizeNsfwLevel, APPROVAL_LEVELS, normalizeApprovalLevel } from "../user-settings.js";
+import {
+    NSFW_LEVELS,
+    normalizeNsfwLevel,
+    APPROVAL_LEVELS,
+    normalizeApprovalLevel,
+    CONTEXT_TRIGGER_PRESETS,
+    normalizeContextTriggerPercent,
+    getContextTriggerPercent,
+    getCompressOnModelChange,
+} from "../user-settings.js";
+import { t as i18nT } from "../i18n.js";
+import { compressBotSessions } from "../agent/summarize.js";
 import { getDreamingConfig, getProactiveConfig, getReviewConfig, applySelfImprovementPatch } from "../self-improvement.js";
 import { startDreamingScheduler } from "../dreaming/scheduler.js";
 import { isValidTimeZone } from "../scheduling/time.js";
@@ -213,6 +225,21 @@ function substituteEnvSafe(value) {
     return String(value ?? "").replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name] ?? "");
 }
 
+// 세션 압축 진행 상태 — 수동 버튼과 모델 변경 확인 알림이 같은 실행 경로를 쓴다.
+// 동시에 하나만 돌리고, 시작/종료를 SSE로 알려 새로고침해도 진행 상태가 보이게 한다.
+let sessionCompressInFlight = false;
+async function runSessionCompression(chatIds = null) {
+    if (sessionCompressInFlight) return null;
+    sessionCompressInFlight = true;
+    emit({ type: "sessions_compress", running: true });
+    try {
+        return await compressBotSessions(chatIds);
+    } finally {
+        sessionCompressInFlight = false;
+        emit({ type: "sessions_compress", running: false });
+    }
+}
+
 // GET/PUT 공용 설정 스냅샷. apiKey는 절대 포함하지 않는다.
 function buildSettingsPayload() {
     const config = loadUserConfig();
@@ -255,6 +282,12 @@ function buildSettingsPayload() {
         nsfwLevels: NSFW_LEVELS,
         approvalLevel: normalizeApprovalLevel(config.approvalLevel),
         approvalLevels: APPROVAL_LEVELS,
+        contextTriggerPercent: getContextTriggerPercent(config),
+        contextTriggerOptions: CONTEXT_TRIGGER_PRESETS,
+        compressOnModelChange: getCompressOnModelChange(config),
+        sessionsCompressing: sessionCompressInFlight,
+        // 채움 한도 드롭다운이 %를 실제 토큰 수로 환산해 보여주는 데 쓴다.
+        contextWindow: loadModelMeta().contextWindow || 128000,
         provider: {
             id: pid,
             label: PROVIDER_LABELS[pid] || pid,
@@ -520,10 +553,19 @@ export function startWebServer() {
         ctx.json200(buildSettingsPayload());
     });
 
+    // 모델 변경 시 압축은 묻기만 하고 실행하지 않는다 — 사용자가 알림을 눌러
+    // 확인해야 compressBotSessions가 돈다(압축 = 대화 기록 재작성 + LLM 호출).
+    function askSessionCompression(lang, chatIds = null) {
+        const action = { kind: "compress_sessions" };
+        if (Array.isArray(chatIds) && chatIds.length) action.chatIds = chatIds;
+        emit({ type: "notice", level: "info", text: i18nT("sessions_compress_ask", lang), action });
+    }
+
     router.add("PUT", "/api/settings", async (ctx) => {
         const patch = await ctx.json();
         const config = loadUserConfig();
         const prevPid = config.provider?.id || "default";
+        const prevModel = String(config.provider?.model || "").trim();
         let providerChanged = false;
 
         if (patch.language !== undefined) {
@@ -544,6 +586,10 @@ export function startWebServer() {
         }
         if (patch.nsfwLevel !== undefined) config.nsfwLevel = normalizeNsfwLevel(patch.nsfwLevel);
         if (patch.approvalLevel !== undefined) config.approvalLevel = normalizeApprovalLevel(patch.approvalLevel);
+        if (patch.contextTriggerPercent !== undefined) {
+            config.contextTriggerPercent = normalizeContextTriggerPercent(patch.contextTriggerPercent);
+        }
+        if (patch.compressOnModelChange !== undefined) config.compressOnModelChange = Boolean(patch.compressOnModelChange);
 
         let selfImprovementChanged = false;
         if (patch.selfImprovement !== undefined) {
@@ -608,8 +654,32 @@ export function startWebServer() {
         if (patch.updateCheckEnabled !== undefined) restartUpdateScheduler();
         // proactive는 매 틱 설정을 다시 읽으므로 재시작 불필요. dreaming 크론은 재등록이 필요하다(시간대 포함).
         if (selfImprovementChanged || patch.timezone !== undefined) startDreamingScheduler();
+        // 모델이 바뀌었고 압축 옵션이 켜져 있으면 모든 세션 압축 여부를 묻는다.
+        // 실행은 사용자가 알림을 눌러 확인할 때만 — 자동 실행은 하지 않는다.
+        // 모델이 비워진 상태(프로바이더 전환 중)에는 묻지 않는다.
+        const modelChanged = String(config.provider?.model || "").trim() !== prevModel;
+        if (modelChanged && config.provider?.model) {
+            // 새 모델의 컨텍스트 윈도우를 미리 받아 둔다 — 설정 화면의 채움 한도
+            // 토큰 표시가 이전 모델 값으로 남지 않도록.
+            void ensureModelMeta(getMergedProvider(config)).catch(() => {});
+            if (getCompressOnModelChange(config)) askSessionCompression(config.language || "en");
+        }
         // 프론트가 부분 객체로 상태를 덮어쓰지 않도록 항상 전체 스냅샷을 돌려준다.
         ctx.json200(buildSettingsPayload());
+    });
+
+    // 봇의 활성 세션을 즉시 압축한다(설정 → 모델 → 고급 / 모델 변경 확인 알림).
+    // body.chatIds를 주면 그 봇들만, 없으면 모든 봇을 압축한다.
+    router.add("POST", "/api/sessions/compress-all", async (ctx) => {
+        const body = await ctx.json().catch(() => ({}));
+        let chatIds = null;
+        if (Array.isArray(body?.chatIds)) chatIds = body.chatIds.map(String).filter(Boolean).slice(0, 50);
+        if (sessionCompressInFlight) return ctx.json409("already_running");
+        try {
+            ctx.json200(await runSessionCompression(chatIds));
+        } catch (err) {
+            ctx.json400(err?.message || String(err));
+        }
     });
 
     // ---- 모델 목록 ----
@@ -677,6 +747,7 @@ export function startWebServer() {
 
     router.add("PATCH", "/api/agents/:id", async (ctx) => {
         const body = await ctx.json();
+        const prevModel = String(getAgent(ctx.params.id)?.model || "").trim();
         const result = storeUpdateAgent(ctx.params.id, {
             name: body.name,
             persona: body.persona,
@@ -685,6 +756,16 @@ export function startWebServer() {
             color: body.color,
         });
         if (result.error) return ctx.json400(result.error);
+        // 봇별 모델 오버라이드가 바뀌면 그 봇의 세션 압축 여부를 묻는다.
+        const userConfig = loadUserConfig();
+        if (
+            body.model !== undefined &&
+            String(result.agent?.model || "").trim() !== prevModel &&
+            result.agent?.uuid &&
+            getCompressOnModelChange(userConfig)
+        ) {
+            askSessionCompression(userConfig.language || "en", [result.agent.uuid]);
+        }
         ctx.json200({ agents: listAgents().map(publicAgent), agent: publicAgent(result.agent) });
     });
 

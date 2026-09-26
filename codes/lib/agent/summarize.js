@@ -6,7 +6,16 @@ import {
     getContextLimit,
     getKeepRecentTokenBudget,
 } from "./context.js";
-import { compressedSummaryTurn, loadChatHistory, replaceChatHistoryAfterCompression, turnToMessages } from "./chat-history.js";
+import {
+    compressedSummaryTurn,
+    hasRecoverableChatTurn,
+    loadChatHistory,
+    replaceChatHistoryAfterCompression,
+    turnToMessages,
+} from "./chat-history.js";
+import { listAgents, getAgentByUuid } from "../agents-store.js";
+import { isAgentSessionRunning } from "./session.js";
+import { createLlmClient } from "../llm/client.js";
 
 const COMPRESS_SYSTEM = `You compress chat transcripts for long-term context storage.
 
@@ -103,7 +112,8 @@ function itemTokens(item, model) {
 
 function splitHistoryForCompression(turns, userMessage, model, recentBudget) {
     const items = turns.map((turn) => ({ kind: "turn", turn }));
-    items.push({ kind: "user", text: userMessage });
+    // 수동 압축은 진행 중인 유저 메시지가 없으므로 null을 허용한다.
+    if (userMessage != null) items.push({ kind: "user", text: userMessage });
 
     const recentItems = [];
     let used = 0;
@@ -230,7 +240,7 @@ async function applyIntelligentCompression(
     model,
     modelMeta,
     attachments = [],
-    { signal, runtimeInfo = {}, chatId = null } = {},
+    { signal, runtimeInfo = {}, chatId = null, archiveReason = "context_compression" } = {},
 ) {
     const recentBudget = getKeepRecentTokenBudget(modelMeta);
     const { oldItems, recentItems } = splitHistoryForCompression(fullHistory, userMessage, model, recentBudget);
@@ -248,7 +258,7 @@ async function applyIntelligentCompression(
     const latestUser = recentUserMessage(recentItems, userMessage);
 
     if (chatId) {
-        replaceChatHistoryAfterCompression(chatId, recentHistory, summary);
+        replaceChatHistoryAfterCompression(chatId, recentHistory, summary, { reason: archiveReason });
     }
 
     // 디스크에 저장된 요약을 진행 중인 요청에도 그대로 실어야
@@ -326,4 +336,63 @@ export async function ensureWithinContextLimit(
         }),
         didCompress: false,
     };
+}
+
+/* ── 수동 세션 압축(설정 → 모델 → 고급) ─────────────────────
+   자동 압축(applyIntelligentCompression)과 같은 함수를 그대로 호출하되
+   트리거만 수동이다 — 진행 중인 유저 메시지가 없으므로 null을 넘기고,
+   반환된 재구성 메시지는 진행 중 요청이 없어 버린다. */
+// 세션에 압축할 실제 대화가 있는지 — 실행 중/복구 대기/빈 세션은 false.
+function sessionNeedsCompression(chatId) {
+    if (isAgentSessionRunning(chatId) || hasRecoverableChatTurn(chatId)) return false;
+    const turns = loadChatHistory(chatId);
+    return turns.some((t) => (t?.messages || []).some((m) => m?.role !== "system"));
+}
+
+async function compressSessionHistory(llm, chatId) {
+    // 실행 중이거나 복구 대기(pending/interrupted) 턴이 있는 세션은 건드리지 않는다.
+    if (!sessionNeedsCompression(chatId)) return false;
+    const compressed = await applyIntelligentCompression(llm, null, loadChatHistory(chatId), llm.provider.model, llm.modelMeta, [], {
+        chatId,
+        archiveReason: "manual_compression",
+    });
+    return compressed !== null;
+}
+
+// chatIds를 생략하면 모든 봇의 활성 세션을 압축한다.
+// 반환: { compressed, skipped, failed } — 실행 중/빈 세션은 skipped로 센다.
+export async function compressBotSessions(chatIds = null) {
+    const ids =
+        Array.isArray(chatIds) && chatIds.length
+            ? chatIds
+            : listAgents()
+                  .map((a) => a.uuid)
+                  .filter(Boolean);
+    const result = { compressed: 0, skipped: 0, failed: 0 };
+    // 압축할 게 하나도 없으면 모델 클라이언트 자체를 만들지 않는다.
+    const candidates = ids.filter(sessionNeedsCompression);
+    result.skipped = ids.length - candidates.length;
+    if (!candidates.length) return result;
+    // 자동 압축처럼 각 봇의 모델/사고 수준 오버라이드를 반영한 클라이언트로
+    // 요약한다 — 같은 오버라이드 조합은 클라이언트를 재사용한다.
+    const clients = new Map();
+    const clientFor = async (chatId) => {
+        const agent = getAgentByUuid(chatId);
+        const model = agent?.model?.trim() || "";
+        const thinkingLevel = agent?.thinkingLevel || "";
+        const key = `${model}|${thinkingLevel}`;
+        if (!clients.has(key)) clients.set(key, await createLlmClient({ model, thinkingLevel }));
+        return clients.get(key);
+    };
+    for (const chatId of candidates) {
+        try {
+            const llm = await clientFor(chatId);
+            if (await compressSessionHistory(llm, chatId)) result.compressed += 1;
+            else result.skipped += 1;
+        } catch (err) {
+            console.warn(`tabyBot: manual session compression failed for ${chatId}:`, err?.message || err);
+            result.failed += 1;
+        }
+    }
+    return result;
 }
