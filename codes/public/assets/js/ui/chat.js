@@ -31,15 +31,19 @@
         return !b.contains("settings-route") && !b.contains("todos-route") && !b.contains("computer-route");
     }
 
+    // display:none→block 재표시 직후 WebKit이 scrollTop을 0으로 리셋하며 쏘는
+    // 스크롤 이벤트는 사용자 스크롤이 아니다 — 복원이 끝날 때까지 플래그/메모리
+    // 갱신을 무시해 오염을 막는다.
+    let restorePending = false;
     scroller.addEventListener("scroll", () => {
-        if (!chatVisible()) return; // 다른 페이지가 스크롤러를 쓰는 동안의 스크롤은 무시
+        if (!chatVisible() || restorePending) return; // 다른 페이지가 스크롤러를 쓰는 동안의 스크롤은 무시
         pinnedBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 64;
         updateJump();
         // 위치 기록은 프레임당 한 번 — 스크롤 이벤트는 연속으로 쏟아진다.
         if (memRaf || !renderedId) return;
         memRaf = requestAnimationFrame(() => {
             memRaf = 0;
-            if (chatVisible() && renderedId) scrollMem.set(renderedId, captureScroll());
+            if (chatVisible() && !restorePending && renderedId) scrollMem.set(renderedId, captureScroll());
         });
     });
     jump.addEventListener("click", () => scrollToBottom(true));
@@ -588,24 +592,8 @@
         return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
     }
 
-    function normalizeTurn(turn) {
-        return {
-            at: turn.at,
-            stats: turn.stats || null,
-            attachments: turn.attachments || [],
-            messages: (turn.messages || []).map((m) => {
-                const isParts = Array.isArray(m.content);
-                const textPart = isParts ? m.content.find((part) => part?.type === "text")?.text || "" : m.content;
-                return {
-                    role: m.role,
-                    content: displayUserText(textPart),
-                    isParts,
-                    imageUrl: m.imageUrl || null,
-                    attachments: m.attachments || null,
-                };
-            }),
-        };
-    }
+    // 턴 정규화는 state가 담당한다 — 서버 정본 응답을 여기서 다시 가공하지 않는다.
+    const normalizeTurn = (turn) => state.normalizeTurn(turn);
 
     // mem === undefined: 같은 대화 재렌더 — 지금 위치 유지. null: 하단으로. 객체: 그 위치로 복원.
     function renderConversation(mem) {
@@ -699,7 +687,12 @@
 
         refreshHeader();
         restoreScroll(keep);
-        requestAnimationFrame(() => fitBubblesIn(thread));
+        requestAnimationFrame(() => {
+            fitBubblesIn(thread);
+            // 버블 재측정·이미지 로드 등으로 높이가 늘어나면 하단 고정 의도가
+            // 실제 위치보다 짧게 끝난다 — 레이아웃 확정 뒤 한 번 더 맞춘다.
+            if (keep && keep.pinned && pinnedBottom) scrollToBottom(false);
+        });
     }
 
     /* ── 라이브 블록 ────────────────────────────────────────── */
@@ -924,32 +917,12 @@
     }
 
     // SSE 재접속 직후 서버 스냅샷과 맞춘다.
-    // 진행 중이거나 방금 끝난 턴을 오래된 GET 응답으로 덮으면 답이 새로고침 전까지 사라진다.
-    let refreshSeq = 0;
+    // 정본은 서버 히스토리 — refreshTurns가 실행 중 live/중간 발화와 병합해 적용한다.
     async function refreshCurrent() {
         const id = state.state.currentId;
         if (!id) return;
-        const c = state.conv(id);
-        const seq = ++refreshSeq;
         try {
-            const r = await T.api.conversation(id);
-            if (seq !== refreshSeq || state.state.currentId !== id) return;
-            if (c.live) {
-                // 서버가 아직 실행 중이면 스트림이 곧 상태를 갱신하므로 덮지 않는다.
-                if (r?.running === true) return;
-                // 서버는 끝났는데 live가 남았다 = 재접속 사이 turn_done 유실 — 정리하고 복원.
-                c.live = null;
-                state.emit("live", { id });
-            }
-            const incoming = (r.turns || []).map(normalizeTurn);
-            if (incoming.length < c.turns.length) return;
-            c.turns = incoming;
-            c.loaded = true;
-            if (r && typeof r === "object") {
-                const { turns: _turns, ...meta } = r;
-                state.upsertMeta(Object.assign({}, c.meta, meta));
-            }
-            renderConversation();
+            await state.refreshTurns(id);
         } catch (_) {}
     }
 
@@ -993,21 +966,18 @@
             if (T.todosUI?.isOpen?.()) refreshHeader();
         });
 
+        // 서버 정본 갱신 — 턴 순서/병합은 항상 서버 응답 기준으로 다시 그린다.
+        state.on("turns", (p) => {
+            if (p.id !== state.state.currentId) return;
+            liveEls = null;
+            renderConversation();
+            updateJump();
+        });
+
         state.on("user_message", (p) => {
             if (p.id !== state.state.currentId) return;
-            const c = state.conv(p.id);
-            if (p.confirmed) {
-                thread.querySelectorAll(".msg-row.optimistic").forEach((el) => el.classList.remove("optimistic"));
-                return;
-            }
-            const last = c.turns[c.turns.length - 1];
-            const m = last && last.messages && last.messages[last.messages.length - 1];
-            if (!m || m.role !== "user") return;
-            const el = buildUserMessage(m.content || "", m.imageUrl, false, m.attachments);
-            thread.append(el);
-            watchBubble(el.querySelector(".bubble"));
-            if (pinnedBottom) scrollToBottom(false);
-            updateJump();
+            // 낙관적 버블의 확인 표시만 — 턴 렌더는 "turns" 이벤트가 담당한다.
+            if (p.confirmed) thread.querySelectorAll(".msg-row.optimistic").forEach((el) => el.classList.remove("optimistic"));
         });
 
         state.on("turn_done", (p) => {
@@ -1031,7 +1001,19 @@
             const shown = chatVisible();
             if (shown === chatShown) return;
             chatShown = shown;
-            if (shown) restoreScroll(renderedId ? scrollMem.get(renderedId) : null);
+            // WebKit은 display:none→block으로 다시 보이는 스크롤러의 scrollTop을
+            // 레이아웃 단계에서 0으로 리셋한다 — 마이크로태스크/첫 rAF에서 복원하면
+            // 리셋이 복원을 덮어 채팅이 맨 위로 튄다. 레이아웃이 확정된 뒤에 복원하며,
+            // 그 사이 리셋이 쏘는 스크롤 이벤트는 restorePending으로 걸러낸다.
+            if (shown) {
+                restorePending = true;
+                requestAnimationFrame(() =>
+                    requestAnimationFrame(() => {
+                        restorePending = false;
+                        restoreScroll(renderedId ? scrollMem.get(renderedId) : null);
+                    }),
+                );
+            }
         }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
         // 숨김 복귀 시 버퍼된 스트림을 즉시 반영
         document.addEventListener("visibilitychange", () => {
