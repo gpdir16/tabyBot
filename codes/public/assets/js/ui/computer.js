@@ -895,10 +895,12 @@
         const bot = (uuid && state.botByUuid(uuid)) || null;
         openUuid = uuid || null;
         openBot = bot;
-        page.hidden = false;
-        document.body.classList.add("computer-route");
+        // 다른 라우트의 hide()가 컴포저(syncMode)를 건드리므로 computer-route를
+        // 켜서 컴포저를 가리기 전에 먼저 정리한다.
         T.settingsUI?.hide?.();
         T.todosUI?.hide?.();
+        page.hidden = false;
+        document.body.classList.add("computer-route");
         T.sidebar?.showChat?.();
         T.sidebar?.syncRoute?.();
         pushed = false;
@@ -962,6 +964,14 @@
 
     function hide() {
         if (!page || page.hidden) return;
+        // 페이지 안의 포커스를 먼저 뺀다 — 숨겨진 요소에 포커스가 남으면
+        // iOS 키보드가 죽은 입력기를 가리켜 돌아온 뒤 컴포저가 입력을 못 받는다.
+        if (page.contains(document.activeElement)) document.activeElement.blur();
+        if (els.kbdInput) {
+            els.kbdInput.dataset.on = "";
+            els.kbdInput.value = "";
+        }
+        els.kbdBtn?.classList.remove("active");
         page.hidden = true;
         document.body.classList.remove("computer-route");
         pushed = false;

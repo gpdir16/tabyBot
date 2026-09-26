@@ -45,6 +45,8 @@
     }
 
     function handleOver(event) {
+        // 터치 탭에는 툴팁을 띄우지 않는다 (네이티브 앱에는 호버 툴팁이 없음)
+        if (event.pointerType === "touch") return;
         const target = event.target.closest("[data-tip]");
         if (!isTipVisible(target)) {
             hide();
@@ -55,8 +57,8 @@
     }
 
     function init() {
-        document.addEventListener("mouseover", handleOver);
-        document.addEventListener("mouseout", (event) => {
+        document.addEventListener("pointerover", handleOver);
+        document.addEventListener("pointerout", (event) => {
             if (!currentTarget) return;
             if (event.target === currentTarget && !event.relatedTarget?.closest?.("[data-tip]")) hide();
         });

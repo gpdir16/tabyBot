@@ -216,6 +216,9 @@
             if (!isSilentMarkedText(c.live.text)) c.live.intermediate.push(c.live.text);
             c.live.text = "";
         }
+        // 툴 라운드 경계는 서버 체크포인트/펜딩 메시지 병합 시점과 겹친다 —
+        // 정본을 다시 읽어 실행 중 메시지 위치를 새로고침 상태와 맞춘다.
+        if (phase === "tools") void refreshTurns(id).catch(() => {});
         c.live.detail = detail || "";
         c.live.elapsedMs = elapsedMs != null ? elapsedMs : c.live.elapsedMs;
         emit("status", { id });
@@ -262,10 +265,79 @@
         emit("ask_resolved", { id, askId });
     }
 
+    /* ── 턴 정본 동기화 ─────────────────────────────────────── */
+    // 클라이언트가 턴을 직접 조립하면 이벤트 도착/완료 시점 순서로 붙어
+    // 전송 직후·생성 중 새로고침·완료·완료 후 새로고침에서 순서가 갈린다.
+    // 디스크 히스토리(서버)가 유일한 정본이므로 이벤트마다 통째로 다시 읽는다.
+
+    const ATTACHED_FILES_MARK = "[User attached files]";
+    function displayUserText(content) {
+        const s = String(content || "");
+        const i = s.indexOf(ATTACHED_FILES_MARK);
+        return i === -1 ? s : s.slice(0, i).trim();
+    }
+    function normalizeTurn(turn) {
+        return {
+            at: turn.at,
+            stats: turn.stats || null,
+            attachments: turn.attachments || [],
+            messages: (turn.messages || []).map((m) => {
+                const isParts = Array.isArray(m.content);
+                const textPart = isParts ? m.content.find((part) => part?.type === "text")?.text || "" : m.content;
+                return {
+                    role: m.role,
+                    content: displayUserText(textPart),
+                    isParts,
+                    imageUrl: m.imageUrl || null,
+                    attachments: m.attachments || null,
+                };
+            }),
+        };
+    }
+
+    // 대화당 최신 요청만 반영 — 오래된 응답이 정본을 덮지 않도록 세대 번호로 가드.
+    const turnsReqSeq = new Map();
+    async function refreshTurns(id) {
+        const c = conv(id);
+        if (!c) return false;
+        const seq = (turnsReqSeq.get(id) || 0) + 1;
+        turnsReqSeq.set(id, seq);
+        const r = await T.api.conversation(id);
+        if (seq !== turnsReqSeq.get(id)) return true; // 더 새 요청이 진행 중
+        const incoming = (Array.isArray(r?.turns) ? r.turns : []).map(normalizeTurn);
+        c.turns = incoming;
+        c.loaded = true;
+        if (r && typeof r === "object") {
+            const { turns: _turns, ...meta } = r;
+            if (meta && meta.id) upsertMeta(Object.assign({}, c.meta, meta));
+        }
+        // 정본에 흡수된 확정 pending과 이미 저장된 라이브 중간 발화를 정리한다.
+        if (c.pending.length) c.pending = c.pending.filter((p) => !p.confirmed);
+        if (c.live) {
+            if (r.running === false) {
+                // 서버는 끝났는데 live만 남은 경우(turn_done 유실) 정본으로 정리
+                c.live = null;
+                emit("live", { id });
+            } else if (c.live.intermediate?.length) {
+                const stored = new Set();
+                for (const t of incoming) {
+                    for (const m of t.messages || []) {
+                        if (m.role === "assistant") stored.add(String(m.content || "").trim());
+                    }
+                }
+                c.live.intermediate = c.live.intermediate.filter((x) => !stored.has(String(x || "").trim()));
+            }
+        }
+        emit("turns", { id });
+        return true;
+    }
+
     function applyUserMessage(id, text, imageUrl, attachments = []) {
         const c = conv(id);
+        if (!c) return;
         const attachmentIds = attachments.map((a) => a.id).filter(Boolean);
-        // 낙관적으로 추가한 내 메시지와 일치하면 확정 처리, 아니면(멀티탭) 신규 기록
+        // 낙관적으로 추가한 내 메시지와 일치하면 확정 표시 — 정본이 도착할 때까지
+        // 버블을 유지하기 위해 confirmed 플래그만 세우고 refreshTurns에서 제거한다.
         const idx = c.pending.findIndex(
             (p) =>
                 p.text === (text || "") &&
@@ -277,24 +349,8 @@
         );
         let confirmed = false;
         if (idx > -1) {
-            c.pending.splice(idx, 1);
+            c.pending[idx].confirmed = true;
             confirmed = true;
-        }
-        // 확정된 사용자 메시지도 turns에 남긴다. 없으면 봇 전환 후 재렌더에서 사라진다.
-        const last = c.turns[c.turns.length - 1];
-        const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
-        const already =
-            lastMsg &&
-            lastMsg.role === "user" &&
-            lastMsg.content === (text || "") &&
-            (lastMsg.imageUrl || null) === (imageUrl || null) &&
-            (lastMsg.attachments || []).map((a) => a.id).join(",") === attachmentIds.join(",");
-        if (!already) {
-            c.turns.push({
-                at: new Date().toISOString(),
-                messages: [{ role: "user", content: text || "", imageUrl: imageUrl || null, attachments }],
-                stats: null,
-            });
         }
         const snippet = String(text || "")
             .replace(/\s+/g, " ")
@@ -302,63 +358,99 @@
             .slice(0, 120);
         if (snippet) c.meta = Object.assign({}, c.meta, { preview: snippet });
         emit("user_message", { id, confirmed });
+        void (async () => {
+            let ok = false;
+            try {
+                ok = await refreshTurns(id);
+            } catch (_) {}
+            if (ok) return;
+            // 정본 읽기 실패 폴백 — 기존처럼 로컬에 붙여 메시지가 안 보이는 일은 막는다.
+            c.pending = c.pending.filter((p) => !p.confirmed);
+            const last = c.turns[c.turns.length - 1];
+            const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
+            const already =
+                lastMsg &&
+                lastMsg.role === "user" &&
+                lastMsg.content === (text || "") &&
+                (lastMsg.imageUrl || null) === (imageUrl || null) &&
+                (lastMsg.attachments || []).map((a) => a.id).join(",") === attachmentIds.join(",");
+            if (!already) {
+                c.turns.push({
+                    at: new Date().toISOString(),
+                    messages: [{ role: "user", content: text || "", imageUrl: imageUrl || null, attachments }],
+                    stats: null,
+                });
+            }
+            emit("turns", { id });
+        })();
     }
 
     function applyTurnDone(id, text, stats, error, attachments = [], silent = false) {
         const c = conv(id);
+        if (!c) return;
         const hadLive = !!c.live;
-        const fallback = c.live && typeof c.live.text === "string" ? c.live.text : "";
+        const liveSnap = c.live;
+        const fallback = liveSnap && typeof liveSnap.text === "string" ? liveSnap.text : "";
         // 중간 과정 발화(툴 호출 전 코멘트)도 메신저 기록에 남긴다 —
         // 라이브에서 이미 보여준 말을 완료 시점에 지우지 않는다.
-        const intermediate = (c.live ? c.live.intermediate : []).filter((t) => !isSilentMarkedText(t));
-        c.live = null;
-        if (silent) {
-            // 침묵 마커는 마지막 답변 한 개만 숨긴다 — 이미 보여준 중간 발화는
-            // 회수하지 않고 그대로 메신저 기록에 남긴다.
-            if (intermediate.length) {
-                const last = c.turns[c.turns.length - 1];
-                const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
-                const tail = intermediate[intermediate.length - 1];
-                const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === tail;
-                if (!already) {
-                    c.turns.push({
-                        at: new Date().toISOString(),
-                        messages: intermediate.map((t) => ({ role: "assistant", content: t })),
-                        stats: stats || null,
-                        attachments,
-                    });
+        const intermediate = (liveSnap ? liveSnap.intermediate : []).filter((t) => !isSilentMarkedText(t));
+        void (async () => {
+            let ok = false;
+            try {
+                ok = await refreshTurns(id);
+            } catch (_) {}
+            if (!ok) {
+                // 정본 읽기 실패 폴백 — 라이브 내용을 로컬 턴으로 승격한다.
+                if (silent) {
+                    // 침묵 마커는 마지막 답변 한 개만 숨긴다 — 이미 보여준 중간 발화는
+                    // 회수하지 않고 그대로 메신저 기록에 남긴다.
+                    if (intermediate.length) {
+                        const last = c.turns[c.turns.length - 1];
+                        const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
+                        const tail = intermediate[intermediate.length - 1];
+                        const already = lastMsg && lastMsg.role === "assistant" && lastMsg.content === tail;
+                        if (!already) {
+                            c.turns.push({
+                                at: new Date().toISOString(),
+                                messages: intermediate.map((t) => ({ role: "assistant", content: t })),
+                                stats: stats || null,
+                                attachments,
+                            });
+                        }
+                    }
+                } else {
+                    // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
+                    // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
+                    const rawFinal = String(text || fallback || "");
+                    const finalText = isSilentMarkedText(rawFinal) ? "" : rawFinal;
+                    const spoken = [
+                        ...intermediate.map((t) => ({ role: "assistant", content: t })),
+                        ...(finalText ? [{ role: "assistant", content: finalText }] : []),
+                    ];
+                    if (spoken.length || attachments.length) {
+                        const last = c.turns[c.turns.length - 1];
+                        const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
+                        const tail = spoken.length ? spoken[spoken.length - 1].content : null;
+                        const already = tail != null && lastMsg && lastMsg.role === "assistant" && lastMsg.content === tail;
+                        if (!already) {
+                            c.turns.push({
+                                at: new Date().toISOString(),
+                                messages: spoken,
+                                stats: stats || null,
+                                attachments,
+                            });
+                        }
+                    }
                 }
             }
+            // 정본이 턴을 저장한 뒤에만 live를 해제한다 — 답 버블이 깜빡 사라지지 않게.
+            if (c.live === liveSnap) c.live = null;
             emit("live", { id });
-            emit("turn_done", { id, hadLive });
-            return;
-        }
-        // 라이브가 없거나 SSE text가 비어도, 스트림에 쌓인 본문이 있으면 턴으로 남긴다.
-        // 그렇지 않으면 답이 DOM에서 사라지고 새로고침 전까지 안 보인다.
+            emit("turn_done", { id, error: error != null ? error : null, finalized: hadLive });
+        })();
         const rawFinal = String(text || fallback || "");
-        const finalText = isSilentMarkedText(rawFinal) ? "" : rawFinal;
-        const spoken = [
-            ...intermediate.map((t) => ({ role: "assistant", content: t })),
-            ...(finalText ? [{ role: "assistant", content: finalText }] : []),
-        ];
-        if (spoken.length || attachments.length) {
-            const last = c.turns[c.turns.length - 1];
-            const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
-            const tail = spoken.length ? spoken[spoken.length - 1].content : null;
-            const already = tail != null && lastMsg && lastMsg.role === "assistant" && lastMsg.content === tail;
-            if (!already) {
-                c.turns.push({
-                    at: new Date().toISOString(),
-                    messages: spoken,
-                    stats: stats || null,
-                    attachments,
-                });
-            }
-            const snippet = finalText.replace(/\s+/g, " ").trim().slice(0, 120);
-            if (snippet) c.meta = Object.assign({}, c.meta, { preview: snippet });
-        }
-        emit("turn_done", { id, error: error != null ? error : null, finalized: hadLive });
-        emit("live", { id });
+        const snippet = (isSilentMarkedText(rawFinal) ? "" : rawFinal).replace(/\s+/g, " ").trim().slice(0, 120);
+        if (snippet && !silent) c.meta = Object.assign({}, c.meta, { preview: snippet });
     }
 
     /* ── 설정 ──────────────────────────────────────────────── */
@@ -419,6 +511,8 @@
         applyAskResolved,
         applyUserMessage,
         applyTurnDone,
+        refreshTurns,
+        normalizeTurn,
         setSettings,
         mergeSettingsLocal,
         setConn,

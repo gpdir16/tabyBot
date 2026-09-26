@@ -408,7 +408,6 @@ kbd {
 .sb-scroll {
     flex: 1;
     overflow-y: auto;
-    scrollbar-gutter: stable;
     padding: 0 var(--sp-2) var(--sp-2);
 }
 
@@ -1372,10 +1371,6 @@ kbd {
 .btn-send:disabled {
     opacity: 0.35;
 }
-.btn-send.stop:hover {
-    filter: brightness(1.1);
-    background: var(--accent);
-}
 
 /* ── 11. 설정 페이지: 채팅 뷰와 같은 계층의 라우트 뷰(스왑 방식) ── */
 .settings-page {
@@ -1392,7 +1387,12 @@ kbd {
 .todos-page {
     outline: none;
 }
-#todosPage:focus-visible {
+/* 라우트 페이지는 tabindex=-1로 프로그래매틱 포커스를 받는다 — 여기에
+   :focus-visible 링이 걸리면 창 전체를 감싸는 커다란 포커스 링이 생긴다. */
+#todosPage:focus-visible,
+#settingsPage:focus-visible,
+#computerPage:focus-visible,
+#onboardingPage:focus-visible {
     box-shadow: none;
 }
 .todos-page[hidden] {
@@ -3761,8 +3761,7 @@ body.sb-collapsed .btn-menu {
         max-height: 128px;
     }
     #btnAttach,
-    #btnSend,
-    #btnStop {
+    #btnSend {
         width: 44px;
         height: 44px;
     }
@@ -3964,9 +3963,6 @@ body.sb-collapsed .btn-menu {
         background: var(--accent);
     }
     .btn.danger:hover:not(:disabled) {
-        filter: none;
-    }
-    .btn-send.stop:hover {
         filter: none;
     }
     .sb-row-action:hover {
