@@ -130,10 +130,33 @@ body {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     overflow: hidden;
+    /* 네이티브 앱처럼 UI 크롬의 텍스트 선택/콜아웃 차단 (콘텐츠는 아래 화이트리스트로 허용) */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 ::selection {
     background: rgba(10, 132, 255, 0.8);
+}
+
+/* 선택 허용 영역: 입력 필드와 실제 콘텐츠(메시지 본문·질문/답변·식별자)만 */
+input,
+textarea,
+[contenteditable],
+.md,
+.bubble-text,
+.ask-q,
+.ask-answer,
+.model-id,
+.oauth-code {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* 콘텐츠 링크/이미지의 iOS 롱프레스 콜아웃은 허용 (네이티브 컨텐츠 동작과 동일) */
+.md {
+    -webkit-touch-callout: default;
 }
 
 button {
