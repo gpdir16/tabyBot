@@ -1,7 +1,6 @@
 /* tabyBot 웹 클라이언트 — 컴포저.
    pill 컨테이너(자동성장), 파일 첨부(선택/드래그앤드롭/paste),
-   업로드 칩 미리보기, Enter 전송 / Shift+Enter 줄바꿈(IME 조합 보호),
-   실행 중 정지 버튼 전환. */
+   업로드 칩 미리보기, Enter 전송 / Shift+Enter 줄바꿈(IME 조합 보호). */
 (function (T) {
     "use strict";
 
@@ -12,7 +11,6 @@
     const chipsEl = document.getElementById("chips");
     const input = document.getElementById("composerInput");
     const btnSend = document.getElementById("btnSend");
-    const btnStop = document.getElementById("btnStop");
     const btnAttach = document.getElementById("btnAttach");
     const btnHandoff = document.getElementById("btnHandoff");
     const fileInput = document.getElementById("fileInput");
@@ -32,7 +30,15 @@
     const HOME_DRAFT = "__home__";
 
     /* ── 자동성장 ───────────────────────────────────────────── */
+    // 설정/할일/컴퓨터 라우트가 컴포저를 display:none으로 가리면 scrollHeight가
+    // 0으로 붕괴한다. 숨겨진 채 grow()가 돌면 height가 0으로 저장돼 돌아왔을 때
+    // 입력창이 패딩 두께의 선처럼 찌그러지므로, 보일 때까지 미뤄둔다.
+    let growPending = false;
     function grow() {
+        if (input.offsetParent === null) {
+            growPending = true;
+            return;
+        }
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 200) + "px";
         box.classList.toggle("multiline", input.scrollHeight > 40 || attachments.length > 0 || !!handoffTo);
@@ -201,7 +207,6 @@
         else loadDraft(state.state.currentId || null);
         grow();
         updateSendState();
-        refreshRunState();
     }
 
     /* ── 할 일 @ 핸드오프 선택 ────────────────────────────── */
@@ -354,27 +359,6 @@
         saveDraft();
     }
 
-    async function stop() {
-        const id = state.state.currentId;
-        if (!id) return;
-        try {
-            await T.api.stopConversation(id);
-        } catch (_) {
-            /* turn_done에서 정리됨 */
-        }
-    }
-
-    /* ── 실행 중 표시 ───────────────────────────────────────── */
-    function refreshRunState() {
-        const c = state.currentConv();
-        const running = !!(c && c.live) && !T.todosUI?.isOpen?.();
-        btnStop.classList.toggle("hidden", !running);
-        btnSend.classList.toggle("hidden", running);
-        btnStop.tabIndex = running ? 0 : -1;
-        btnSend.tabIndex = running ? -1 : 0;
-        if (T.tooltip) T.tooltip.hide();
-    }
-
     function saveDraft() {
         if (!draftId) return;
         drafts.set(draftId, { text: input.value, attachments: attachments.slice() });
@@ -413,7 +397,6 @@
         });
 
         btnSend.addEventListener("click", send);
-        btnStop.addEventListener("click", stop);
         btnAttach.addEventListener("click", () => fileInput.click());
         btnHandoff.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -456,8 +439,6 @@
             }
         });
 
-        state.on("live", refreshRunState);
-        state.on("turn_done", refreshRunState);
         state.on("current", (id) => {
             if (T.todosUI?.isOpen?.()) {
                 syncMode();
@@ -465,15 +446,21 @@
             }
             loadDraft(id);
             input.placeholder = t("sendPlaceholder");
-            refreshRunState();
         });
         T.i18n.onChange(() => {
             input.placeholder = T.todosUI?.isOpen?.() ? t("todosQuickAdd") : t("sendPlaceholder");
         });
 
+        // 다른 라우트가 컴포저를 가렸다가 놓는 순간 미뤄둔 높이 재측정을 수행한다.
+        new MutationObserver(() => {
+            if (growPending && input.offsetParent !== null) {
+                growPending = false;
+                grow();
+            }
+        }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
         grow();
         updateSendState();
-        refreshRunState();
     }
 
     function setValue(v) {
