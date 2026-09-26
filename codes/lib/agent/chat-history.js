@@ -246,7 +246,7 @@ export function compressedSummaryTurn(summary) {
 
 // After compression: archive full session on disk; active file keeps recent turns.
 // The compressed summary is stored as a system-message turn at the start of the new session.
-export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary) {
+export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary, { reason = "context_compression" } = {}) {
     if (!chatId) return null;
     const root = conversationDir(chatId);
     const manifest = ensureManifest(chatId);
@@ -258,7 +258,7 @@ export function replaceChatHistoryAfterCompression(chatId, recentTurns, summary)
     if (oldEntry) {
         oldEntry.closedAt = now;
         oldEntry.kind = "archived";
-        oldEntry.archiveReason = "context_compression";
+        oldEntry.archiveReason = reason;
     }
 
     const summaryTurn = summary?.trim() ? [{ ...compressedSummaryTurn(summary), at: now }] : [];

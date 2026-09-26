@@ -29,6 +29,11 @@ const MESSAGES = {
         ko: "(출력 없음)",
         ja: "(出力なし)",
     },
+    sessions_compress_ask: {
+        en: "Model changed — tap to compress sessions for a clean start.",
+        ko: "모델이 변경되었습니다 — 눌러서 세션 압축",
+        ja: "モデルが変更されました — タップしてセッションを圧縮",
+    },
 };
 
 export function t(key, lang = "en", vars = {}) {
