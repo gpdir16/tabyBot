@@ -191,11 +191,18 @@
         return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [] };
     }
 
+    // 목록 정렬(updatedAt)을 새 활동 시각으로 맞춘다 — 정본은 뒤따르는
+    // refreshTurns/upsertMeta가 서버 값으로 덮는다.
+    function touchMeta(c, id) {
+        c.meta = Object.assign({}, c.meta, { id, updatedAt: new Date().toISOString() });
+    }
+
     // live가 시작되는 전환 지점에서만 "live"를 방출한다(컴포저 정지 버튼 등이 구독).
     function ensureLive(id) {
         const c = conv(id);
         if (!c.live) {
             c.live = freshLive();
+            touchMeta(c, id);
             emit("live", { id });
         }
         return c;
@@ -210,12 +217,9 @@
     function applyStatus(id, phase, detail, elapsedMs) {
         const c = ensureLive(id);
         if (phase) c.live.phase = phase;
-        // 새 라운드(툴 실행) 진입 시점에 이전 라운드 텍스트를 중간 과정 버블로 굳힌다.
-        // 새로고침 시 서버 히스토리에 남는 중간 assistant 메시지와 동일하게 보이도록 한다.
-        if (phase === "tools" && c.live.text.trim()) {
-            if (!isSilentMarkedText(c.live.text)) c.live.intermediate.push(c.live.text);
-            c.live.text = "";
-        }
+        // 툴 호출에 붙은 텍스트는 사용자에게 가지 않는 내부 메모 — 버리기만 한다.
+        // 사용자용 중간 발화는 user_say 호출(applySay)로만 들어온다.
+        if (phase === "tools") c.live.text = "";
         // 툴 라운드 경계는 서버 체크포인트/펜딩 메시지 병합 시점과 겹친다 —
         // 정본을 다시 읽어 실행 중 메시지 위치를 새로고침 상태와 맞춘다.
         if (phase === "tools") void refreshTurns(id).catch(() => {});
@@ -229,6 +233,15 @@
         // full이 지금까지 전체 누적. 없으면 text를 덧셈 폴백.
         c.live.text = typeof full === "string" ? full : c.live.text + (text || "");
         emit("delta", { id });
+    }
+
+    // user_say 도구 호출 — 모델이 명시적으로 사용자에게 보낸 중간 발화만 버블로 쌓는다.
+    function applySay(id, text) {
+        const s = String(text || "");
+        if (!s.trim() || isSilentMarkedText(s)) return;
+        const c = ensureLive(id);
+        if (!c.live.intermediate.includes(s)) c.live.intermediate.push(s);
+        emit("status", { id });
     }
 
     function applyTool(id, name, argsSummary) {
@@ -356,7 +369,7 @@
             .replace(/\s+/g, " ")
             .trim()
             .slice(0, 120);
-        if (snippet) c.meta = Object.assign({}, c.meta, { preview: snippet });
+        c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet ? { preview: snippet } : {}) });
         emit("user_message", { id, confirmed });
         void (async () => {
             let ok = false;
@@ -391,7 +404,7 @@
         const hadLive = !!c.live;
         const liveSnap = c.live;
         const fallback = liveSnap && typeof liveSnap.text === "string" ? liveSnap.text : "";
-        // 중간 과정 발화(툴 호출 전 코멘트)도 메신저 기록에 남긴다 —
+        // user_say로 이미 전달된 중간 발화는 메신저 기록에 남긴다 —
         // 라이브에서 이미 보여준 말을 완료 시점에 지우지 않는다.
         const intermediate = (liveSnap ? liveSnap.intermediate : []).filter((t) => !isSilentMarkedText(t));
         void (async () => {
@@ -450,7 +463,7 @@
         })();
         const rawFinal = String(text || fallback || "");
         const snippet = (isSilentMarkedText(rawFinal) ? "" : rawFinal).replace(/\s+/g, " ").trim().slice(0, 120);
-        if (snippet && !silent) c.meta = Object.assign({}, c.meta, { preview: snippet });
+        c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet && !silent ? { preview: snippet } : {}) });
     }
 
     /* ── 설정 ──────────────────────────────────────────────── */
@@ -506,6 +519,7 @@
         currentBot,
         applyStatus,
         applyDelta,
+        applySay,
         applyTool,
         applyAsk,
         applyAskResolved,

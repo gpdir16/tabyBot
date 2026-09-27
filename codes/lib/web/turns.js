@@ -60,7 +60,9 @@ function isUnremarkableAutoTurn(result) {
                 if (name && !OBSERVATION_TOOLS.has(name)) return false;
             }
             const text = typeof m.content === "string" ? m.content.trim() : "";
-            if (text && !isSilentMarkedText(text)) return false;
+            // 툴 호출에 붙은 본문은 사용자에게 가지 않는 내부 메모 — 턴의 가치를 올리지 않는다.
+            // (user_say 호출은 위 도구 판정에서 이미 유의미로 걸러진다)
+            if (text && !isSilentMarkedText(text) && !m.tool_calls?.length) return false;
         }
     }
     return true;
@@ -297,7 +299,7 @@ ${isJob ? `Scheduled job` : `Agent todo`} "${item.title}"${when}. This is an aut
 Task:
 ${body}
 
-Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"), and do not post progress updates mid-run ("checking the page", "it loaded, extracting now"). Like a coworker, report only the finished job. Speak mid-task only for a finding that cannot wait. If there is nothing to tell the user, reply with ONLY __SILENT__ as the entire message. __SILENT__ voids only the message containing it, so to suppress text you should not have sent mid-run, end that same message with __SILENT__; earlier messages stay sent.`;
+Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"), and do not post progress updates mid-run ("checking the page", "it loaded, extracting now"). Like a coworker, report only the finished job. Text written next to tool calls never reaches the user — if something cannot wait, send it with the user_say tool. If there is nothing to tell the user, reply with ONLY __SILENT__ as the entire message.`;
 }
 
 // 능동 체크인: 봇의 메인 스레드에서 조용히 깨어 할 말이 있을 때만 게시한다.
