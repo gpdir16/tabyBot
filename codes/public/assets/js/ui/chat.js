@@ -617,23 +617,15 @@
         for (const turn of c.turns) {
             const messages = turn.messages || [];
             let lastAssistant = -1;
-            let lastAssistantText = "";
             messages.forEach((message, index) => {
-                if (message.role === "assistant") {
-                    lastAssistant = index;
-                    const text = typeof message.content === "string" ? message.content.trim() : "";
-                    if (text) lastAssistantText = text;
-                }
+                if (message.role === "assistant") lastAssistant = index;
             });
-            // 침묵으로 끝난 턴의 중간 발화는 사용자용이 아니었으므로 숨긴다(서버 toDisplayTurns와 동일).
-            const endedSilent = isSilentMarked(lastAssistantText);
             messages.forEach((m, index) => {
                 flat.push({
                     m,
                     turn,
                     stats: turn.stats,
                     attachments: index === lastAssistant ? turn.attachments || [] : [],
-                    endedSilent,
                 });
             });
         }
@@ -644,7 +636,7 @@
             const text = typeof f.m.content === "string" ? f.m.content.trim() : "";
             if (f.m.role === "assistant") {
                 if (!text && !(f.m.attachments || []).length) return false;
-                if (f.endedSilent || isSilentMarked(text)) return false;
+                if (isSilentMarked(text)) return false;
             }
             if (f.m.role === "user" && text.includes("[tabybot-scheduled]")) return false;
             return true;

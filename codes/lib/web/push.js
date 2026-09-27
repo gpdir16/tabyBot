@@ -96,6 +96,12 @@ function payloadFor(event) {
     if (event.type === "ask") {
         return { title: eventTitle(event), body: String(event.question || "").slice(0, 180), tag: `ask-${event.askId || ""}`, url: "/" };
     }
+    if (event.type === "say") {
+        // 작업 중 명시 발화(user_say) — 최종 답변과 같은 태그로 묶어 알림을 합친다.
+        const body = String(event.text || "").trim();
+        if (!body || !event.conversationId) return null;
+        return { title: eventTitle(event), body: body.slice(0, 180), tag: `turn-${event.conversationId}`, url: "/" };
+    }
     if (event.type === "turn_done") {
         if (event.stopped || event.silent) return null;
         const body = String(event.text || event.error?.detail || "").trim();

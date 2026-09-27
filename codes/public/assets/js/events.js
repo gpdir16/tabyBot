@@ -87,6 +87,12 @@
             case "delta":
                 state.applyDelta(msg.conversationId, typeof msg.full === "string" ? msg.full : undefined, msg.text || "");
                 break;
+            case "say": {
+                const sayText = String(msg.text || "").trim();
+                state.applySay(msg.conversationId, sayText);
+                if (sayText) notifyIncoming(msg.conversationId, sayText.slice(0, 180), "turn-" + (msg.conversationId || ""));
+                break;
+            }
             case "tool": {
                 const call = msg.call || {};
                 state.applyTool(msg.conversationId, call.name, call.argsSummary);

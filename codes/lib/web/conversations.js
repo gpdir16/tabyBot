@@ -10,6 +10,7 @@ import {
     isSilentMarkedText,
     loadChatHistory,
     previewSnippetFromTurns,
+    sayTextsFromMessage,
     stripMarkdownForPreview,
 } from "../agent/chat-history.js";
 
@@ -132,13 +133,20 @@ function toDisplayTurns(rawTurns) {
             // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
             if (m?.role === "tool") continue;
             if (m?.role === "assistant") {
+                // 툴 호출이 딸린 메시지의 본문은 내부 메모 — user_say 호출의
+                // text 인자만 사용자용 발화로 꺼내 버블로 남긴다.
+                if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+                    for (const said of sayTextsFromMessage(m)) {
+                        if (isSilentMarkedText(said)) continue;
+                        messages.push({ role: "assistant", content: said });
+                    }
+                    continue;
+                }
                 const text = String(m.content || "").trim();
                 if (!text && !m.attachments?.length) continue;
                 // 침묵 마커는 그 메시지 하나만 숨긴다 — 이미 보낸 중간 발화까지 소급 회수하지 않는다.
                 if (isSilentMarkedText(text)) continue;
-                // tool_calls 인자 페이로드는 화면용이 아니다 — 발화 텍스트만 남기고 벗겨 낸다.
-                const { tool_calls: _toolCalls, ...pub } = m;
-                messages.push(pub?.attachments ? publicUserMessage(pub) : pub);
+                messages.push(m?.attachments ? publicUserMessage(m) : m);
                 continue;
             }
             if (m?.role === "user" && typeof m.content === "string" && m.content.includes("[tabybot-scheduled]")) continue;

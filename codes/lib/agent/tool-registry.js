@@ -6,6 +6,7 @@ import { todoToolDefinitions, executeTodoTool } from "../tools/todo-tool.js";
 import { stopTodoScheduler } from "../todos/scheduler.js";
 import { sendFileToolDefinitions, executeSendFileTool } from "../tools/send-file-tool.js";
 import { userAskToolDefinitions, executeUserAskTool } from "../tools/user-ask-tool.js";
+import { userSayToolDefinitions, executeUserSayTool } from "../tools/user-say-tool.js";
 import { vizToolDefinitions, executeVizTool } from "../tools/visualization.js";
 import { xvfbGuiToolDefinitions, executeXvfbGuiTool } from "../tools/xvfb-gui.js";
 import { consultAgentToolDefinitions, executeConsultAgent } from "../tools/consult-agent.js";
@@ -42,6 +43,7 @@ export async function getAllToolDefinitions() {
         ...terminalToolDefinitions,
         ...sendFileToolDefinitions,
         ...userAskToolDefinitions,
+        ...userSayToolDefinitions,
         ...sessionSearchToolDefinitions,
         ...(listAgents().length ? consultAgentToolDefinitions : []),
         ...vizToolDefinitions,
@@ -62,6 +64,7 @@ export async function executeTool(name, args, ctx = {}) {
         }
         if (name === "send_file") return await executeSendFileTool(name, args, ctx);
         if (name === "user_ask") return await executeUserAskTool(name, args, ctx);
+        if (name === "user_say") return await executeUserSayTool(args, ctx);
         if (name === "consult_agent") return await executeConsultAgent(name, args, ctx);
         if (name === "session_search") return await executeSessionSearchTool(name, args);
         if (name === "viz_create") return await executeVizTool(name, args);
