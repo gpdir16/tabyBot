@@ -171,6 +171,22 @@ export function isSilentMarkedText(text) {
     return t.startsWith("__SILENT__") || t.endsWith("__SILENT__");
 }
 
+// 툴 호출 메시지의 user_say 호출에서 사용자용 발화 텍스트만 추출한다.
+// 같은 메시지에 붙은 본문 텍스트는 내부 메모이므로 사용자에게 보이지 않는다.
+export function sayTextsFromMessage(message) {
+    const out = [];
+    for (const tc of message?.tool_calls || []) {
+        if (tc?.function?.name !== "user_say") continue;
+        try {
+            const text = String(JSON.parse(tc.function.arguments || "{}")?.text || "").trim();
+            if (text) out.push(text);
+        } catch {
+            // 인자 JSON이 깨진 호출은 건너뛴다.
+        }
+    }
+    return out;
+}
+
 export function stripMarkdownForPreview(text) {
     let s = String(text || "");
     if (!s) return "";
@@ -191,6 +207,13 @@ export function stripMarkdownForPreview(text) {
 function previewTextFromMessage(message) {
     if (!message || (message.role !== "user" && message.role !== "assistant")) return "";
     if (isInternalStoredMessage(message)) return "";
+    // 툴 호출이 딸린 발화는 내부 메모 — 프리뷰에는 user_say로 보낸 말만 쓴다.
+    if (message.role === "assistant" && message.tool_calls?.length) {
+        const said = sayTextsFromMessage(message)
+            .filter((t) => !isSilentMarkedText(t))
+            .at(-1);
+        return said ? stripMarkdownForPreview(said) : "";
+    }
     if (typeof message.content !== "string") return "";
     if (message.role === "assistant" && isSilentMarkedText(message.content)) return "";
     if (message.role === "user" && message.content.includes("[tabybot-scheduled]")) return "";
