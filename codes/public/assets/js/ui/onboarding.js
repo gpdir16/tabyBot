@@ -672,7 +672,7 @@
             dismiss();
             try {
                 const r = await T.api.agents();
-                T.state.setBots(r.agents || []);
+                T.state.applyAgents(r);
             } catch (_) {}
             const first = T.state.state.bots[0];
             if (first) T.chat.open(first.uuid);

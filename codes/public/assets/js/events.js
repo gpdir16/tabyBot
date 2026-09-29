@@ -77,7 +77,7 @@
                 refreshConversations();
                 T.api
                     .agents()
-                    .then((r) => state.setBots(r.agents || []))
+                    .then((r) => state.applyAgents(r))
                     .catch(() => {});
                 state.fetchTodos().catch(() => {});
                 T.chat.refreshCurrent?.();
@@ -166,7 +166,7 @@
                 refreshConversations();
                 T.api
                     .agents()
-                    .then((r) => state.setBots(r.agents || []))
+                    .then((r) => state.applyAgents(r))
                     .catch(() => {});
                 break;
             case "todos_changed":

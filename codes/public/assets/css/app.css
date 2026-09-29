@@ -296,6 +296,9 @@ kbd {
 .btn:disabled {
     opacity: 0.38;
 }
+.btn {
+    text-decoration: none;
+}
 .btn.primary {
     background: var(--accent);
     color: #fff;
@@ -396,8 +399,14 @@ kbd {
 .sb-search input {
     flex: 1;
     min-width: 0;
+    padding: 0;
     background: none;
     border: 0;
+    /* iOS가 인풋 자체에 그리는 네이티브 라운딩 박스를 제거한다.
+       남겨 두면 컨테이너 라운딩 안에 라운딩 필드가 중첩돼 가장자리 글자가 짤린다. */
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 0;
     font-size: var(--fs-m);
     color: var(--text);
 }
@@ -695,6 +704,22 @@ kbd {
     color: var(--text-tertiary);
     padding: 0 6px;
     user-select: none;
+}
+/* 날짜가 바뀌는 지점의 구분선 — 메신저식 날짜 칩 */
+.date-sep {
+    display: flex;
+    justify-content: center;
+    margin: var(--sp-2) 0;
+    user-select: none;
+}
+.date-sep span {
+    padding: 3px 12px;
+    border-radius: var(--radius-pill);
+    background: var(--hover);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 /* 검색/딥링크로 점프한 메시지 강조 */
 .msg-highlight .bubble {
@@ -3240,6 +3265,92 @@ body.resizing {
     color: var(--text-tertiary);
     text-align: center;
 }
+/* 에이전트 폴더 탭 바 — 메신저 폴더처럼 목록 위 가로 탭으로 필터링한다.
+   탭은 드래그로 순서 변경, 에이전트 행을 탭 위에 놓으면 그 폴더로 배정. */
+.sb-tabs {
+    display: flex;
+    flex: none;
+    gap: 4px;
+    align-items: center;
+    padding: 0 var(--sp-2) 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.sb-tabs[hidden] {
+    display: none;
+}
+.sb-tabs::-webkit-scrollbar {
+    display: none;
+}
+.sb-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.sb-tab:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+}
+.sb-tab.active {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+}
+.sb-tab-count {
+    font-size: 10px;
+    opacity: 0.65;
+}
+.sb-tab .btn-icon {
+    width: 18px;
+    height: 18px;
+    margin: 0 -6px 0 -2px;
+    color: inherit;
+}
+.sb-tab-add {
+    width: 26px;
+    padding: 0;
+    justify-content: center;
+    color: var(--text-tertiary);
+}
+.sb-tab-add:hover {
+    color: var(--text);
+}
+.sb-tab.editing {
+    padding: 0 4px;
+}
+.sb-tab-input {
+    width: 110px;
+    height: 20px;
+    padding: 0 6px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--fs-xs);
+}
+.bot-row.drop-ok,
+.sb-tab.drop-ok {
+    outline: 1.5px dashed var(--accent);
+    outline-offset: -2px;
+    background: rgba(10, 132, 255, 0.08);
+}
+.menu-sep {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--border);
+}
 /* 메시지 검색 섹션 라벨 + 히트 행 */
 .sb-sec {
     padding: 12px 10px 4px;
@@ -4400,9 +4511,7 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     align-items: center;
     justify-content: center;
     padding: var(--sp-5);
-    background: rgba(10, 10, 14, 0.35);
-    backdrop-filter: blur(12px) brightness(0.55);
-    -webkit-backdrop-filter: blur(12px) brightness(0.55);
+    backdrop-filter: blur(4px) brightness(0.3);
     animation: onbModalScrim var(--dur-1) var(--ease);
 }
 .fv-card {
@@ -4413,15 +4522,13 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     overflow: hidden;
     background: var(--surface);
     border-radius: var(--radius-l);
-    box-shadow: var(--shadow-pop);
     animation: onbModalIn var(--dur-2) var(--ease);
 }
 .fv-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--sp-3);
-    padding: var(--sp-3) var(--sp-4);
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
     border-bottom: 1px solid var(--border);
 }
 .fv-title {
@@ -4447,15 +4554,12 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     justify-content: center;
     min-height: 0;
     overflow: auto;
-    padding: var(--sp-4);
+    padding: var(--sp-2);
 }
 .fv-media {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-}
-.fv-img {
-    border-radius: var(--radius-s);
 }
 .fv-audio {
     width: min(480px, 100%);
