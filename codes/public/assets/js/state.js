@@ -191,11 +191,18 @@
         return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [] };
     }
 
+    // 목록 정렬(updatedAt)을 새 활동 시각으로 맞춘다 — 정본은 뒤따르는
+    // refreshTurns/upsertMeta가 서버 값으로 덮는다.
+    function touchMeta(c, id) {
+        c.meta = Object.assign({}, c.meta, { id, updatedAt: new Date().toISOString() });
+    }
+
     // live가 시작되는 전환 지점에서만 "live"를 방출한다(컴포저 정지 버튼 등이 구독).
     function ensureLive(id) {
         const c = conv(id);
         if (!c.live) {
             c.live = freshLive();
+            touchMeta(c, id);
             emit("live", { id });
         }
         return c;
@@ -362,7 +369,7 @@
             .replace(/\s+/g, " ")
             .trim()
             .slice(0, 120);
-        if (snippet) c.meta = Object.assign({}, c.meta, { preview: snippet });
+        c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet ? { preview: snippet } : {}) });
         emit("user_message", { id, confirmed });
         void (async () => {
             let ok = false;
@@ -456,7 +463,7 @@
         })();
         const rawFinal = String(text || fallback || "");
         const snippet = (isSilentMarkedText(rawFinal) ? "" : rawFinal).replace(/\s+/g, " ").trim().slice(0, 120);
-        if (snippet && !silent) c.meta = Object.assign({}, c.meta, { preview: snippet });
+        c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet && !silent ? { preview: snippet } : {}) });
     }
 
     /* ── 설정 ──────────────────────────────────────────────── */

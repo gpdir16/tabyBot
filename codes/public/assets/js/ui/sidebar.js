@@ -386,11 +386,18 @@
         return row;
     }
 
+    // 목록 정렬 키: 대화 메타의 updatedAt. 기록이 없는 봇은 빈 문자열로 뒤에 둔다.
+    function recencyOf(bot) {
+        return state.state.convs.get(bot.uuid)?.meta?.updatedAt || "";
+    }
+
     /* ── 렌더 ───────────────────────────────────────────────── */
     function render() {
         if (!listEl) return;
         listEl.replaceChildren();
+        // 최근 메시지 순 — 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
         const bots = state.state.bots.filter(matches);
+        bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
         for (const bot of bots) listEl.append(buildRow(bot));
         if (todosVisible()) listEl.append(buildTodosRow());
         if (!listEl.children.length) {
