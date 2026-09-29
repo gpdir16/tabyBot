@@ -645,7 +645,7 @@
         }
 
         const flat = [];
-        for (const turn of c.turns) {
+        c.turns.forEach((turn, ti) => {
             const messages = turn.messages || [];
             let lastAssistant = -1;
             messages.forEach((message, index) => {
@@ -655,11 +655,13 @@
                 flat.push({
                     m,
                     turn,
+                    t: ti,
+                    mi: index,
                     stats: turn.stats,
                     attachments: index === lastAssistant ? turn.attachments || [] : [],
                 });
             });
-        }
+        });
         // 서버 히스토리의 role:"tool" 메시지(JSON 원문)는 화면에 버블로 그리지 않는다.
         // 라이브에서는 툴 카드로 표시되므로 새로고침 화면과의 일관성을 위해 제외.
         const visible = flat.filter((f) => {
@@ -697,6 +699,8 @@
                 });
             }
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
+            el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
+            el.dataset.m = String(f.mi);
             thread.append(el);
             watchBubble(el.querySelector(".bubble"));
         });
@@ -931,14 +935,39 @@
         // 1회성 파라미터 적용: 특정 메시지 이동(m)
         if (o.params?.m != null) {
             requestAnimationFrame(() => {
-                const el = thread.querySelector(`[data-midx="${Number(o.params.m)}"]`);
-                if (el) {
-                    el.scrollIntoView({ block: "center" });
-                    el.classList.add("msg-highlight");
-                    setTimeout(() => el.classList.remove("msg-highlight"), 1600);
-                }
+                scrollToMessage(`[data-midx="${Number(o.params.m)}"]`);
             });
         }
+    }
+
+    // 검색 결과 등에서 특정 메시지로 점프 — 찾으면 중앙으로 스크롤하고 하이라이트.
+    function scrollToMessage(selector) {
+        const el = thread.querySelector(selector);
+        if (!el) return false;
+        el.scrollIntoView({ block: "center" });
+        el.classList.add("msg-highlight");
+        setTimeout(() => el.classList.remove("msg-highlight"), 1600);
+        return true;
+    }
+
+    // 검색 결과 클릭 → 그 대화를 열고 서버 인덱스(턴/메시지)의 행으로 이동한다.
+    // 다른 페이지(설정/할일/컴퓨터)가 열려 있어도 닫고 라우트를 채팅으로 바꾼다.
+    async function openMessageTarget(convId, t, m) {
+        try {
+            if (T.settingsUI.isOpen()) T.settingsUI.hide();
+            if (T.todosUI?.isOpen?.()) T.todosUI.hide();
+            if (T.computerUI?.isOpen?.()) T.computerUI.hide();
+            const target = `/a/${encodeURIComponent(convId)}`;
+            if (location.pathname !== target) history.pushState(null, "", target);
+        } catch (_) {}
+        T.app?.renderRoute();
+        const sel = `[data-t="${Number(t)}"][data-m="${Number(m)}"]`;
+        // 라우트→대화 로드가 비동기라 행이 생길 때까지 짧게 기다린다.
+        for (let i = 0; i < 40; i++) {
+            if (scrollToMessage(sel)) return true;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return false;
     }
 
     // SSE 재접속 직후 서버 스냅샷과 맞춘다.
@@ -1051,5 +1080,5 @@
         refreshHeader();
     }
 
-    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader };
+    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget };
 })((window.Taby = window.Taby || {}));
