@@ -1300,6 +1300,13 @@
                                 T.h("div", { class: "model-label", text: m.label || m.id }),
                                 T.h("div", { class: "model-id", text: m.id }),
                             ]),
+                            // 비전 지원 모델만 배지를 표시 — 없으면 텍스트 전용
+                            m.supportsVision === true
+                                ? T.h("span", { class: "model-vision", "data-tip": t("visionSupported") }, [
+                                      T.icon("eye"),
+                                      T.h("span", { text: t("vision") }),
+                                  ])
+                                : T.h("span", { class: "model-vision off", "data-tip": t("visionUnsupported") }, [T.icon("eye-off")]),
                             Number.isFinite(Number(m.contextWindow)) && Number(m.contextWindow) > 0
                                 ? T.h("span", { class: "model-ctx", text: Number(m.contextWindow).toLocaleString() })
                                 : null,
