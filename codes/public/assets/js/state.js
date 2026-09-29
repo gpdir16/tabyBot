@@ -8,6 +8,7 @@
         bootstrap: null, // GET /api/bootstrap 응답
         settings: null, // GET /api/settings 응답
         bots: [], // GET /api/agents 응답(메신저 라스터)
+        folders: [], // GET /api/agents 응답의 에이전트 폴더(순서 = 표시 순서)
         botQuery: "", // 봇 검색 필터
         conversations: [], // 스레드 메타(봇 uuid + 스케줄 결과 등)
         convs: new Map(), // uuid → { meta, loaded, turns, pending, live }
@@ -77,6 +78,18 @@
             }
         }
         emit("bots", {});
+    }
+
+    function setFolders(list) {
+        state.folders = Array.isArray(list) ? list : [];
+        emit("folders", {});
+    }
+
+    // /api/agents 계열 응답 {agents, folders}를 한 번에 반영한다.
+    // folders가 없는 예전 응답이면 기존 폴더 상태를 유지한다.
+    function applyAgents(payload) {
+        setBots(payload?.agents || []);
+        if (Array.isArray(payload?.folders)) setFolders(payload.folders);
     }
 
     function botByUuid(uuid) {
@@ -516,6 +529,8 @@
         upsertMeta,
         replaceConversations,
         setBots,
+        setFolders,
+        applyAgents,
         botByUuid,
         currentBot,
         applyStatus,

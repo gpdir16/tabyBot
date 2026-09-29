@@ -155,7 +155,7 @@
     async function refreshBots() {
         try {
             const r = await T.api.agents();
-            state.setBots(r.agents || []);
+            state.applyAgents(r);
         } catch (_) {}
     }
 
@@ -1698,7 +1698,7 @@
                     else r = await T.api.updateAgent(agent.id, body);
                     if (r && Array.isArray(r.agents)) {
                         state.mergeSettingsLocal({ agents: r.agents });
-                        state.setBots(r.agents);
+                        state.applyAgents(r);
                     } else {
                         const s = await T.api.getSettings();
                         if (s) state.setSettings(s);
@@ -1753,7 +1753,7 @@
                         .then((r) => {
                             const agents = r && Array.isArray(r.agents) ? r.agents : [];
                             state.mergeSettingsLocal({ agents });
-                            state.setBots(agents);
+                            state.applyAgents(r || {});
                             if (state.state.currentId === agent.uuid) {
                                 const next = agents[0];
                                 if (next && T.chat) T.chat.open(next.uuid);

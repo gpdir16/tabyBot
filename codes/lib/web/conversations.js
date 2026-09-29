@@ -126,10 +126,25 @@ function publicUserMessage(message) {
 }
 function toDisplayTurns(rawTurns) {
     const turns = [];
+    // 실행 중 주입된 큐 메시지 텍스트 — 같은 발화의 단독 pending 턴이 남아 있으면
+    // 화면에 두 번 보이므로, 이미 래핑 본문으로 표시된 텍스트는 여기서 기억한다.
+    const queuedSeen = new Set();
     for (const turn of rawTurns || []) {
         const rawMessages = turn?.messages || [];
+        if (
+            turn?.status === "pending" &&
+            rawMessages.length === 1 &&
+            rawMessages[0]?.role === "user" &&
+            typeof rawMessages[0].content === "string" &&
+            queuedSeen.has(stripAttachedFilesPrompt(rawMessages[0].content).trim())
+        ) {
+            continue;
+        }
         const messages = [];
         for (const m of rawMessages) {
+            // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다 —
+            // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
+            if (m?.role === "user" && Array.isArray(m.content)) continue;
             // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
             if (m?.role === "tool") continue;
             if (m?.role === "assistant") {
@@ -160,6 +175,7 @@ function toDisplayTurns(rawTurns) {
                 // 실행 중 보낸 메시지들은 일반 사용자 메시지로 분해해 표시
                 for (const part of content.slice(PENDING_PREFIX.length).split("\n\n")) {
                     const clean = stripAttachedFilesPrompt(part.trim());
+                    if (clean) queuedSeen.add(clean);
                     if (clean || m.attachments?.length) {
                         messages.push(
                             publicUserMessage({

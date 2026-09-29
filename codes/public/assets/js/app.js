@@ -281,7 +281,7 @@
             }
             try {
                 const r = await T.api.agents();
-                state.setBots(Array.isArray(r?.agents) ? r.agents : []);
+                state.applyAgents(r);
             } catch (err) {
                 T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
             }

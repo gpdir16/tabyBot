@@ -11,6 +11,7 @@ const AGENTS_PATH = path.join(USER_DIR, "agents.json");
 const AGENTS_ROOT = path.join(USER_DIR, "agents");
 
 const MAX_AGENTS = 20;
+const MAX_FOLDERS = 20;
 const MAX_NAME = 32;
 const MAX_PERSONA = 500;
 const MAX_MODEL = 128;
@@ -51,6 +52,23 @@ function withSeed(agents) {
     return { agents, mutated };
 }
 
+// 폴더 목록을 읽어 {id, name}만 남긴다. 순서 = 표시 순서.
+function normalizeFolders(raw) {
+    const seen = new Set();
+    const out = [];
+    for (const f of Array.isArray(raw) ? raw : []) {
+        if (!f || typeof f.id !== "string" || seen.has(f.id)) continue;
+        const name = String(f.name || "")
+            .trim()
+            .slice(0, MAX_NAME);
+        if (!name) continue;
+        seen.add(f.id);
+        out.push({ id: f.id, name });
+        if (out.length >= MAX_FOLDERS) break;
+    }
+    return out;
+}
+
 let agentsCache = null;
 
 function statMtime() {
@@ -64,20 +82,98 @@ function statMtime() {
 export function loadAgentsStore() {
     const mtime = statMtime();
     if (agentsCache && mtime !== -1 && agentsCache.mtime === mtime) return agentsCache.store;
-    const raw = readJson(AGENTS_PATH, { agents: [] });
+    const raw = readJson(AGENTS_PATH, { agents: [], folders: [] });
     const { agents, mutated } = withSeed(Array.isArray(raw?.agents) ? raw.agents.filter((a) => a && typeof a.id === "string") : []);
-    if (mutated) writeJson(AGENTS_PATH, { agents });
-    agentsCache = { mtime: mutated ? statMtime() : mtime, store: { agents } };
+    const folders = normalizeFolders(raw?.folders);
+    const folderIds = new Set(folders.map((f) => f.id));
+    // 지워진 폴더를 가리키는 에이전트는 미분류로 되돌린다.
+    for (const a of agents) {
+        if (a.folder && !folderIds.has(a.folder)) {
+            a.folder = "";
+        }
+    }
+    if (mutated) writeJson(AGENTS_PATH, { agents, folders });
+    agentsCache = { mtime: mutated ? statMtime() : mtime, store: { agents, folders } };
     return agentsCache.store;
 }
 
 export function saveAgentsStore(store) {
-    writeJson(AGENTS_PATH, { agents: store.agents || [] });
+    writeJson(AGENTS_PATH, { agents: store.agents || [], folders: store.folders || [] });
     agentsCache = { mtime: statMtime(), store };
 }
 
 export function listAgents() {
     return loadAgentsStore().agents;
+}
+
+export function listFolders() {
+    return loadAgentsStore().folders || [];
+}
+
+function normalizeFolderName(name) {
+    const trimmed = String(name || "")
+        .trim()
+        .replace(/\s+/g, " ");
+    if (!trimmed) return { error: "folder_name_required" };
+    if (trimmed.length > MAX_NAME) return { error: "name_too_long", max: MAX_NAME };
+    return { name: trimmed };
+}
+
+export function addFolder({ name }) {
+    const named = normalizeFolderName(name);
+    if (named.error) return named;
+    const store = loadAgentsStore();
+    if (store.folders.length >= MAX_FOLDERS) return { error: "too_many_folders", max: MAX_FOLDERS };
+    const folder = { id: `f-${crypto.randomBytes(6).toString("hex")}`, name: named.name };
+    store.folders.push(folder);
+    saveAgentsStore(store);
+    return { folder };
+}
+
+export function updateFolder(id, { name }) {
+    const named = normalizeFolderName(name);
+    if (named.error) return named;
+    const store = loadAgentsStore();
+    const folder = store.folders.find((f) => f.id === id);
+    if (!folder) return { error: "not_found" };
+    folder.name = named.name;
+    saveAgentsStore(store);
+    return { folder };
+}
+
+// 폴더를 지우고 소속 에이전트는 미분류로 되돌린다.
+export function removeFolder(id) {
+    const store = loadAgentsStore();
+    const idx = store.folders.findIndex((f) => f.id === id);
+    if (idx < 0) return { error: "not_found" };
+    store.folders.splice(idx, 1);
+    for (const a of store.agents) {
+        if (a.folder === id) a.folder = "";
+    }
+    saveAgentsStore(store);
+    return { ok: true };
+}
+
+// ids 순서대로 폴더를 재배열한다. 누락된 폴더는 끝에 유지한다.
+export function setFoldersOrder(ids) {
+    if (!Array.isArray(ids)) return { error: "invalid_ids" };
+    const store = loadAgentsStore();
+    const byId = new Map(store.folders.map((f) => [f.id, f]));
+    const ordered = [];
+    const seen = new Set();
+    for (const id of ids) {
+        const f = byId.get(id);
+        if (f && !seen.has(id)) {
+            seen.add(id);
+            ordered.push(f);
+        }
+    }
+    for (const f of store.folders) {
+        if (!seen.has(f.id)) ordered.push(f);
+    }
+    store.folders = ordered;
+    saveAgentsStore(store);
+    return { folders: ordered };
 }
 
 export function firstAgent() {
@@ -261,6 +357,11 @@ export function updateAgent(id, patch) {
         const col = normalizeAgentColor(patch.color);
         if (col.error) return col;
         current.color = col.color;
+    }
+    if (patch.folder !== undefined) {
+        const folderId = String(patch.folder || "");
+        if (folderId && !store.folders.some((f) => f.id === folderId)) return { error: "folder_not_found" };
+        current.folder = folderId;
     }
     store.agents[idx] = current;
     saveAgentsStore(store);

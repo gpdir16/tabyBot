@@ -157,6 +157,23 @@
             return "";
         }
     }
+    // 날짜 구분선용 로컬 날짜 키/라벨 — 시각만으로는 며칠 전 메시지와 오늘 메시지가
+    // 구분되지 않아 순서가 엉켜 보이는 문제를 막는다.
+    function dayKeyOf(at) {
+        const ms = Date.parse(at || "");
+        if (!Number.isFinite(ms)) return "";
+        const d = new Date(ms);
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    }
+    function fmtMsgDate(at) {
+        const ms = Date.parse(at || "");
+        if (!Number.isFinite(ms)) return "";
+        try {
+            return new Intl.DateTimeFormat(i18nLocale(), { dateStyle: "full" }).format(new Date(ms));
+        } catch (_) {
+            return "";
+        }
+    }
     // 메시지 발화 시각 — 시각만 보이고 전체 날짜시각은 툴팁으로.
     function msgTimeEl(at) {
         const label = fmtMsgTime(at);
@@ -689,9 +706,15 @@
             }
         });
 
+        let lastDayKey = null;
         visible.forEach((f, i) => {
             let el;
             const msgAt = f.m.at || f.turn.at;
+            const dayKey = dayKeyOf(msgAt);
+            if (dayKey && dayKey !== lastDayKey) {
+                lastDayKey = dayKey;
+                thread.append(T.h("div", { class: "date-sep", role: "separator" }, [T.h("span", { text: fmtMsgDate(msgAt) })]));
+            }
             if (f.m.role === "user") {
                 const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
                 el = buildUserMessage(text, f.m.imageUrl, false, f.m.attachments, msgAt);

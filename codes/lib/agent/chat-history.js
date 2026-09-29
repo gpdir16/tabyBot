@@ -373,6 +373,49 @@ function userContentsFromTurnMessages(turnMessages) {
     return out;
 }
 
+// 턴 메시지에 이미 포함된 큐 발화의 단독 pending 턴을 뒤에서부터 소비한다.
+// 반환값은 제거된 pending 턴의 user 메시지들 — 첨부 복구에 쓴다.
+function consumeQueuedUserTurns(turns, turnMessages) {
+    const incomingUsers = userContentsFromTurnMessages(turnMessages);
+    const popped = [];
+    while (turns.length && incomingUsers.length) {
+        const pending = turns[turns.length - 1];
+        const msgs = pending?.messages || [];
+        if (msgs.length !== 1 || msgs[0]?.role !== "user") break;
+        const content = msgs[0].content;
+        if (typeof content !== "string") break;
+        // 빈 줄이 들어간 메시지는 합성 래퍼에서 여러 파트로 쪼개져 있으므로
+        // 인접 파트를 다시 이어 붙여서 pending 턴 원문과 맞는지 본다.
+        let idx = -1;
+        let span = 1;
+        for (let i = incomingUsers.length - 1; i >= 0; i -= 1) {
+            for (let len = 1; i + len <= incomingUsers.length; len += 1) {
+                if (incomingUsers.slice(i, i + len).join("\n\n") === content) {
+                    idx = i;
+                    span = len;
+                    break;
+                }
+                if (incomingUsers.slice(i, i + len).join("\n\n").length > content.length) break;
+            }
+            if (idx >= 0) break;
+        }
+        if (idx < 0) break;
+        incomingUsers.splice(idx, span);
+        popped.push(turns.pop().messages[0]);
+    }
+    return popped;
+}
+
+// 소비된 pending 턴에 붙어 있던 첨부를 주입된 user 메시지로 옮긴다 —
+// 큐에 실린 업로드가 히스토리에서 사라지지 않게.
+function rescuePoppedAttachments(popped, messages) {
+    for (const pm of popped) {
+        if (!pm?.attachments?.length) continue;
+        const userMessage = [...messages].reverse().find((m) => m?.role === "user");
+        if (userMessage && !userMessage.attachments) userMessage.attachments = pm.attachments;
+    }
+}
+
 export function appendPendingUserTurn(chatId, userText, attachments = []) {
     const text = String(userText || "").trim();
     if (!chatId || (!text && !attachments.length)) return;
@@ -397,6 +440,9 @@ export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null }
     if (!chatId || !turnMessages?.length) return;
 
     const turns = loadChatHistory(chatId);
+    // 실행 중 보낸 메시지가 이 체크포인트에 래핑 주입돼 있으면 단독 pending 턴을
+    // 여기서 소비한다 — 턴 완료까지 남겨 두면 화면에 같은 발화가 두 번 보인다.
+    const consumedPending = consumeQueuedUserTurns(turns, turnMessages);
     let targetIndex = turns.length - 1;
     // 복구 실행(baseMessages 있음)이 아니면 interrupted 턴까지 거슬러 합치지 않는다 —
     // 이전 턴의 메시지가 새 턴 체크포인트로 교체되며 유실되는 것을 막기 위해서다.
@@ -411,6 +457,7 @@ export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null }
         const userMessage = messages.find((m) => m?.role === "user");
         if (userMessage && !userMessage.attachments) userMessage.attachments = pendingAttachments;
     }
+    rescuePoppedAttachments(consumedPending, messages);
     const checkpoint = {
         at: target?.at || new Date().toISOString(),
         status: "in_progress",
@@ -495,32 +542,8 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
         if (userMessage) userMessage.attachments = extra.attachments;
     }
 
-    const incomingUsers = userContentsFromTurnMessages(turnMessages);
-    while (turns.length && incomingUsers.length) {
-        const pending = turns[turns.length - 1];
-        const msgs = pending?.messages || [];
-        if (msgs.length !== 1 || msgs[0]?.role !== "user") break;
-        const content = msgs[0].content;
-        if (typeof content !== "string") break;
-        // 빈 줄이 들어간 메시지는 합성 래퍼에서 여러 파트로 쪼개져 있으므로
-        // 인접 파트를 다시 이어 붙여서 pending 턴 원문과 맞는지 본다.
-        let idx = -1;
-        let span = 1;
-        for (let i = incomingUsers.length - 1; i >= 0; i -= 1) {
-            for (let len = 1; i + len <= incomingUsers.length; len += 1) {
-                if (incomingUsers.slice(i, i + len).join("\n\n") === content) {
-                    idx = i;
-                    span = len;
-                    break;
-                }
-                if (incomingUsers.slice(i, i + len).join("\n\n").length > content.length) break;
-            }
-            if (idx >= 0) break;
-        }
-        if (idx < 0) break;
-        incomingUsers.splice(idx, span);
-        turns.pop();
-    }
+    const poppedPending = consumeQueuedUserTurns(turns, turnMessages);
+    rescuePoppedAttachments(poppedPending, storedMessages);
 
     const last = turns[turns.length - 1];
     // 복구 턴은 기존 체크포인트와 새 실행분을 하나의 완료 턴으로 확정한다.
