@@ -136,6 +136,33 @@
             return String(n);
         }
     }
+    function i18nLocale() {
+        return T.i18n.getLang() === "ko" ? "ko-KR" : T.i18n.getLang() === "ja" ? "ja-JP" : "en-US";
+    }
+    function fmtMsgTime(at) {
+        const ms = Date.parse(at || "");
+        if (!Number.isFinite(ms)) return "";
+        try {
+            return new Intl.DateTimeFormat(i18nLocale(), { hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+        } catch (_) {
+            return "";
+        }
+    }
+    function fmtMsgTitle(at) {
+        const ms = Date.parse(at || "");
+        if (!Number.isFinite(ms)) return "";
+        try {
+            return new Intl.DateTimeFormat(i18nLocale(), { dateStyle: "medium", timeStyle: "medium" }).format(new Date(ms));
+        } catch (_) {
+            return "";
+        }
+    }
+    // 메시지 발화 시각 — 시각만 보이고 전체 날짜시각은 툴팁으로.
+    function msgTimeEl(at) {
+        const label = fmtMsgTime(at);
+        if (!label) return null;
+        return T.h("div", { class: "msg-time", text: label, title: fmtMsgTitle(at) });
+    }
     // 이미지 src: blob/data는 그대로, 파일 API는 쿼리 토큰을 붙인다.
     function setThumbSrc(img, pathOrUrl) {
         if (!pathOrUrl) return;
@@ -242,7 +269,7 @@
         return items?.length ? T.h("div", { class: "msg-atts" }, items.map(buildAttachmentTile)) : null;
     }
 
-    function buildUserMessage(text, imageUrl, optimistic, attachments) {
+    function buildUserMessage(text, imageUrl, optimistic, attachments, at) {
         const items = attachments && attachments.length ? attachments : imageUrl ? [{ objUrl: imageUrl, mime: "image/*" }] : [];
         const visibleText = displayUserText(text);
         const stack = T.h("div", { class: "msg-user-stack" });
@@ -252,6 +279,8 @@
             const bubble = T.h("div", { class: "bubble" }, [T.h("div", { class: "bubble-text", text: visibleText })]);
             stack.append(bubble);
         }
+        const time = msgTimeEl(at);
+        if (time) stack.append(time);
         return T.h("div", { class: "msg-row user" + (optimistic ? " optimistic" : "") }, [stack]);
     }
 
@@ -419,6 +448,8 @@
         const stack = T.h("div", { class: "msg-stack" }, [bubble]);
         const atts = buildMessageAttachments(o.attachments);
         if (atts) stack.append(atts);
+        const time = msgTimeEl(o.at);
+        if (time) stack.append(time);
         const row = T.h("div", { class: "msg-row assistant" }, [stack]);
         bindActionDock(row, actions, bubble);
         return row;
@@ -653,14 +684,16 @@
 
         visible.forEach((f, i) => {
             let el;
+            const msgAt = f.m.at || f.turn.at;
             if (f.m.role === "user") {
                 const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
-                el = buildUserMessage(text, f.m.imageUrl, false, f.m.attachments);
+                el = buildUserMessage(text, f.m.imageUrl, false, f.m.attachments, msgAt);
             } else {
                 el = buildAssistant(f.m.content || "", {
                     stats: lastOfTurn.get(f.turn) === i ? f.stats : null,
                     attachments: f.attachments,
                     allowRegen: i === lastA && !c.live,
+                    at: msgAt,
                 });
             }
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
@@ -670,7 +703,7 @@
 
         // 낙관적(미확정) 사용자 메시지
         for (const p of c.pending) {
-            const el = buildUserMessage(p.text, null, true, p.attachments);
+            const el = buildUserMessage(p.text, null, true, p.attachments, p.at);
             thread.append(el);
             watchBubble(el.querySelector(".bubble"));
         }
@@ -804,12 +837,12 @@
         }
         const c = state.conv(convId);
 
-        const pend = { text, attachments: atts, imageUrl: null };
+        const pend = { text, attachments: atts, imageUrl: null, at: new Date().toISOString() };
         c.pending.push(pend);
 
         // 빈 스레드 첫 진입이면 안내줄을 치운다
         thread.querySelector(".thread-intro")?.remove();
-        const el = buildUserMessage(text, null, true, atts);
+        const el = buildUserMessage(text, null, true, atts, pend.at);
         pend._el = el;
         thread.append(el);
         for (const p of c.pending) {

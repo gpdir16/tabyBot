@@ -242,7 +242,11 @@ export function extractTurnMessages(messages, fromIndex) {
     return messages
         .slice(fromIndex)
         .filter((m) => !isInternalStoredMessage(m))
-        .map(cloneStoredMessage);
+        .map((m) => {
+            // 첫 추출 시각을 발화 시각으로 — 원본에 남겨 다음 체크포인트에서도 유지한다.
+            if (typeof m.at !== "string" || !m.at) m.at = new Date().toISOString();
+            return cloneStoredMessage(m);
+        });
 }
 
 export function loadChatHistory(chatId) {
@@ -379,10 +383,11 @@ export function appendPendingUserTurn(chatId, userText, attachments = []) {
     const lastMsg = lastMsgs[lastMsgs.length - 1];
     if (lastMsgs.length === 1 && lastMsg?.role === "user" && lastMsg.content === text) return;
 
+    const now = new Date().toISOString();
     turns.push({
-        at: new Date().toISOString(),
+        at: now,
         status: "pending",
-        messages: [{ role: "user", content: text, ...(attachments.length ? { attachments } : {}) }],
+        messages: [{ role: "user", content: text, at: now, ...(attachments.length ? { attachments } : {}) }],
     });
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);

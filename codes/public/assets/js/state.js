@@ -300,6 +300,7 @@
                 return {
                     role: m.role,
                     content: displayUserText(textPart),
+                    at: typeof m.at === "string" ? m.at : null,
                     isParts,
                     imageUrl: m.imageUrl || null,
                     attachments: m.attachments || null,

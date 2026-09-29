@@ -688,6 +688,14 @@ kbd {
     word-break: break-word;
     overflow-wrap: anywhere;
 }
+/* 메시지 발화 시각 — 버블 아래 한 줄, 시각만 */
+.msg-time {
+    font-size: 11px;
+    line-height: 1.2;
+    color: var(--text-tertiary);
+    padding: 0 6px;
+    user-select: none;
+}
 .msg-atts .thumb {
     width: 86px;
     height: 86px;
