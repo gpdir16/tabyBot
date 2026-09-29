@@ -28,7 +28,8 @@
     function notifyIncoming(conversationId, body, tag, url) {
         if (!T.notifications) return;
         const title = (conversationId && state.botByUuid(conversationId)?.name) || "tabyBot";
-        T.notifications.show(title, body, tag, url);
+        // 대화 알림은 눌렀을 때 그 에이전트 스레드로 바로 연다.
+        T.notifications.show(title, body, tag, url || (conversationId ? `/a/${conversationId}` : ""));
     }
 
     const FRESH_LOAD_GAP_MS = 15000;
