@@ -193,3 +193,46 @@ export function getConversationDetail(id) {
     }
     return { ...meta, turns: toDisplayTurns(turns) };
 }
+
+// 메시지 전문 검색: 모든 에이전트의 활성 세션에서 표시용 발화 텍스트를 찾는다.
+// 반환 인덱스는 toDisplayTurns 기준 — 클라이언트는 같은 순서로 턴을 받으므로
+// turnIndex/messageIndex로 곧장 그 행을 찾을 수 있다.
+export function searchMessages(query, { limit = 30 } = {}) {
+    const q = String(query || "")
+        .trim()
+        .toLowerCase();
+    if (!q) return [];
+    const hits = [];
+    for (const agent of listAgents()) {
+        let turns;
+        try {
+            turns = toDisplayTurns(loadChatHistory(agent.uuid));
+        } catch {
+            continue;
+        }
+        for (let t = turns.length - 1; t >= 0; t--) {
+            const messages = turns[t].messages || [];
+            for (let m = messages.length - 1; m >= 0; m--) {
+                const msg = messages[m];
+                const text = typeof msg.content === "string" ? msg.content : "";
+                const idx = text.toLowerCase().indexOf(q);
+                if (idx === -1) continue;
+                const from = Math.max(0, idx - 60);
+                const to = Math.min(text.length, idx + q.length + 60);
+                hits.push({
+                    conversationId: agent.uuid,
+                    turnIndex: t,
+                    messageIndex: m,
+                    role: msg.role,
+                    at: msg.at || turns[t].at || null,
+                    snippet: `${from ? "…" : ""}${text.slice(from, to).replace(/\s+/g, " ")}${to < text.length ? "…" : ""}`,
+                });
+                if (hits.length >= limit * 4) break;
+            }
+            if (hits.length >= limit * 4) break;
+        }
+        if (hits.length >= limit * 4) break;
+    }
+    hits.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+    return hits.slice(0, limit);
+}

@@ -79,6 +79,7 @@
     const DICT = {
         en: {
             searchPlaceholder: "Search",
+            searchMsgs: "Messages",
             botNoJob: "No job yet",
             more: "More",
             lastBotTooltip: "The last bot cannot be deleted",
@@ -453,6 +454,7 @@
         },
         ko: {
             searchPlaceholder: "검색",
+            searchMsgs: "메시지",
             botNoJob: "아직 맡은 일이 없어요",
             more: "더보기",
             lastBotTooltip: "마지막 봇은 삭제할 수 없어요",
@@ -827,6 +829,7 @@
         },
         ja: {
             searchPlaceholder: "検索",
+            searchMsgs: "メッセージ",
             botNoJob: "担当業務なし",
             more: "その他",
             lastBotTooltip: "最後のボットは削除できません",

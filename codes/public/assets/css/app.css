@@ -696,6 +696,12 @@ kbd {
     padding: 0 6px;
     user-select: none;
 }
+/* 검색/딥링크로 점프한 메시지 강조 */
+.msg-highlight .bubble {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    transition: outline-color 1.5s ease;
+}
 .msg-atts .thumb {
     width: 86px;
     height: 86px;
@@ -3209,6 +3215,28 @@ body.resizing {
     font-size: var(--fs-s);
     color: var(--text-tertiary);
     text-align: center;
+}
+/* 메시지 검색 섹션 라벨 + 히트 행 */
+.sb-sec {
+    padding: 12px 10px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+.sb-hit .sb-hit-time {
+    margin-left: auto;
+    flex: none;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-tertiary);
+}
+.sb-hit-snippet mark {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 1px;
 }
 
 /* ── 헤더: 유리 오버레이(iOS 26 Liquid Glass) ───────────── */
