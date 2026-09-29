@@ -4,8 +4,8 @@ import { emit } from "../web/bus.js";
 const USER_SAY_DESCRIPTION = [
     "Deliver one chat message to the user mid-task, without ending your turn.",
     "Text written next to tool calls is internal and never reaches the user — this tool is the ONLY way to speak mid-task.",
-    "Use sparingly, only for something the user needs NOW: a warning before an irreversible action (what will change), a blocker only the user can resolve (for questions that need an answer, use user_ask), or a finding that cannot wait for the final reply.",
-    "Never use it for progress narration (what you did, are doing, or will do next) — just call the next tool.",
+    "Good reasons: a warning before an irreversible action (what will change), a blocker only the user can resolve (for questions that need an answer, use user_ask), a finding that cannot wait for the final reply, or a brief progress note at meaningful milestones during long multi-step work.",
+    "Keep it sparse — skip mechanical step narration ('clicked', 'retrying', 'page loaded') and do not post one per tool call.",
 ].join(" ");
 
 export const userSayToolDefinitions = [
