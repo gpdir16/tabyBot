@@ -487,14 +487,18 @@ export function startWebServer() {
         }
     });
 
+    // 미리보기 뷰어의 iframe이 inline 렌더를 요청할 때 허용하는 타입만 연다.
+    // 스크립트 실행 가능한 형식(svg/html 등)은 절대 inline으로 서빙하지 않는다.
+    const INLINE_PREVIEW_MIME = /^(video\/|audio\/|application\/pdf$)/i;
     router.add("GET", "/api/files/:id", (ctx) => {
         const file = getFile(ctx.params.id);
         if (!file) return ctx.json404();
         const stat = fs.statSync(file.filePath);
+        const inline = file.mime.startsWith("image/") || (ctx.query.inline === "1" && INLINE_PREVIEW_MIME.test(file.mime));
         ctx.res.writeHead(200, {
             "Content-Type": file.mime,
             "Content-Length": stat.size,
-            "Content-Disposition": file.mime.startsWith("image/") ? "inline" : `attachment; filename="${encodeURIComponent(file.name)}"`,
+            "Content-Disposition": inline ? "inline" : `attachment; filename="${encodeURIComponent(file.name)}"`,
             "Cache-Control": "private, max-age=3600",
         });
         fs.createReadStream(file.filePath)
