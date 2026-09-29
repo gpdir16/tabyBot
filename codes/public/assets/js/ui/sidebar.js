@@ -73,19 +73,30 @@
     }
 
     // 마지막 발화 → 없으면 "아직 맡은 일이 없어요". 미리보기 줄은 항상 채운다.
+    // 최신 순: 확인 전 낙관 메시지 → 실행 중 발화(중간 say/스트리밍) → 서버 메타 →
+    // 봇 목록 스냅샷 → 캐시된 턴.
     function previewOf(bot) {
         const c = state.conv(bot.uuid);
+        const pending = c?.pending || [];
+        for (let i = pending.length - 1; i >= 0; i--) {
+            if (pending[i]?.confirmed) continue;
+            const text = snippet(pending[i]?.text);
+            if (text) return text;
+        }
+        const live = c?.live;
+        const inter = live?.intermediate || [];
+        for (let i = inter.length - 1; i >= 0; i--) {
+            const text = snippet(inter[i]);
+            if (text) return text;
+        }
+        const liveText = snippet(live?.text);
+        if (liveText) return liveText;
         const fromMeta = snippet(c?.meta?.preview);
         if (fromMeta) return fromMeta;
         const fromBot = snippet(bot.preview);
         if (fromBot) return fromBot;
         const fromTurns = previewFromTurns(c?.turns);
         if (fromTurns) return fromTurns;
-        const pending = c?.pending || [];
-        for (let i = pending.length - 1; i >= 0; i--) {
-            const text = snippet(pending[i]?.text);
-            if (text) return text;
-        }
         return "";
     }
 
@@ -537,6 +548,15 @@
             hydratePreviews();
         });
         state.on("status", render); // 실행중 점
+        // 스트리밍 중 미리보기 갱신 — 토큰마다 전체를 다시 그리지 않게 짧게 묶는다.
+        let deltaTimer = null;
+        state.on("delta", () => {
+            if (deltaTimer) return;
+            deltaTimer = setTimeout(() => {
+                deltaTimer = null;
+                render();
+            }, 400);
+        });
         state.on("user_message", render);
         state.on("turn_done", render);
         state.on("settings", render);
