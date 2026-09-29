@@ -110,6 +110,10 @@
                       }),
                   ]);
             preview.addEventListener("click", () => {
+                if (T.viewer) {
+                    T.viewer.open({ name: a.name || t("file"), mime: a.mime, url: a.objUrl });
+                    return;
+                }
                 try {
                     window.open(a.objUrl, "_blank");
                 } catch (_) {}
