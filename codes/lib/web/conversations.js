@@ -138,7 +138,7 @@ function toDisplayTurns(rawTurns) {
                 if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
                     for (const said of sayTextsFromMessage(m)) {
                         if (isSilentMarkedText(said)) continue;
-                        messages.push({ role: "assistant", content: said });
+                        messages.push({ role: "assistant", content: said, ...(m.at ? { at: m.at } : {}) });
                     }
                     continue;
                 }
@@ -161,7 +161,14 @@ function toDisplayTurns(rawTurns) {
                 for (const part of content.slice(PENDING_PREFIX.length).split("\n\n")) {
                     const clean = stripAttachedFilesPrompt(part.trim());
                     if (clean || m.attachments?.length) {
-                        messages.push(publicUserMessage({ role: "user", content: clean, ...(m.attachments ? { attachments: m.attachments } : {}) }));
+                        messages.push(
+                            publicUserMessage({
+                                role: "user",
+                                content: clean,
+                                ...(m.at ? { at: m.at } : {}),
+                                ...(m.attachments ? { attachments: m.attachments } : {}),
+                            }),
+                        );
                     }
                 }
                 continue;
