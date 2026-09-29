@@ -243,14 +243,14 @@
     function buildAttachmentTile(attachment) {
         const src = attachment.objUrl || (attachment.id ? fileHref(attachment.id) : attachment.url || "");
         const name = attachment.name || t("file");
+        // 첨부 클릭은 새 탭/다운로드가 아니라 앱 내 미리보기 뷰어로 연다.
+        const openViewer = (resolved) => {
+            if (T.viewer) T.viewer.open({ name, mime: attachment.mime, url: resolved || src });
+        };
         if (attachment.mime?.startsWith("image/") || attachment.mime === "image/*") {
             const img = T.h("img", { class: "thumb", alt: name });
             setThumbSrc(img, src);
-            img.addEventListener("click", () => {
-                try {
-                    window.open(img.src || src, "_blank");
-                } catch (_) {}
-            });
+            img.addEventListener("click", () => openViewer(img.src));
             return img;
         }
         const meta = `${fileType(attachment.mime, name)}${formatSize(attachment.size) ? ` · ${formatSize(attachment.size)}` : ""}`;
@@ -260,6 +260,11 @@
             download: name,
             title: name,
             rel: "noopener",
+            onclick(e) {
+                if (!T.viewer) return;
+                e.preventDefault();
+                openViewer(src);
+            },
         });
         link.append(T.h("strong", { class: "file-name", text: name }), T.h("span", { class: "file-meta", text: meta }));
         return link;
