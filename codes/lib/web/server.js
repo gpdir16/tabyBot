@@ -44,6 +44,11 @@ import {
     DEFAULT_AGENT_NAME,
     getAgent,
     AVATAR_COLORS,
+    listFolders,
+    addFolder,
+    updateFolder,
+    removeFolder,
+    setFoldersOrder,
 } from "../agents-store.js";
 import {
     acceptHandoff,
@@ -212,6 +217,7 @@ function publicAgent(a) {
         thinkingLevel: a.thinkingLevel || "",
         color: a.color || agentColor(a.id),
         colorChoice: a.color || "",
+        folder: a.folder || "",
         createdAt: a.createdAt ?? null,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
     };
@@ -738,8 +744,10 @@ export function startWebServer() {
     });
 
     // ---- 봇(에이전트) ----
+    const agentsPayload = () => ({ agents: listAgents().map(publicAgent), folders: listFolders() });
+
     router.add("GET", "/api/agents", (ctx) => {
-        ctx.json200({ agents: listAgents().map(publicAgent) });
+        ctx.json200(agentsPayload());
     });
 
     router.add("POST", "/api/agents", async (ctx) => {
@@ -752,7 +760,7 @@ export function startWebServer() {
             color: body.color,
         });
         if (result.error) return ctx.json400(result.error);
-        ctx.json200({ agents: listAgents().map(publicAgent), agent: publicAgent(result.agent) });
+        ctx.json200({ ...agentsPayload(), agent: publicAgent(result.agent) });
     });
 
     router.add("PATCH", "/api/agents/:id", async (ctx) => {
@@ -764,6 +772,7 @@ export function startWebServer() {
             model: body.model,
             thinkingLevel: body.thinkingLevel,
             color: body.color,
+            folder: body.folder,
         });
         if (result.error) return ctx.json400(result.error);
         // 봇별 모델 오버라이드가 바뀌면 그 봇의 세션 압축 여부를 묻는다.
@@ -776,7 +785,7 @@ export function startWebServer() {
         ) {
             askSessionCompression(userConfig.language || "en", [result.agent.uuid]);
         }
-        ctx.json200({ agents: listAgents().map(publicAgent), agent: publicAgent(result.agent) });
+        ctx.json200({ ...agentsPayload(), agent: publicAgent(result.agent) });
     });
 
     router.add("DELETE", "/api/agents/:id", (ctx) => {
@@ -794,7 +803,37 @@ export function startWebServer() {
         void purgeAgentComputer(ctx.params.id).catch(() => {});
         if (purgeAgentTodos(ctx.params.id).changed) emit({ type: "todos_changed" });
         emit({ type: "conversations_changed" });
-        ctx.json200({ agents: listAgents().map(publicAgent) });
+        ctx.json200(agentsPayload());
+    });
+
+    // ---- 에이전트 폴더 ----
+    router.add("POST", "/api/folders", async (ctx) => {
+        const body = await ctx.json();
+        const result = addFolder({ name: body.name });
+        if (result.error) return ctx.json400(result.error);
+        ctx.json200({ ...agentsPayload(), folder: result.folder });
+    });
+
+    router.add("PATCH", "/api/folders/:id", async (ctx) => {
+        const body = await ctx.json();
+        const result = updateFolder(ctx.params.id, { name: body.name });
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error) return ctx.json400(result.error);
+        ctx.json200(agentsPayload());
+    });
+
+    router.add("DELETE", "/api/folders/:id", (ctx) => {
+        const result = removeFolder(ctx.params.id);
+        if (result.error) return ctx.json404();
+        ctx.json200(agentsPayload());
+    });
+
+    // 폴더 표시 순서를 통째로 바꾼다 — 사이드바 드래그/▲▼ 이동이 여기로 쓴다.
+    router.add("POST", "/api/folders/order", async (ctx) => {
+        const body = await ctx.json();
+        const result = setFoldersOrder(body.ids);
+        if (result.error) return ctx.json400(result.error);
+        ctx.json200(agentsPayload());
     });
 
     function todoPayload() {

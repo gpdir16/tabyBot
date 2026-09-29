@@ -141,6 +141,11 @@
         updateAgent: (id, b) => request("/api/agents/" + enc(id), { method: "PATCH", json: b }),
         deleteAgent: (id) => request("/api/agents/" + enc(id), { method: "DELETE" }),
 
+        createFolder: (b) => request("/api/folders", { method: "POST", json: b }),
+        updateFolder: (id, b) => request("/api/folders/" + enc(id), { method: "PATCH", json: b }),
+        deleteFolder: (id) => request("/api/folders/" + enc(id), { method: "DELETE" }),
+        orderFolders: (ids) => request("/api/folders/order", { method: "POST", json: { ids } }),
+
         todos: () => request("/api/todos"),
         createTodo: (b) => request("/api/todos", { method: "POST", json: b }),
         updateTodo: (todoId, b) => request("/api/todos/" + enc(todoId), { method: "PATCH", json: b }),

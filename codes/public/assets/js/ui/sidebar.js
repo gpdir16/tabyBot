@@ -169,11 +169,15 @@
         const row = T.h(
             "div",
             {
-                class: "bot-row" + (state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""),
+                class:
+                    "bot-row" +
+                    (folderOf(bot) ? " in-folder" : "") +
+                    (state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""),
                 "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? "true" : null,
                 role: "button",
                 "aria-label": `${bot.name}. ${previewText}`.trim(),
                 tabindex: "0",
+                draggable: "true",
             },
             [
                 T.h("span", { class: "bot-avatar", text: initials(bot.name), style: `background:${safeColor(bot.color)}` }),
@@ -193,6 +197,30 @@
                 e.preventDefault();
                 openBot(bot);
             }
+        });
+        row.addEventListener("dragstart", (e) => {
+            dragPayload = { type: "agent", id: bot.id };
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", bot.id);
+        });
+        row.addEventListener("dragend", () => {
+            dragPayload = null;
+            clearDrops();
+        });
+        // 다른 에이전트 위에 놓으면 그 행과 같은 폴더로 배정한다.
+        row.addEventListener("dragover", (e) => {
+            if (dragPayload?.type !== "agent" || dragPayload.id === bot.id) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            row.classList.add("drop-ok");
+        });
+        row.addEventListener("dragleave", () => row.classList.remove("drop-ok"));
+        row.addEventListener("drop", (e) => {
+            e.preventDefault();
+            row.classList.remove("drop-ok");
+            const p = dragPayload;
+            dragPayload = null;
+            if (p?.type === "agent" && p.id !== bot.id) void assignAgentFolder(p.id, folderOf(bot));
         });
         return row;
     }
@@ -284,7 +312,7 @@
         botMenu = null;
         if (botMenuBtn) botMenuBtn.setAttribute("aria-expanded", "false");
         botMenuBtn = null;
-        document.querySelectorAll(".bot-row.menu-open").forEach((el) => el.classList.remove("menu-open"));
+        document.querySelectorAll(".menu-open").forEach((el) => el.classList.remove("menu-open"));
         document.removeEventListener("pointerdown", onBotMenuPointer, true);
         document.removeEventListener("keydown", onBotMenuKey, true);
         if (T.tooltip) T.tooltip.hide();
@@ -305,37 +333,105 @@
         }
     }
 
+    function menuItem(label, onclick, opts = {}) {
+        return T.h("button", {
+            role: "menuitem",
+            class: opts.danger ? "danger" : null,
+            onclick(e) {
+                e.stopPropagation();
+                closeBotMenu();
+                onclick();
+            },
+            text: label,
+        });
+    }
+
+    function openMenuAt(btn, items, hostRow) {
+        const menu = T.h("div", { class: "menu bot-ctx-menu", role: "menu" }, items.filter(Boolean));
+        document.body.append(menu);
+        botMenu = menu;
+        botMenuBtn = btn;
+        btn.setAttribute("aria-expanded", "true");
+        hostRow?.classList.add("menu-open");
+        const r = btn.getBoundingClientRect();
+        const w = menu.offsetWidth;
+        const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+        const top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8);
+        menu.style.left = `${left}px`;
+        menu.style.top = `${Math.max(8, top)}px`;
+        document.addEventListener("pointerdown", onBotMenuPointer, true);
+        document.addEventListener("keydown", onBotMenuKey, true);
+        menu.querySelector("button")?.focus();
+        if (T.tooltip) T.tooltip.hide();
+    }
+
     function toggleBotMenu(btn, bot) {
         if (botMenu && botMenuBtn === btn) {
             closeBotMenu();
             return;
         }
         closeBotMenu();
-        const item = T.h("button", {
-            role: "menuitem",
-            text: t("botSettings"),
-            onclick(e) {
-                e.stopPropagation();
-                closeBotMenu();
+        const items = [
+            menuItem(t("botSettings"), () => {
                 // 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링된다.
                 settingsPush(bot.id);
-            },
-        });
-        botMenu = T.h("div", { class: "menu bot-ctx-menu", role: "menu" }, [item]);
-        document.body.append(botMenu);
-        botMenuBtn = btn;
-        btn.setAttribute("aria-expanded", "true");
-        btn.closest(".bot-row")?.classList.add("menu-open");
-        const r = btn.getBoundingClientRect();
-        const w = botMenu.offsetWidth;
-        const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-        const top = Math.min(r.bottom + 4, window.innerHeight - botMenu.offsetHeight - 8);
-        botMenu.style.left = `${left}px`;
-        botMenu.style.top = `${Math.max(8, top)}px`;
-        document.addEventListener("pointerdown", onBotMenuPointer, true);
-        document.addEventListener("keydown", onBotMenuKey, true);
-        item.focus();
-        if (T.tooltip) T.tooltip.hide();
+            }),
+        ];
+        // 폴더 이동: 폴더가 있으면 목록을 보여주고, 항상 "새 폴더로 이동"을 단다.
+        const folders = state.state.folders || [];
+        const current = folderOf(bot);
+        if (folders.length) {
+            items.push(T.h("div", { class: "menu-sep", role: "separator" }));
+            for (const f of folders) {
+                if (f.id === current) continue;
+                items.push(menuItem(`${f.name}`, () => void assignAgentFolder(bot.id, f.id)));
+            }
+            if (current) items.push(menuItem(t("folderUnassign"), () => void assignAgentFolder(bot.id, "")));
+        }
+        items.push(
+            menuItem(t("folderToNew"), () => {
+                pendingAssign = bot.id;
+                editingFolder = "new";
+                render();
+            }),
+        );
+        openMenuAt(btn, items, btn.closest(".bot-row"));
+    }
+
+    function toggleFolderMenu(btn, folder) {
+        if (botMenu && botMenuBtn === btn) {
+            closeBotMenu();
+            return;
+        }
+        closeBotMenu();
+        const folders = state.state.folders || [];
+        const idx = folders.findIndex((f) => f.id === folder.id);
+        const items = [
+            menuItem(t("folderRename"), () => {
+                editingFolder = folder.id;
+                render();
+            }),
+            idx > 0 ? menuItem(t("folderUp"), () => void moveFolderBefore(folder.id, folders[idx - 1].id)) : null,
+            idx < folders.length - 1
+                ? menuItem(t("folderDown"), () => void moveFolderBefore(folder.id, idx + 2 < folders.length ? folders[idx + 2].id : null))
+                : null,
+            T.h("div", { class: "menu-sep", role: "separator" }),
+            menuItem(
+                t("folderDelete"),
+                () => {
+                    void (async () => {
+                        try {
+                            const r = await T.api.deleteFolder(folder.id);
+                            state.applyAgents(r);
+                        } catch (err) {
+                            T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+                        }
+                    })();
+                },
+                { danger: true },
+            ),
+        ];
+        openMenuAt(btn, items, btn.closest(".sb-folder"));
     }
 
     /* ── 연결 상태 점: 끊겼을 때만 설정 옆에 빨간 점 ───────── */
@@ -423,6 +519,226 @@
         return state.state.convs.get(bot.uuid)?.meta?.updatedAt || "";
     }
 
+    /* ── 에이전트 폴더 ─────────────────────────────
+       서버 상태는 state.folders(순서=표시 순서)와 bot.folder.
+       접힘 상태·드래그 진행은 이 모듈의 로컬 상태다. */
+    const COLLAPSED_KEY = "tabybot.sidebar.folders.collapsed";
+    let collapsedIds = new Set(readCollapsed());
+    let dragPayload = null; // {type:"agent"|"folder", id}
+    let editingFolder = null; // 폴더 id(이름 변경) | "new"(생성) | null
+    let pendingAssign = null; // 새 폴더 생성이 끝나면 그 안에 넣을 에이전트 id
+
+    function readCollapsed() {
+        try {
+            const v = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "[]");
+            return Array.isArray(v) ? v : [];
+        } catch {
+            return [];
+        }
+    }
+    function saveCollapsed() {
+        try {
+            localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedIds]));
+        } catch (_) {}
+    }
+    function toggleCollapsed(id) {
+        if (collapsedIds.has(id)) collapsedIds.delete(id);
+        else collapsedIds.add(id);
+        saveCollapsed();
+        render();
+    }
+
+    // 존재하는 폴더 id만 인정한다 — 지워진 폴더를 가리키는 봇은 미분류로 본다.
+    function folderOf(bot) {
+        const f = String(bot?.folder || "");
+        return f && (state.state.folders || []).some((x) => x.id === f) ? f : "";
+    }
+
+    async function assignAgentFolder(agentId, folderId) {
+        try {
+            const r = await T.api.updateAgent(agentId, { folder: folderId || "" });
+            state.applyAgents(r);
+        } catch (err) {
+            T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+        }
+    }
+
+    // dragId 폴더를 beforeId 앞으로 옮긴다. beforeId=null이면 맨 끝.
+    async function moveFolderBefore(dragId, beforeId) {
+        const ids = (state.state.folders || []).map((f) => f.id).filter((id) => id !== dragId);
+        let idx = beforeId == null ? ids.length : ids.indexOf(beforeId);
+        if (idx < 0) idx = ids.length;
+        ids.splice(idx, 0, dragId);
+        try {
+            const r = await T.api.orderFolders(ids);
+            state.applyAgents(r);
+        } catch (err) {
+            T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+        }
+    }
+
+    function clearDrops() {
+        listEl.querySelectorAll(".drop-ok").forEach((el) => el.classList.remove("drop-ok"));
+    }
+
+    // folderId(null=미분류) 헤더를 드롭 대상으로 만든다.
+    // 에이전트 → 폴더 배정, 폴더 → 그 앞으로 순서 이동.
+    function attachDropTarget(el, folderId) {
+        el.addEventListener("dragover", (e) => {
+            if (!dragPayload) return;
+            if (dragPayload.type === "folder" && dragPayload.id === folderId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            el.classList.add("drop-ok");
+        });
+        el.addEventListener("dragleave", () => el.classList.remove("drop-ok"));
+        el.addEventListener("drop", (e) => {
+            e.preventDefault();
+            el.classList.remove("drop-ok");
+            const p = dragPayload;
+            dragPayload = null;
+            if (!p) return;
+            if (p.type === "agent") void assignAgentFolder(p.id, folderId);
+            else if (p.type === "folder" && p.id !== folderId) void moveFolderBefore(p.id, folderId);
+        });
+    }
+
+    /* 폴더 생성/이름 변경은 모달 없이 헤더 자리에 인라인 입력으로 처리한다. */
+    function buildFolderEditor(f) {
+        const input = T.h("input", {
+            class: "input sb-folder-input",
+            type: "text",
+            value: f?.name || "",
+            placeholder: t("folderNamePh"),
+            maxlength: "32",
+            spellcheck: "false",
+            "aria-label": t("folderNamePh"),
+        });
+        const row = T.h("div", { class: "sb-folder editing" }, [T.h("span", { class: "sb-folder-icon" }, [T.icon("folder", "icon-sm")]), input]);
+        let done = false;
+        const finish = (cancel) => {
+            if (done) return;
+            done = true;
+            editingFolder = null;
+            render();
+            if (cancel) return;
+            const name = input.value.trim();
+            if (!name) {
+                pendingAssign = null;
+                return;
+            }
+            void (async () => {
+                try {
+                    if (f) {
+                        const r = await T.api.updateFolder(f.id, { name });
+                        state.applyAgents(r);
+                    } else {
+                        const r = await T.api.createFolder({ name });
+                        state.applyAgents(r);
+                        if (pendingAssign && r?.folder?.id) {
+                            const rr = await T.api.updateAgent(pendingAssign, { folder: r.folder.id });
+                            state.applyAgents(rr);
+                        }
+                    }
+                } catch (err) {
+                    T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+                }
+                pendingAssign = null;
+            })();
+        };
+        input.addEventListener("keydown", (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") finish(false);
+            else if (e.key === "Escape") finish(true);
+        });
+        input.addEventListener("blur", () => finish(false));
+        requestAnimationFrame(() => input.focus());
+        return row;
+    }
+
+    function buildFolderHeader(f, count, collapsed) {
+        if (editingFolder === f.id) return buildFolderEditor(f);
+        const menuBtn = T.h(
+            "button",
+            {
+                class: "btn-icon btn-xs bot-more",
+                "data-tip": t("more"),
+                "aria-label": t("more"),
+                "aria-haspopup": "menu",
+                "aria-expanded": "false",
+                onclick(e) {
+                    e.stopPropagation();
+                    toggleFolderMenu(menuBtn, f);
+                },
+            },
+            [T.icon("more", "icon-sm")],
+        );
+        const row = T.h(
+            "div",
+            {
+                class: "sb-folder" + (collapsed ? " closed" : ""),
+                role: "button",
+                tabindex: "0",
+                draggable: "true",
+                "aria-expanded": String(!collapsed),
+                "aria-label": f.name,
+            },
+            [
+                T.h("span", { class: "sb-folder-chev" }, [T.icon("chevron", "icon-sm")]),
+                T.h("span", { class: "sb-folder-icon" }, [T.icon("folder", "icon-sm")]),
+                T.h("span", { class: "sb-folder-name", text: f.name }),
+                T.h("span", { class: "sb-folder-count", text: String(count) }),
+                T.h("span", { class: "bot-actions" }, [menuBtn]),
+            ],
+        );
+        row.addEventListener("click", () => toggleCollapsed(f.id));
+        row.addEventListener("keydown", (e) => {
+            if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
+                e.preventDefault();
+                toggleCollapsed(f.id);
+            }
+        });
+        row.addEventListener("dragstart", (e) => {
+            dragPayload = { type: "folder", id: f.id };
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", f.id);
+        });
+        row.addEventListener("dragend", () => {
+            dragPayload = null;
+            clearDrops();
+        });
+        attachDropTarget(row, f.id);
+        return row;
+    }
+
+    // 미분류 헤더: 폴더가 있을 때만 보인다. 접기 + 에이전트 빼기 드롭 대상.
+    function buildUncatHeader(count, collapsed) {
+        const row = T.h(
+            "div",
+            {
+                class: "sb-folder uncat" + (collapsed ? " closed" : ""),
+                role: "button",
+                tabindex: "0",
+                "aria-expanded": String(!collapsed),
+                "aria-label": t("folderUncat"),
+            },
+            [
+                T.h("span", { class: "sb-folder-chev" }, [T.icon("chevron", "icon-sm")]),
+                T.h("span", { class: "sb-folder-name", text: t("folderUncat") }),
+                T.h("span", { class: "sb-folder-count", text: String(count) }),
+            ],
+        );
+        row.addEventListener("click", () => toggleCollapsed("__none__"));
+        row.addEventListener("keydown", (e) => {
+            if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
+                e.preventDefault();
+                toggleCollapsed("__none__");
+            }
+        });
+        attachDropTarget(row, null);
+        return row;
+    }
+
     // 검색 히트 행: 에이전트 아바타 + 이름/시각 + 매치 스니펫
     function hitTime(at) {
         const ms = Date.parse(at || "");
@@ -478,13 +794,21 @@
     }
 
     /* ── 렌더 ───────────────────────────────────────────────── */
+    // 폴더가 없거나 검색 중이면 플랫 목록 — 검색 시엔 폴더 안 봇도 섞여야 한다.
     function render() {
         if (!listEl) return;
         listEl.replaceChildren();
         // 최근 메시지 순 — 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
         const bots = state.state.bots.filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
-        for (const bot of bots) listEl.append(buildRow(bot));
+        const folders = state.state.folders || [];
+        if (!folders.length && editingFolder !== "new") {
+            for (const bot of bots) listEl.append(buildRow(bot));
+        } else if (!query) {
+            renderGrouped(folders, bots);
+        } else {
+            for (const bot of bots) listEl.append(buildRow(bot));
+        }
         if (todosVisible()) listEl.append(buildTodosRow());
         if (query && msgResults?.length) {
             listEl.append(T.h("div", { class: "sb-sec", text: t("searchMsgs") }));
@@ -492,6 +816,46 @@
         }
         if (!listEl.children.length) {
             listEl.append(T.h("div", { class: "sb-empty", text: t("noBots") }));
+        }
+    }
+
+    // 폴더 그룹 모드: 폴더(순서대로) → 새 폴더 입력/버튼 → 미분류.
+    // 각 그룹 안의 봇 정렬은 위에서 이미 최신 순으로 끝난 상태를 쓴다.
+    function renderGrouped(folders, bots) {
+        const members = new Map();
+        const uncat = [];
+        for (const b of bots) {
+            const f = folderOf(b);
+            if (f) {
+                if (!members.has(f)) members.set(f, []);
+                members.get(f).push(b);
+            } else uncat.push(b);
+        }
+        for (const f of folders) {
+            const list = members.get(f.id) || [];
+            listEl.append(buildFolderHeader(f, list.length, collapsedIds.has(f.id)));
+            if (!collapsedIds.has(f.id)) for (const b of list) listEl.append(buildRow(b));
+        }
+        if (editingFolder === "new") listEl.append(buildFolderEditor(null));
+        listEl.append(
+            T.h(
+                "button",
+                {
+                    class: "sb-folder-new",
+                    type: "button",
+                    onclick() {
+                        pendingAssign = null;
+                        editingFolder = "new";
+                        render();
+                    },
+                },
+                [T.icon("plus", "icon-sm"), T.h("span", { text: t("folderNew") })],
+            ),
+        );
+        const uncatCollapsed = collapsedIds.has("__none__");
+        if (uncat.length) {
+            listEl.append(buildUncatHeader(uncat.length, uncatCollapsed));
+            if (!uncatCollapsed) for (const b of uncat) listEl.append(buildRow(b));
         }
     }
 
@@ -624,6 +988,7 @@
             render();
             hydratePreviews();
         });
+        state.on("folders", render);
         state.on("current", render);
         state.on("conversations", () => {
             render();
