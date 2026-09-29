@@ -705,7 +705,7 @@ kbd {
 .msg-atts .thumb {
     width: 86px;
     height: 86px;
-    margin: 8px 0;
+    /* margin: 8px 0; */
     object-fit: cover;
     border-radius: var(--radius-m);
     border: 1px solid var(--border);
