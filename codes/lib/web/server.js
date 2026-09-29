@@ -449,6 +449,12 @@ export function startWebServer() {
         ctx.json200({ ok: stopConversation(ctx.params.id) });
     });
 
+    router.add("GET", "/api/search/messages", (ctx) => {
+        const q = String(ctx.query.q || "");
+        if (!q.trim()) return ctx.json200({ results: [] });
+        ctx.json200({ results: conversationsStore.searchMessages(q) });
+    });
+
     // ---- 업로드/파일 ----
     router.add("POST", "/api/uploads", async (ctx) => {
         const mime = String(ctx.req.headers["content-type"] || "application/octet-stream")

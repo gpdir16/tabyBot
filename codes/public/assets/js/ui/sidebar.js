@@ -23,6 +23,27 @@
     const mobileMq = window.matchMedia("(max-width: 860px)");
 
     let query = "";
+    // 서버 메시지 전문 검색 결과 (검색어가 있을 때만 요청).
+    let msgResults = null;
+    let msgSeq = 0;
+    let msgTimer = null;
+
+    function scheduleMsgSearch() {
+        clearTimeout(msgTimer);
+        if (!query || state.state.offline) {
+            msgResults = null;
+            return;
+        }
+        const seq = ++msgSeq;
+        msgTimer = setTimeout(async () => {
+            try {
+                const r = await T.api.searchMessages(query);
+                if (seq !== msgSeq) return;
+                msgResults = r?.results || [];
+                render();
+            } catch (_) {}
+        }, 300);
+    }
 
     // 서버 색상은 UI 팔레트 해시 값이므로 CSS 주입을 막기 위해 형식을 강제한다.
     function safeColor(value) {
@@ -402,6 +423,60 @@
         return state.state.convs.get(bot.uuid)?.meta?.updatedAt || "";
     }
 
+    // 검색 히트 행: 에이전트 아바타 + 이름/시각 + 매치 스니펫
+    function hitTime(at) {
+        const ms = Date.parse(at || "");
+        if (!Number.isFinite(ms)) return "";
+        try {
+            const loc = T.i18n.getLang() === "ko" ? "ko-KR" : T.i18n.getLang() === "ja" ? "ja-JP" : "en-US";
+            return new Intl.DateTimeFormat(loc, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+        } catch {
+            return "";
+        }
+    }
+
+    function hitSnippetEl(hit) {
+        const el = T.h("span", { class: "bot-persona sb-hit-snippet" });
+        const s = String(hit.snippet || "");
+        const i = s.toLowerCase().indexOf(query.toLowerCase());
+        if (i === -1) {
+            el.textContent = s;
+        } else {
+            el.append(
+                document.createTextNode(s.slice(0, i)),
+                T.h("mark", { text: s.slice(i, i + query.length) }),
+                document.createTextNode(s.slice(i + query.length)),
+            );
+        }
+        return el;
+    }
+
+    function buildHitRow(hit) {
+        const bot = state.botByUuid(hit.conversationId);
+        const row = T.h("div", { class: "bot-row sb-hit", role: "button", tabindex: "0" }, [
+            T.h("span", { class: "bot-avatar", text: initials(bot?.name || "?"), style: `background:${safeColor(bot?.color)}` }),
+            T.h("span", { class: "bot-meta" }, [
+                T.h("span", { class: "bot-name" }, [
+                    document.createTextNode(bot?.name || ""),
+                    T.h("span", { class: "sb-hit-time", text: hitTime(hit.at) }),
+                ]),
+                hitSnippetEl(hit),
+            ]),
+        ]);
+        const go = () => {
+            void T.chat.openMessageTarget?.(hit.conversationId, hit.turnIndex, hit.messageIndex);
+            if (isMobile()) setMobileChat(true);
+        };
+        row.addEventListener("click", go);
+        row.addEventListener("keydown", (e) => {
+            if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
+                e.preventDefault();
+                go();
+            }
+        });
+        return row;
+    }
+
     /* ── 렌더 ───────────────────────────────────────────────── */
     function render() {
         if (!listEl) return;
@@ -411,6 +486,10 @@
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
         for (const bot of bots) listEl.append(buildRow(bot));
         if (todosVisible()) listEl.append(buildTodosRow());
+        if (query && msgResults?.length) {
+            listEl.append(T.h("div", { class: "sb-sec", text: t("searchMsgs") }));
+            for (const hit of msgResults) listEl.append(buildHitRow(hit));
+        }
         if (!listEl.children.length) {
             listEl.append(T.h("div", { class: "sb-empty", text: t("noBots") }));
         }
@@ -527,6 +606,9 @@
     function init() {
         searchEl.addEventListener("input", () => {
             query = searchEl.value.trim();
+            // 바뀐 검색어에 맞지 않는 이전 결과는 즉시 걷어낸다.
+            msgResults = null;
+            scheduleMsgSearch();
             render();
         });
         document.addEventListener("keydown", (e) => {
