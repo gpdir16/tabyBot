@@ -86,6 +86,10 @@ function eventTitle(event) {
     return agent?.name || "tabyBot";
 }
 
+function convUrl(id) {
+    return id ? `/a/${id}` : "/";
+}
+
 function payloadFor(event) {
     if (!event || typeof event !== "object") return null;
     if (event.type === "notice") {
@@ -94,19 +98,29 @@ function payloadFor(event) {
         return { title: "tabyBot", body: String(event.text || "").slice(0, 180), tag: "notice", url: "/" };
     }
     if (event.type === "ask") {
-        return { title: eventTitle(event), body: String(event.question || "").slice(0, 180), tag: `ask-${event.askId || ""}`, url: "/" };
+        return {
+            title: eventTitle(event),
+            body: String(event.question || "").slice(0, 180),
+            tag: `ask-${event.askId || ""}`,
+            url: convUrl(event.conversationId),
+        };
     }
     if (event.type === "say") {
         // 작업 중 명시 발화(user_say) — 최종 답변과 같은 태그로 묶어 알림을 합친다.
         const body = String(event.text || "").trim();
         if (!body || !event.conversationId) return null;
-        return { title: eventTitle(event), body: body.slice(0, 180), tag: `turn-${event.conversationId}`, url: "/" };
+        return { title: eventTitle(event), body: body.slice(0, 180), tag: `turn-${event.conversationId}`, url: convUrl(event.conversationId) };
     }
     if (event.type === "turn_done") {
         if (event.stopped || event.silent) return null;
         const body = String(event.text || event.error?.detail || "").trim();
         if (!body) return null;
-        return { title: eventTitle(event), body: body.slice(0, 180), tag: `turn-${event.conversationId || ""}`, url: "/" };
+        return {
+            title: eventTitle(event),
+            body: body.slice(0, 180),
+            tag: `turn-${event.conversationId || ""}`,
+            url: convUrl(event.conversationId),
+        };
     }
     if (event.type === "todo_due") {
         const body = [event.title || event.text || ""]
