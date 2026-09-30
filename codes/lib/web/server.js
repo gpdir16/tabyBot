@@ -496,11 +496,14 @@ export function startWebServer() {
     // 미리보기 뷰어의 iframe이 inline 렌더를 요청할 때 허용하는 타입만 연다.
     // 스크립트 실행 가능한 형식(svg/html 등)은 절대 inline으로 서빙하지 않는다.
     const INLINE_PREVIEW_MIME = /^(video\/|audio\/|application\/pdf$)/i;
+    // svg는 image/*지만 스크립트를 실행할 수 있어 직접 탭에서 열면 같은 오리진의
+    // 토큰이 털릴 수 있다. <img> 임베드는 실행되지 않아 안전하므로 다운로드로만보낸다.
+    const INLINE_IMAGE_MIME = /^image\/(?!svg)/i;
     router.add("GET", "/api/files/:id", (ctx) => {
         const file = getFile(ctx.params.id);
         if (!file) return ctx.json404();
         const stat = fs.statSync(file.filePath);
-        const inline = file.mime.startsWith("image/") || (ctx.query.inline === "1" && INLINE_PREVIEW_MIME.test(file.mime));
+        const inline = INLINE_IMAGE_MIME.test(file.mime) || (ctx.query.inline === "1" && INLINE_PREVIEW_MIME.test(file.mime));
         ctx.res.writeHead(200, {
             "Content-Type": file.mime,
             "Content-Length": stat.size,
