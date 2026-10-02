@@ -234,6 +234,19 @@ export function previewSnippetFromTurns(turns) {
     return "";
 }
 
+// 히스토리에서 가장 최근 발화 시각을 찾는다 — 목록 정렬(updatedAt)의 정본이다.
+// 파일 mtime은 압축·백필 같은 내부 쓰기에도 바뀌므로 정렬 근거로 쓰지 않는다.
+export function lastActivityAtFromTurns(turns) {
+    for (let i = (turns || []).length - 1; i >= 0; i--) {
+        const messages = turns[i]?.messages || [];
+        for (let j = messages.length - 1; j >= 0; j--) {
+            if (messages[j]?.at) return messages[j].at;
+        }
+        if (turns[i]?.at) return turns[i].at;
+    }
+    return "";
+}
+
 export function turnToMessages(turn) {
     return Array.isArray(turn?.messages) ? turn.messages : [];
 }
@@ -349,6 +362,8 @@ function writePreview(chatId, turns) {
         if (!manifest) return;
         const text = previewSnippetFromTurns(turns);
         if (text) manifest.preview = text;
+        const lastAt = lastActivityAtFromTurns(turns);
+        if (lastAt) manifest.lastActivityAt = lastAt;
         saveManifest(chatId, manifest);
     } catch (_) {}
 }

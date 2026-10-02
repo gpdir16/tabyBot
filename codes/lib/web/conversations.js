@@ -8,6 +8,7 @@ import {
     RECOVERY_PROMPT,
     conversationDir,
     isSilentMarkedText,
+    lastActivityAtFromTurns,
     loadChatHistory,
     previewSnippetFromTurns,
     sayTextsFromMessage,
@@ -59,20 +60,40 @@ function readMeta(id) {
     if (!mPath || !dir) return null;
     const manifest = readJson(mPath);
     if (!manifest?.activeSessionId) return null;
-    const updatedAt = Math.max(statTime(mPath), statTime(path.join(dir, "sessions", `${manifest.activeSessionId}.json`)));
     const createdAt = statTime(mPath, "birthtimeMs") || statTime(mPath);
+    // 목록 정렬은 실제 발화 시각(lastActivityAt)이 정본이다 — mtime은
+    // 압축·백필 같은 내부 쓰기에도 갱신돼 최신 순서를 깨뜨린다.
+    let lastActivityAt = typeof manifest.lastActivityAt === "string" ? manifest.lastActivityAt : "";
+    let turnsCache = null;
+    const ensureTurns = () => (turnsCache ??= loadChatHistory(id));
+    let manifestDirty = false;
+    if (!lastActivityAt) {
+        try {
+            lastActivityAt = lastActivityAtFromTurns(ensureTurns());
+            if (lastActivityAt) {
+                manifest.lastActivityAt = lastActivityAt;
+                manifestDirty = true;
+            }
+        } catch {
+            /* 세션 읽기 실패 시 mtime으로 폴백한다 */
+        }
+    }
+    const updatedAt = lastActivityAt || toIso(Math.max(statTime(mPath), statTime(path.join(dir, "sessions", `${manifest.activeSessionId}.json`))));
     let preview = typeof manifest.preview === "string" ? stripMarkdownForPreview(manifest.preview) : "";
     // preview가 없거나 빈 문자열이면 히스토리에서 마지막 발화를 채운다.
     if (!preview) {
         try {
-            preview = previewSnippetFromTurns(loadChatHistory(id));
+            preview = previewSnippetFromTurns(ensureTurns());
         } catch {
             preview = "";
         }
     }
     if (preview && manifest.preview !== preview) {
+        manifest.preview = preview;
+        manifestDirty = true;
+    }
+    if (manifestDirty) {
         try {
-            manifest.preview = preview;
             writeJson(mPath, manifest);
         } catch {
             /* 목록 응답은 유지 */
