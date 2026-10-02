@@ -296,6 +296,9 @@ kbd {
 .btn:disabled {
     opacity: 0.38;
 }
+.btn {
+    text-decoration: none;
+}
 .btn.primary {
     background: var(--accent);
     color: #fff;
@@ -695,6 +698,22 @@ kbd {
     color: var(--text-tertiary);
     padding: 0 6px;
     user-select: none;
+}
+/* 날짜가 바뀌는 지점의 구분선 — 메신저식 날짜 칩 */
+.date-sep {
+    display: flex;
+    justify-content: center;
+    margin: var(--sp-2) 0;
+    user-select: none;
+}
+.date-sep span {
+    padding: 3px 12px;
+    border-radius: var(--radius-pill);
+    background: var(--hover);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 /* 검색/딥링크로 점프한 메시지 강조 */
 .msg-highlight .bubble {
@@ -3240,104 +3259,83 @@ body.resizing {
     color: var(--text-tertiary);
     text-align: center;
 }
-/* 에이전트 폴더 헤더 + 새 폴더 버튼 + 드롭 대상 */
-.sb-folder {
+/* 에이전트 폴더 탭 바 — 메신저 폴더처럼 목록 위 가로 탭으로 필터링한다.
+   탭은 드래그로 순서 변경, 에이전트 행을 탭 위에 놓으면 그 폴더로 배정. */
+.sb-tabs {
     display: flex;
+    flex: none;
+    gap: 4px;
     align-items: center;
-    gap: 6px;
-    margin: 8px 4px 2px;
-    padding: 4px 6px;
-    border-radius: var(--radius-s);
+    padding: 0 var(--sp-3) 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.sb-tabs[hidden] {
+    display: none;
+}
+.sb-tabs::-webkit-scrollbar {
+    display: none;
+}
+.sb-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: var(--fs-xs);
     cursor: pointer;
+    white-space: nowrap;
     user-select: none;
     -webkit-user-select: none;
 }
-.sb-folder:hover {
-    background: var(--hover);
+.sb-tab:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
 }
-.sb-folder .bot-actions {
-    display: none;
+.sb-tab.active {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
 }
-.sb-folder:hover .bot-actions,
-.sb-folder:focus-within .bot-actions,
-.sb-folder.menu-open .bot-actions {
-    display: inline-flex;
+.sb-tab-count {
+    font-size: 10px;
+    opacity: 0.65;
 }
-.sb-folder-chev,
-.sb-folder-icon {
-    display: inline-flex;
-    flex: none;
-    width: 16px;
+.sb-tab .btn-icon {
+    width: 18px;
+    height: 18px;
+    margin: 0 -6px 0 -2px;
+    color: inherit;
+}
+.sb-tab-add {
+    width: 26px;
+    padding: 0;
     justify-content: center;
-}
-.sb-folder-chev .icon {
-    width: 12px;
-    height: 12px;
-    color: var(--text-tertiary);
-    transition: transform var(--dur-1) var(--ease);
-}
-.sb-folder.closed .sb-folder-chev .icon {
-    transform: rotate(-90deg);
-}
-.sb-folder-icon .icon {
-    width: 14px;
-    height: 14px;
     color: var(--text-tertiary);
 }
-.sb-folder-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.sb-folder-count {
-    flex: none;
-    color: var(--text-tertiary);
-    font-weight: 500;
-}
-.sb-folder.editing {
-    gap: 6px;
-}
-.sb-folder-input {
-    flex: 1;
-    min-width: 0;
-    height: 24px;
-    padding: 0 8px;
-    font-size: var(--fs-s);
-    text-transform: none;
-}
-.sb-folder-new {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    margin: 2px 4px;
-    padding: 4px 6px;
-    border-radius: var(--radius-s);
-    color: var(--text-tertiary);
-    font-size: var(--fs-xs);
-    text-align: left;
-    cursor: pointer;
-}
-.sb-folder-new:hover {
-    background: var(--hover);
+.sb-tab-add:hover {
     color: var(--text);
 }
-.sb-folder-new .icon {
-    width: 13px;
-    height: 13px;
+.sb-tab.editing {
+    padding: 0 4px;
 }
-.bot-row.in-folder {
-    margin-left: 18px;
+.sb-tab-input {
+    width: 110px;
+    height: 20px;
+    padding: 0 6px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--fs-xs);
 }
 .bot-row.drop-ok,
-.sb-folder.drop-ok {
+.sb-tab.drop-ok {
     outline: 1.5px dashed var(--accent);
     outline-offset: -2px;
     background: rgba(10, 132, 255, 0.08);
@@ -4507,9 +4505,7 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     align-items: center;
     justify-content: center;
     padding: var(--sp-5);
-    background: rgba(10, 10, 14, 0.35);
-    backdrop-filter: blur(12px) brightness(0.55);
-    -webkit-backdrop-filter: blur(12px) brightness(0.55);
+    backdrop-filter: blur(4px) brightness(0.3);
     animation: onbModalScrim var(--dur-1) var(--ease);
 }
 .fv-card {
@@ -4520,15 +4516,13 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     overflow: hidden;
     background: var(--surface);
     border-radius: var(--radius-l);
-    box-shadow: var(--shadow-pop);
     animation: onbModalIn var(--dur-2) var(--ease);
 }
 .fv-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--sp-3);
-    padding: var(--sp-3) var(--sp-4);
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
     border-bottom: 1px solid var(--border);
 }
 .fv-title {
@@ -4554,15 +4548,12 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     justify-content: center;
     min-height: 0;
     overflow: auto;
-    padding: var(--sp-4);
+    padding: var(--sp-2);
 }
 .fv-media {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-}
-.fv-img {
-    border-radius: var(--radius-s);
 }
 .fv-audio {
     width: min(480px, 100%);
