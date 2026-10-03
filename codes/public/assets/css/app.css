@@ -154,9 +154,10 @@ textarea,
     user-select: text;
 }
 
-/* 콘텐츠 링크/이미지의 iOS 롱프레스 콜아웃은 허용 (네이티브 컨텐츠 동작과 동일) */
+/* iOS 롱프레스 콜아웃은 커스텀 컨텍스트 메뉴(contextmenu.js)가 대신한다.
+   기본 콜아웃까지 허용하면 메뉴가 이중으로 뜨므로 여기서도 차단한다. */
 .md {
-    -webkit-touch-callout: default;
+    -webkit-touch-callout: none;
 }
 
 button {
