@@ -418,6 +418,7 @@
     T.i18n.applyStatic();
 
     T.sidebar.init();
+    T.ctxmenu?.init?.();
     T.tooltip.init();
     T.chat.init();
     T.composer.init();

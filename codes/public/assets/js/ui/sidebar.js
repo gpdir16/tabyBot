@@ -190,6 +190,11 @@
             ],
         );
         row.addEventListener("click", () => openBot(bot));
+        // 행 우클릭은 ⋯ 메뉴와 동일하게 동작한다(네이티브 리스트 동작).
+        row.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            toggleBotMenu(moreBtn, bot);
+        });
         row.addEventListener("keydown", (e) => {
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
                 e.preventDefault();
