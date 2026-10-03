@@ -547,6 +547,11 @@
         return f && (state.state.folders || []).some((x) => x.id === f) ? f : "";
     }
 
+    // 설정: "전체" 탭에서 폴더 소속 에이전트를 숨긴다(미분류만 표시).
+    function allExcludesFoldered() {
+        return state.state.settings?.allTabExcludesFoldered === true;
+    }
+
     async function assignAgentFolder(agentId, folderId) {
         try {
             const r = await T.api.updateAgent(agentId, { folder: folderId || "" });
@@ -721,6 +726,8 @@
         }
 
         // 고정 "전체" 탭 — 에이전트를 여기 놓으면 폴더에서 뺀다.
+        // allTabExcludesFoldered가 켜져 있으면 미분류 에이전트 수만 센다.
+        const allCount = allExcludesFoldered() ? state.state.bots.filter((b) => !folderOf(b)).length : state.state.bots.length;
         const allTab = T.h(
             "div",
             {
@@ -729,7 +736,7 @@
                 tabindex: "0",
                 "aria-selected": String(active === ""),
             },
-            [document.createTextNode(t("folderAll")), T.h("span", { class: "sb-tab-count", text: String(state.state.bots.length) })],
+            [document.createTextNode(t("folderAll")), T.h("span", { class: "sb-tab-count", text: String(allCount) })],
         );
         allTab.addEventListener("click", () => setActiveFolder(""));
         allTab.addEventListener("keydown", (e) => {
@@ -835,7 +842,7 @@
         const bots = state.state.bots.filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
         const active = query ? "" : activeFolderId();
-        const shown = active ? bots.filter((b) => folderOf(b) === active) : bots;
+        const shown = active ? bots.filter((b) => folderOf(b) === active) : allExcludesFoldered() ? bots.filter((b) => !folderOf(b)) : bots;
         for (const bot of shown) listEl.append(buildRow(bot));
         if ((!active || query) && todosVisible()) listEl.append(buildTodosRow());
         if (query && msgResults?.length) {

@@ -394,6 +394,14 @@
             ]),
         );
 
+        // 전체 탭에서 폴더 소속 에이전트 제외
+        sec.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("allTabExcludesFoldered") }),
+                switchEl(s.allTabExcludesFoldered, (v) => put({ allTabExcludesFoldered: v }), t("allTabExcludesFoldered")),
+            ]),
+        );
+
         // 알림 (클라이언트 전용: OS 알림 + 웹 푸시)
         if (T.notifications && typeof Notification !== "undefined") {
             sec.append(
