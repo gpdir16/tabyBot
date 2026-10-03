@@ -17,10 +17,23 @@ export function readSkillSummary(skillPath) {
     const text = fs.readFileSync(skillFile, "utf8");
     const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (fm) {
-        const desc = fm[1].match(/^description:\s*(.+)$/m);
+        const body = fm[1];
+        const desc = body.match(/^description:[ \t]*(.*)$/m);
         if (desc) {
-            const summary = renderSkillContent(desc[1].trim().replace(/^["']|["']$/g, ""));
-            return { name: path.basename(skillPath), summary };
+            let summary = desc[1].trim();
+            if (/^[|>][+-]?$/.test(summary)) {
+                // YAML 블록 스칼라(|, >, |-, >- 등): 들여쓴 뒤따르는 줄들이 실제 값이다.
+                const block = [];
+                for (const line of body.slice(desc.index + desc[0].length).split("\n")) {
+                    const t = line.trim();
+                    if (t && !/^\s/.test(line)) break; // 들여쓰기가 없으면 다른 키의 시작
+                    if (t) block.push(t);
+                }
+                summary = block.join(" ");
+            } else {
+                summary = summary.replace(/^["']|["']$/g, "");
+            }
+            return { name: path.basename(skillPath), summary: renderSkillContent(summary) };
         }
     }
     const firstLine =
@@ -34,7 +47,12 @@ export function readSkillSummary(skillPath) {
 export function collectAvailableSkills() {
     const skills = [];
     const seen = new Set();
-    for (const root of [SKILLS_SYSTEM_DIR, path.join(USER_DIR, "skills"), AGENTS_SKILLS_LINK]) {
+    for (const { root, source } of [
+        { root: SKILLS_SYSTEM_DIR, source: "system" },
+        { root: path.join(USER_DIR, "skills"), source: "user" },
+        // ~/.agents/skills는 다른 에이전트와 공유하는 디렉터리라 별도 소스로 표시한다.
+        { root: AGENTS_SKILLS_LINK, source: "shared" },
+    ]) {
         for (const dirName of listSkillDirs(root)) {
             if (seen.has(dirName)) continue;
             const summary = readSkillSummary(path.join(root, dirName));
@@ -43,7 +61,7 @@ export function collectAvailableSkills() {
                 skills.push({
                     name: summary.name,
                     summary: summary.summary,
-                    source: root === SKILLS_SYSTEM_DIR ? "system" : "user",
+                    source,
                 });
             }
         }
@@ -56,7 +74,7 @@ export function formatSkillsListForPrompt() {
     if (!skills.length) return "- (no skills installed)";
 
     const builtIn = skills.filter((s) => s.source === "system").sort((a, b) => a.name.localeCompare(b.name));
-    const user = skills.filter((s) => s.source === "user").sort((a, b) => a.name.localeCompare(b.name));
+    const user = skills.filter((s) => s.source !== "system").sort((a, b) => a.name.localeCompare(b.name));
     const lines = [];
     if (builtIn.length) {
         lines.push("### Built-in");
@@ -73,11 +91,11 @@ export function formatSkillsListForPrompt() {
 export function resolveSkillPath(name, source) {
     const roots = [];
     if (source === "system" || !source) roots.push({ root: SKILLS_SYSTEM_DIR, label: "system" });
-    if (source === "user" || !source) {
+    if (source !== "system" && source !== "shared") {
         roots.push({ root: path.join(USER_DIR, "skills"), label: "user" });
-        if (fs.existsSync(AGENTS_SKILLS_LINK)) {
-            roots.push({ root: AGENTS_SKILLS_LINK, label: "user" });
-        }
+    }
+    if (source !== "system" && fs.existsSync(AGENTS_SKILLS_LINK)) {
+        roots.push({ root: AGENTS_SKILLS_LINK, label: "shared" });
     }
 
     for (const { root, label } of roots) {

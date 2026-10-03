@@ -29,13 +29,23 @@
     let advOpen = null; // 에이전트 편집기의 고급 설정 펼침. null이면 페르소나 유무로 초기화
     let modelAdvOpen = false; // 모델 탭의 고급 설정 펼침
     let putChain = Promise.resolve();
+    let skillsCache = null; // GET /api/skills 응답의 skills 배열
+    let skillsLoading = false;
+    let skillsFailed = false;
+    let mcpCache = null; // GET /api/mcp 응답의 servers 배열
+    let mcpLoading = false;
+    let mcpFailed = false;
+    let skillEditing = null; // { mode:"new" } | { mode:"edit"|"view", name, source, builtin, content }
+    let mcpEditing = null; // { mode:"new" } | { mode:"edit", name }
+    let armSkillDelete = null; // "<source>:<name>" — 삭제 확인 2단계
+    let armMcpDelete = null; // name — 삭제 확인 2단계
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "provider", "model", "account", "selfimprovement", "agents"];
+    const TABS = ["general", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
     function routeFromPath() {
-        const m = /^\/s\/(general|provider|model|account|selfimprovement|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
+        const m = /^\/s\/(general|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
         if (!m) return null;
         const tab = m[1];
         let agentId = null;
@@ -80,6 +90,10 @@
         openTab = tab;
         editingAgent = agent;
         armDelete = null;
+        armSkillDelete = null;
+        armMcpDelete = null;
+        skillEditing = null;
+        mcpEditing = null;
         armCompressAll = false;
         advOpen = null;
         modelAdvOpen = false;
@@ -129,6 +143,16 @@
         modelsFailedKey = null;
         modelsReq++;
         providerChoice = null;
+        skillsCache = null;
+        skillsLoading = false;
+        skillsFailed = false;
+        mcpCache = null;
+        mcpLoading = false;
+        mcpFailed = false;
+        skillEditing = null;
+        mcpEditing = null;
+        armSkillDelete = null;
+        armMcpDelete = null;
         page.replaceChildren();
         if (mobileFromList) {
             mobileFromList = false;
@@ -211,6 +235,8 @@
             tabBtn("model", t("model")),
             tabBtn("account", t("account")),
             tabBtn("selfimprovement", t("selfImprovement")),
+            tabBtn("skills", t("skills")),
+            tabBtn("mcp", t("mcpTab")),
             T.h("hr", { class: "divider" }),
             ...agents.map(agentNavBtn),
             T.h("button", {
@@ -231,9 +257,13 @@
         else if (openTab === "model") buildModel(body);
         else if (openTab === "account") buildAccount(body);
         else if (openTab === "selfimprovement") buildSelfImprovement(body);
+        else if (openTab === "skills") buildSkills(body);
+        else if (openTab === "mcp") buildMcp(body);
         else buildAgents(body);
 
         page.append(head, T.h("div", { class: "sp-main" }, [nav, body]));
+        // 모바일 가로 탭바에서 활성 탭이 화면 밖에 있을 수 있으므로 보이게 스크롤한다.
+        nav.querySelector(".active")?.scrollIntoView({ block: "nearest", inline: "center" });
     }
 
     function tabBtn(id, label) {
@@ -1517,6 +1547,480 @@
         );
 
         body.append(sec);
+    }
+
+    /* ── 스킬 / MCP 탭 ────────────────────────────────────── */
+    async function loadSkillsList() {
+        if (skillsLoading) return;
+        skillsLoading = true;
+        try {
+            const r = await T.api.skills();
+            skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
+            skillsFailed = false;
+        } catch (err) {
+            skillsCache = [];
+            skillsFailed = true;
+            T.toast.show("error", T.api.errorText(err, t("loadFailed")));
+        } finally {
+            skillsLoading = false;
+            if (openTab === "skills") rebuildIfIdle();
+        }
+    }
+
+    async function loadMcpList() {
+        if (mcpLoading) return;
+        mcpLoading = true;
+        try {
+            const r = await T.api.mcpServers();
+            mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
+            mcpFailed = false;
+        } catch (err) {
+            mcpCache = [];
+            mcpFailed = true;
+            T.toast.show("error", T.api.errorText(err, t("loadFailed")));
+        } finally {
+            mcpLoading = false;
+            if (openTab === "mcp") rebuildIfIdle();
+        }
+    }
+
+    function skillSourceLabel(source) {
+        if (source === "system") return t("skillBuiltin");
+        if (source === "shared") return t("skillShared");
+        return t("skillUser");
+    }
+
+    function skillRow(sk) {
+        const key = `${sk.source}:${sk.name}`;
+        const actions = T.h("div", { class: "ext-actions" });
+        // 보기/편집 버튼 하나로 내용을 연다 — 시스템 스킬은 읽기 전용 뷰로만 열린다.
+        actions.append(
+            T.h("button", {
+                class: "btn ghost",
+                text: sk.builtin ? t("view") : t("edit"),
+                async onclick() {
+                    try {
+                        const r = await T.api.skill(sk.name, sk.source);
+                        skillEditing = {
+                            mode: r.builtin ? "view" : "edit",
+                            name: r.name,
+                            source: r.source,
+                            builtin: !!r.builtin,
+                            content: r.content || "",
+                        };
+                    } catch (err) {
+                        T.toast.show("error", T.api.errorText(err, t("loadFailed")));
+                        return;
+                    }
+                    build();
+                },
+            }),
+        );
+        if (!sk.builtin) {
+            const delBtn = T.h("button", {
+                class: "btn ghost" + (armSkillDelete === key ? " danger" : ""),
+                text: armSkillDelete === key ? t("deleteConfirm") : t("delete"),
+                onclick() {
+                    if (armSkillDelete !== key) {
+                        armSkillDelete = key;
+                        delBtn.classList.add("danger");
+                        delBtn.textContent = t("deleteConfirm");
+                        return;
+                    }
+                    delBtn.disabled = true;
+                    T.api
+                        .deleteSkill(sk.name, sk.source)
+                        .then((r) => {
+                            skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
+                            armSkillDelete = null;
+                            build();
+                        })
+                        .catch((err) => {
+                            delBtn.disabled = false;
+                            T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                        });
+                },
+            });
+            actions.append(delBtn);
+        }
+        return T.h("div", { class: "ext-row" }, [
+            T.h("div", { class: "ext-main" }, [
+                T.h("div", { class: "ext-name" }, [
+                    T.h("span", { class: "ext-nm", text: sk.name }),
+                    T.h("span", { class: "ext-badge", text: skillSourceLabel(sk.source) }),
+                ]),
+                sk.summary ? T.h("div", { class: "ext-sub", text: sk.summary }) : null,
+            ]),
+            actions,
+        ]);
+    }
+
+    // 스킬/MCP 편집 폼 공통 뼈대 — 제목 + 닫기 X + 필드 나열.
+    function formHead(title, onClose) {
+        return T.h("div", { class: "form-head" }, [
+            T.h("div", { class: "form-title", text: title }),
+            T.h(
+                "button",
+                {
+                    class: "btn-icon",
+                    type: "button",
+                    "aria-label": t("close"),
+                    onclick: onClose,
+                },
+                [T.icon("x")],
+            ),
+        ]);
+    }
+
+    function fieldOf(label, control, desc) {
+        return T.h("div", { class: "field" }, [fieldLabel(label), control, desc ? T.h("div", { class: "set-desc", text: desc }) : null]);
+    }
+
+    function skillForm() {
+        const editing = skillEditing;
+        const isNew = editing.mode === "new";
+        const readonly = editing.mode === "view" || editing.builtin === true;
+        const close = () => {
+            skillEditing = null;
+            build();
+        };
+        const form = T.h("div", { class: "agent-editor ext-form" });
+        form.append(formHead(isNew ? t("addSkill") : editing.name, close));
+
+        const nameInput = T.h("input", {
+            class: "input",
+            type: "text",
+            value: isNew ? "" : editing.name,
+            placeholder: "my-skill",
+            "aria-label": t("skillName"),
+        });
+        if (!isNew) nameInput.disabled = true;
+        nameInput.addEventListener("keydown", (e) => e.stopPropagation());
+        form.append(fieldOf(t("skillName"), nameInput, isNew ? t("skillNameDesc") : null));
+
+        const content = T.h("textarea", {
+            class: "textarea skill-md",
+            placeholder: "---\ndescription: What this skill does\n---\n",
+            "aria-label": t("skillContent"),
+            spellcheck: "false",
+        });
+        content.value = isNew ? "" : editing.content || "";
+        if (readonly) content.readOnly = true;
+        content.addEventListener("keydown", (e) => e.stopPropagation());
+        form.append(fieldOf("SKILL.md", content, readonly ? t("skillReadOnly") : null));
+
+        const actions = T.h("div", { class: "editor-actions" });
+        if (!readonly) {
+            const saveBtn = T.h("button", {
+                class: "btn primary",
+                text: t("save"),
+                async onclick() {
+                    const n = nameInput.value.trim();
+                    const c = content.value;
+                    if (!n || !c.trim()) {
+                        if (!n) nameInput.focus();
+                        else content.focus();
+                        return;
+                    }
+                    saveBtn.disabled = true;
+                    try {
+                        const r = isNew
+                            ? await T.api.createSkill({ name: n, content: c })
+                            : await T.api.updateSkill(editing.name, { source: editing.source, content: c });
+                        skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
+                        skillEditing = null;
+                        build();
+                    } catch (err) {
+                        saveBtn.disabled = false;
+                        T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                    }
+                },
+            });
+            actions.append(saveBtn);
+        }
+        actions.append(
+            T.h("button", {
+                class: "btn ghost",
+                text: readonly ? t("close") : t("cancel"),
+                onclick: close,
+            }),
+        );
+        form.append(actions);
+        return form;
+    }
+
+    function mcpStatusLabel(srv) {
+        const st = srv.status || {};
+        if (st.connected) return t("mcpConnected", { n: st.tools ?? 0 });
+        if (st.failed) return t("mcpFailed");
+        return t("mcpPending");
+    }
+
+    function mcpRow(srv) {
+        const actions = T.h("div", { class: "ext-actions" });
+        actions.append(
+            T.h("button", {
+                class: "btn ghost",
+                text: t("edit"),
+                onclick() {
+                    mcpEditing = { mode: "edit", name: srv.name };
+                    build();
+                },
+            }),
+        );
+        const delBtn = T.h("button", {
+            class: "btn ghost" + (armMcpDelete === srv.name ? " danger" : ""),
+            text: armMcpDelete === srv.name ? t("deleteConfirm") : t("delete"),
+            onclick() {
+                if (armMcpDelete !== srv.name) {
+                    armMcpDelete = srv.name;
+                    delBtn.classList.add("danger");
+                    delBtn.textContent = t("deleteConfirm");
+                    return;
+                }
+                delBtn.disabled = true;
+                T.api
+                    .deleteMcpServer(srv.name)
+                    .then((r) => {
+                        mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
+                        armMcpDelete = null;
+                        build();
+                    })
+                    .catch((err) => {
+                        delBtn.disabled = false;
+                        T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                    });
+            },
+        });
+        actions.append(delBtn);
+        const cmdLine = [srv.command, ...(srv.args || [])].filter(Boolean).join(" ");
+        const st = srv.status || {};
+        return T.h("div", { class: "ext-row" }, [
+            T.h("div", { class: "ext-main" }, [
+                T.h("div", { class: "ext-name" }, [
+                    T.h("span", { class: "ext-nm", text: srv.name }),
+                    T.h("span", { class: "ext-badge" + (st.connected ? " ok" : st.failed ? " bad" : ""), text: mcpStatusLabel(srv) }),
+                ]),
+                cmdLine ? T.h("div", { class: "ext-sub mono", text: cmdLine }) : null,
+            ]),
+            actions,
+        ]);
+    }
+
+    function mcpForm() {
+        const editing = mcpEditing;
+        const isNew = editing.mode === "new";
+        const srv = isNew ? null : (mcpCache || []).find((x) => x.name === editing.name) || { name: editing.name };
+        const close = () => {
+            mcpEditing = null;
+            build();
+        };
+        const form = T.h("div", { class: "agent-editor ext-form" });
+        form.append(formHead(isNew ? t("addMcpServer") : editing.name, close));
+
+        const nameInput = T.h("input", {
+            class: "input",
+            type: "text",
+            value: srv?.name || "",
+            placeholder: "my-server",
+            "aria-label": t("mcpName"),
+        });
+        if (!isNew) nameInput.disabled = true;
+        nameInput.addEventListener("keydown", (e) => e.stopPropagation());
+        form.append(fieldOf(t("mcpName"), nameInput, isNew ? t("mcpNameDesc") : null));
+
+        const cmdInput = T.h("input", {
+            class: "input",
+            type: "text",
+            value: srv?.command || "",
+            placeholder: "npx / uvx / node …",
+            "aria-label": t("mcpCommand"),
+        });
+        cmdInput.addEventListener("keydown", (e) => e.stopPropagation());
+        form.append(fieldOf(t("mcpCommand"), cmdInput, t("mcpCommandDesc")));
+
+        const argsInput = T.h("textarea", {
+            class: "textarea mcp-args",
+            "aria-label": t("mcpArgs"),
+            placeholder: "-y\n@scope/mcp-server",
+            spellcheck: "false",
+        });
+        argsInput.value = (srv?.args || []).join("\n");
+        argsInput.addEventListener("keydown", (e) => e.stopPropagation());
+        form.append(fieldOf(t("mcpArgs"), argsInput, t("mcpArgsDesc")));
+
+        // env 값은 서버가 내려주지 않는다(비밀) — 기존 키는 빈 값이면 유지, 새 값이면 교체, ✕면 삭제.
+        const removedKeys = new Set();
+        const envList = T.h("div", { class: "env-list" });
+        function envRow(key, existing) {
+            const keyInput = T.h("input", {
+                class: "input env-key",
+                type: "text",
+                value: key || "",
+                placeholder: t("mcpEnvKey"),
+                "aria-label": t("mcpEnvKey"),
+            });
+            if (existing) keyInput.disabled = true;
+            keyInput.addEventListener("keydown", (e) => e.stopPropagation());
+            const valInput = T.h("input", {
+                class: "input env-val",
+                type: existing ? "password" : "text",
+                value: "",
+                placeholder: existing ? t("mcpEnvKeep") : t("mcpEnvValue"),
+                "aria-label": t("mcpEnvValue"),
+            });
+            valInput.addEventListener("keydown", (e) => e.stopPropagation());
+            const row = T.h("div", { class: "env-row", dataset: { key: key || "", existing: existing ? "1" : "" } }, [
+                keyInput,
+                valInput,
+                T.h(
+                    "button",
+                    {
+                        class: "btn-icon btn-xs danger",
+                        type: "button",
+                        "aria-label": t("mcpEnvDelete"),
+                        onclick() {
+                            row.remove();
+                            if (existing && key) removedKeys.add(key);
+                        },
+                    },
+                    [T.icon("x")],
+                ),
+            ]);
+            return row;
+        }
+        for (const k of srv?.envKeys || []) envList.append(envRow(k, true));
+        const envField = T.h("div", { class: "field" }, [
+            T.h("div", { class: "env-head" }, [
+                fieldLabel(t("mcpEnv")),
+                T.h(
+                    "button",
+                    {
+                        class: "btn ghost btn-sm",
+                        type: "button",
+                        onclick() {
+                            const row = envRow("", false);
+                            envList.append(row);
+                            row.querySelector(".env-key")?.focus();
+                        },
+                    },
+                    [T.icon("plus"), document.createTextNode(t("mcpAddEnv"))],
+                ),
+            ]),
+            envList,
+            T.h("div", { class: "set-desc", text: isNew ? t("mcpEnvDesc") : t("mcpEnvKeepDesc") }),
+        ]);
+        form.append(envField);
+
+        const actions = T.h("div", { class: "editor-actions" });
+        const saveBtn = T.h("button", {
+            class: "btn primary",
+            text: t("save"),
+            async onclick() {
+                const n = nameInput.value.trim();
+                const command = cmdInput.value.trim();
+                if (!n || !command) {
+                    if (!n) nameInput.focus();
+                    else cmdInput.focus();
+                    return;
+                }
+                saveBtn.disabled = true;
+                const args = argsInput.value
+                    .split("\n")
+                    .map((l) => l.trim())
+                    .filter(Boolean);
+                const env = {};
+                for (const k of removedKeys) env[k] = null;
+                for (const row of envList.querySelectorAll(".env-row")) {
+                    const key = row.querySelector(".env-key").value.trim();
+                    const val = row.querySelector(".env-val").value;
+                    if (!key) continue;
+                    // 기존 키의 빈 값은 "유지"다 — 새 키만 빈 값 그대로 저장한다.
+                    if (row.dataset.existing) {
+                        if (val !== "") env[key] = val;
+                    } else env[key] = val;
+                }
+                try {
+                    const r = isNew
+                        ? await T.api.createMcpServer({ name: n, command, args, env })
+                        : await T.api.updateMcpServer(editing.name, { command, args, env });
+                    mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
+                    mcpEditing = null;
+                    build();
+                } catch (err) {
+                    saveBtn.disabled = false;
+                    T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                }
+            },
+        });
+        actions.append(
+            saveBtn,
+            T.h("button", {
+                class: "btn ghost",
+                text: t("cancel"),
+                onclick: close,
+            }),
+        );
+        form.append(actions);
+        return form;
+    }
+
+    function buildSkills(body) {
+        if (skillsCache === null && !skillsLoading && !skillsFailed) void loadSkillsList();
+        const ssec = T.h("div", { class: "set-section" });
+        ssec.append(T.h("div", { class: "set-desc", text: t("skillsDesc") }));
+        if (skillEditing) {
+            ssec.append(skillForm());
+        } else {
+            if (skillsCache === null) ssec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+            else if (!skillsCache.length) ssec.append(T.h("div", { class: "set-desc", text: t("skillsEmpty") }));
+            else for (const sk of skillsCache) ssec.append(skillRow(sk));
+            ssec.append(
+                T.h("div", { class: "ext-add" }, [
+                    T.h(
+                        "button",
+                        {
+                            class: "btn ghost",
+                            onclick() {
+                                skillEditing = { mode: "new" };
+                                build();
+                            },
+                        },
+                        [T.icon("plus"), document.createTextNode(t("addSkill"))],
+                    ),
+                ]),
+            );
+        }
+        body.append(ssec);
+    }
+
+    function buildMcp(body) {
+        if (mcpCache === null && !mcpLoading && !mcpFailed) void loadMcpList();
+        const msec = T.h("div", { class: "set-section" });
+        msec.append(T.h("div", { class: "set-desc", text: t("mcpDesc") }));
+        if (mcpEditing) {
+            msec.append(mcpForm());
+        } else {
+            if (mcpCache === null) msec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+            else if (!mcpCache.length) msec.append(T.h("div", { class: "set-desc", text: t("mcpEmpty") }));
+            else for (const srv of mcpCache) msec.append(mcpRow(srv));
+            msec.append(
+                T.h("div", { class: "ext-add" }, [
+                    T.h(
+                        "button",
+                        {
+                            class: "btn ghost",
+                            onclick() {
+                                mcpEditing = { mode: "new" };
+                                build();
+                            },
+                        },
+                        [T.icon("plus"), document.createTextNode(t("addMcpServer"))],
+                    ),
+                ]),
+            );
+        }
+        body.append(msec);
     }
 
     function buildAgents(body) {

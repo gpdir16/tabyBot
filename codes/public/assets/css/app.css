@@ -2760,6 +2760,136 @@ body.todos-route #btnAttach {
     flex: 1;
 }
 
+/* 스킬/MCP 목록 행(설정 → 스킬 & MCP) */
+.ext-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-1) 0;
+}
+.ext-main {
+    flex: 1;
+    min-width: 0;
+}
+.ext-name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.004em;
+}
+.ext-nm {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ext-sub {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ext-sub.mono {
+    font-family: var(--font-mono);
+}
+.ext-badge {
+    flex: none;
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-xs);
+    font-weight: 400;
+    color: var(--text-tertiary);
+}
+.ext-badge.ok {
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+.ext-badge.bad {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.ext-actions {
+    flex: none;
+    display: flex;
+    gap: var(--sp-1);
+}
+.ext-actions .btn {
+    height: 28px;
+    padding: 0 var(--sp-3);
+    font-size: var(--fs-s);
+}
+.env-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+.env-list:empty {
+    display: none;
+}
+.env-row {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr) auto;
+    align-items: center;
+    gap: var(--sp-2);
+}
+.env-row > .btn-icon {
+    justify-self: end;
+}
+.env-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+}
+.btn-sm {
+    height: 28px;
+    padding: 0 var(--sp-3);
+    font-size: var(--fs-xs);
+}
+.form-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--border);
+}
+.form-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ext-form {
+    gap: var(--sp-3);
+    padding-top: var(--sp-2);
+}
+.textarea.mcp-args {
+    min-height: 72px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.ext-add {
+    margin-top: var(--sp-2);
+}
+.textarea.skill-md {
+    min-height: 320px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    line-height: 1.5;
+    white-space: pre;
+}
+
 /* ── 12. 온보딩(풀페이지) ──────────────────────────────── */
 .onb-page {
     position: fixed;
@@ -3571,6 +3701,10 @@ body.sb-collapsed .btn-menu {
     textarea,
     select {
         -webkit-tap-highlight-color: transparent;
+    }
+    /* 롱프레스 메뉴는 손가락 아래에 열리므로 첫 항목에 포커스 링이 남지 않게 한다 */
+    .menu button:focus-visible {
+        box-shadow: none;
     }
 
     #app {
