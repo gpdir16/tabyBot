@@ -10,7 +10,8 @@ let syncing = null;
 
 const CONNECT_TIMEOUT_MS = 20_000;
 const RETRY_BACKOFF_MS = 60_000;
-const SERVER_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+// 이름은 mcp__<name>__<tool>의 구분자와 겹치면 안 되므로 연속 __를 금지한다.
+const SERVER_NAME_RE = /^(?!.*__)[A-Za-z0-9_-]{1,64}$/;
 
 function mcpToolName(serverName, toolName) {
     return `mcp__${serverName}__${toolName}`;
@@ -38,7 +39,7 @@ function mcpToolToOpenAI(serverName, tool) {
 
 // mcp.json이 깨져 있어도 부팅이 멈추지 않게 항목별로 검증해 걸러낸다.
 // name은 도구 이름 mcp__<name>__<tool>에 들어가므로 __ 포함을 금지한다.
-function validServerEntry(entry) {
+export function validServerEntry(entry) {
     return (
         entry &&
         typeof entry === "object" &&
@@ -147,6 +148,18 @@ export function syncMcpServers() {
         });
     }
     return syncing;
+}
+
+// 설정 GUI 상태 표시용: 연결된 서버는 도구 수, 실패한 서버는 실패 표시를 돌려준다.
+export function getMcpServerStatus() {
+    const out = {};
+    for (const [name, entry] of servers) {
+        out[name] = { connected: true, tools: entry.tools.length };
+    }
+    for (const name of failures.keys()) {
+        if (!out[name]) out[name] = { connected: false, failed: true };
+    }
+    return out;
 }
 
 export function getDynamicMcpToolDefinitions() {

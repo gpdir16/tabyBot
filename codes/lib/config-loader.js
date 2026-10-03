@@ -48,6 +48,11 @@ export function loadMcpConfig() {
     return readJson(userPath, { servers: [] });
 }
 
+export function saveMcpConfig(config) {
+    const filePath = path.join(USER_DIR, "mcp.json");
+    writeJsonAtomic(filePath, config);
+}
+
 export function loadUserConfig() {
     const filePath = path.join(USER_DIR, "config.json");
     return readJson(filePath, {

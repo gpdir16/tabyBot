@@ -141,6 +141,17 @@
         updateAgent: (id, b) => request("/api/agents/" + enc(id), { method: "PATCH", json: b }),
         deleteAgent: (id) => request("/api/agents/" + enc(id), { method: "DELETE" }),
 
+        skills: () => request("/api/skills"),
+        skill: (name, source) => request("/api/skills/" + enc(name) + (source ? "?source=" + enc(source) : "")),
+        createSkill: (b) => request("/api/skills", { method: "POST", json: b }),
+        updateSkill: (name, b) => request("/api/skills/" + enc(name), { method: "PUT", json: b }),
+        deleteSkill: (name, source) => request("/api/skills/" + enc(name) + (source ? "?source=" + enc(source) : ""), { method: "DELETE" }),
+
+        mcpServers: () => request("/api/mcp"),
+        createMcpServer: (b) => request("/api/mcp", { method: "POST", json: b }),
+        updateMcpServer: (name, b) => request("/api/mcp/" + enc(name), { method: "PUT", json: b }),
+        deleteMcpServer: (name) => request("/api/mcp/" + enc(name), { method: "DELETE" }),
+
         createFolder: (b) => request("/api/folders", { method: "POST", json: b }),
         updateFolder: (id, b) => request("/api/folders/" + enc(id), { method: "PATCH", json: b }),
         deleteFolder: (id) => request("/api/folders/" + enc(id), { method: "DELETE" }),
