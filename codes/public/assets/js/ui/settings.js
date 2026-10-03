@@ -1712,7 +1712,15 @@
                         if (s) state.setSettings(s);
                         await refreshBots();
                     }
-                    editingAgent = isNew && r?.agent?.id ? r.agent.id : agent?.id || firstAgentId();
+                    // 새 에이전트는 설정에 머물지 않고 그 봇의 채팅으로 바로 이동한다.
+                    if (isNew && r?.agent?.uuid) {
+                        try {
+                            history.pushState(null, "", `/a/${encodeURIComponent(r.agent.uuid)}`);
+                        } catch (_) {}
+                        T.app?.renderRoute();
+                        return;
+                    }
+                    editingAgent = agent?.id || firstAgentId();
                     armDelete = null;
                     syncPath();
                     build();
