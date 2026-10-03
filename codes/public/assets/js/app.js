@@ -132,11 +132,18 @@
     }
 
     /* ── 연결 상태 토스트 ───────────────────────────────────── */
+    let connToast = null;
     state.on("conn", (s) => {
-        if (s === "connected") wasConnected = true;
-        else if (s === "disconnected" && wasConnected && !state.state.offline) {
+        if (s === "connected") {
+            wasConnected = true;
+            // 재연결되면 끊김 알림은 남겨두지 않고 바로 지운다.
+            if (connToast) {
+                T.toast.dismiss(connToast);
+                connToast = null;
+            }
+        } else if (s === "disconnected" && wasConnected && !state.state.offline) {
             wasConnected = false;
-            T.toast.show("error", t("connectionLost"));
+            connToast = T.toast.show("error", t("connectionLost"));
         }
     });
 
