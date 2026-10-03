@@ -283,6 +283,7 @@ function buildSettingsPayload() {
         thinkingLevels: levels.map((value) => ({ value, label: thinkingLevelLabel(config.language || "en", value) })),
         showReplyFooter: config.showReplyFooter !== false,
         updateCheckEnabled: config.updateCheckEnabled !== false,
+        allTabExcludesFoldered: config.allTabExcludesFoldered === true,
         onboardingDismissed: config.onboardingDismissed === true,
         nsfwLevel: normalizeNsfwLevel(config.nsfwLevel),
         nsfwLevels: NSFW_LEVELS,
@@ -596,6 +597,7 @@ export function startWebServer() {
         }
         if (patch.showReplyFooter !== undefined) config.showReplyFooter = Boolean(patch.showReplyFooter);
         if (patch.updateCheckEnabled !== undefined) config.updateCheckEnabled = Boolean(patch.updateCheckEnabled);
+        if (patch.allTabExcludesFoldered !== undefined) config.allTabExcludesFoldered = Boolean(patch.allTabExcludesFoldered);
         if (patch.onboardingDismissed !== undefined) config.onboardingDismissed = Boolean(patch.onboardingDismissed);
         if (patch.timezone !== undefined) {
             const tz = String(patch.timezone || "").trim();
