@@ -893,6 +893,14 @@
             localStorage.setItem(k, v);
         } catch {}
     };
+    // 접힌 사이드바를 다시 펼친다(설정 화면의 펼치기 버튼 등에서 호출).
+    function expandSidebar() {
+        if (!collapsedState) return;
+        collapsedState = false;
+        lsSet(C_KEY, "0");
+        applyCollapsed(false);
+    }
+
     function initResize() {
         const savedW = Number(lsGet(W_KEY));
         if (savedW >= 240 && savedW <= 460) applyWidth(savedW);
@@ -932,10 +940,7 @@
                     showMobileList();
                     return;
                 }
-                if (!collapsedState) return;
-                collapsedState = false;
-                lsSet(C_KEY, "0");
-                applyCollapsed(false);
+                expandSidebar();
                 if (T.tooltip) T.tooltip.hide();
             });
         }
@@ -1011,5 +1016,5 @@
         render();
     }
 
-    T.sidebar = { init, hydrate: hydratePreviews, showChat: () => setMobileChat(true), showList: showMobileList, syncRoute };
+    T.sidebar = { init, hydrate: hydratePreviews, showChat: () => setMobileChat(true), showList: showMobileList, syncRoute, expand: expandSidebar };
 })((window.Taby = window.Taby || {}));
