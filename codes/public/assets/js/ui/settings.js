@@ -212,6 +212,19 @@
         page.replaceChildren();
 
         const head = T.h("header", { class: "sp-head" }, [
+            // 데스크톱에서 사이드바가 접힌 상태로 설정에 들어오면 채팅 헤더(메뉴 버튼)가
+            // 숨겨져 다시 펼칠 방법이 없다 — 접힌 때만 보이는 펼치기 버튼을 둔다.
+            T.h(
+                "button",
+                {
+                    class: "btn-icon sp-expand",
+                    "aria-label": t("menu"),
+                    onclick() {
+                        T.sidebar?.expand?.();
+                    },
+                },
+                [T.icon("menu")],
+            ),
             // 채팅 헤더의 뒤로 버튼과 동일: 목록 화면으로 돌아간 뒤 라우터가 화면을 맞춘다.
             T.h(
                 "button",

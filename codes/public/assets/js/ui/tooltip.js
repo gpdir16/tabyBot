@@ -22,7 +22,9 @@
         tooltipEl.textContent = text;
 
         const above = rect.top >= 42;
-        const left = Math.min(Math.max(rect.left + rect.width / 2, 12), window.innerWidth - 12);
+        // 툴팁은 left 중심 기준 translate(-50%)이므로 실제 너비의 절반만큼 양쪽 가장자리를 보장한다.
+        const half = tooltipEl.offsetWidth / 2;
+        const left = Math.min(Math.max(rect.left + rect.width / 2, half + 12), window.innerWidth - half - 12);
         tooltipEl.style.left = `${left}px`;
         tooltipEl.style.top = above ? `${rect.top - 7}px` : `${rect.bottom + 7}px`;
         tooltipEl.style.transform = `translate(-50%, ${above ? "-100%" : "0"}) translateY(${above ? "-2px" : "2px"})`;
