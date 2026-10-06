@@ -2269,13 +2269,23 @@
                 const fresh = cur.filter((row) => !seenSugIds.has(row.id));
                 if (fresh.length) {
                     const name = fresh[0].agentName || "";
-                    T.toast.show("info", name ? t("todosNewSuggest", { name }) : t("todosNewSuggestAnon"), () => {
-                        if (location.pathname !== "/t") {
-                            try {
-                                history.pushState(null, "", "/t");
-                            } catch (_) {}
-                        }
-                        T.app?.renderRoute?.();
+                    T.notices.alert({
+                        key: "todo-suggestion",
+                        title: t("todos"),
+                        text: name ? t("todosNewSuggest", { name }) : t("todosNewSuggestAnon"),
+                        actions: [
+                            {
+                                label: t("open"),
+                                run() {
+                                    if (location.pathname !== "/t") {
+                                        try {
+                                            history.pushState(null, "", "/t");
+                                        } catch (_) {}
+                                    }
+                                    T.app?.renderRoute?.();
+                                },
+                            },
+                        ],
                     });
                 }
             }

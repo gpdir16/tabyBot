@@ -30,9 +30,9 @@ const MESSAGES = {
         ja: "(出力なし)",
     },
     sessions_compress_ask: {
-        en: "Model changed — tap to compress sessions for a clean start.",
-        ko: "모델이 변경되었습니다 — 눌러서 세션 압축",
-        ja: "モデルが変更されました — タップしてセッションを圧縮",
+        en: "Model changed. Compress sessions for a clean start?",
+        ko: "모델이 변경되었습니다. 깔끔하게 시작하도록 세션을 압축할까요?",
+        ja: "モデルが変更されました。セッションを圧縮してすっきり始めますか？",
     },
 };
 

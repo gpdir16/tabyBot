@@ -781,6 +781,69 @@
         });
     }
 
+    // 다른 화면 요소(경고창 버튼 등)도 같은 햅틱을 쓴다.
+    T.haptic = haptic;
+
+    // 손가락을 따라가는 선택: root 안에서 누른 채 움직이면 손가락 아래의 selector 요소에 .hl이
+    // 옮겨 붙고(바뀔 때마다 햅틱), 손을 뗀 자리의 요소로 onPick이 불린다. 밖에서 떼면 아무 일도 없다.
+    // canStart(e)가 false면 그 터치는 추적하지 않는다(스크롤되는 본문에서 시작한 터치 등).
+    T.touchPick = function (root, selector, onPick, canStart) {
+        let tracking = false;
+        let cur = null;
+        const set = (el) => {
+            if (el === cur) return;
+            cur?.classList.remove("hl");
+            cur = el;
+            if (el) {
+                el.classList.add("hl");
+                haptic();
+            }
+        };
+        const at = (touch) => {
+            const el = document.elementFromPoint(touch.clientX, touch.clientY)?.closest?.(selector);
+            return el && root.contains(el) ? el : null;
+        };
+        root.addEventListener(
+            "touchstart",
+            (e) => {
+                tracking = e.touches.length === 1 && (!canStart || canStart(e));
+                set(tracking ? at(e.touches[0]) : null);
+            },
+            { passive: true },
+        );
+        root.addEventListener(
+            "touchmove",
+            (e) => {
+                if (!tracking) return;
+                if (e.cancelable) e.preventDefault();
+                set(e.touches[0] ? at(e.touches[0]) : null);
+            },
+            { passive: false },
+        );
+        root.addEventListener(
+            "touchend",
+            (e) => {
+                if (!tracking) return;
+                tracking = false;
+                const el = cur;
+                set(null);
+                if (!el) return;
+                // 여기서 실행했으니 뒤따르는 합성 클릭은 만들지 않는다(두 번 실행 방지).
+                if (e.cancelable) e.preventDefault();
+                onPick(el);
+            },
+            { passive: false },
+        );
+        root.addEventListener(
+            "touchcancel",
+            () => {
+                tracking = false;
+                set(null);
+            },
+            { passive: true },
+        );
+    };
+
     T.ctxmenu = {
         init,
         open,
