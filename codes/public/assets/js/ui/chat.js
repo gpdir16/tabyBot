@@ -724,6 +724,8 @@
                     at: msgAt,
                 });
             }
+            // 길게 누르기 메뉴의 "재생성" — hover 액션과 같은 조건(마지막 답변, 실행 중 아님).
+            if (f.m.role === "assistant" && i === lastA && !c.live) el.dataset.regen = "1";
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
             el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
             el.dataset.m = String(f.mi);
@@ -1135,5 +1137,5 @@
         refreshHeader();
     }
 
-    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget, isViewing };
+    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget, isViewing, regenerate };
 })((window.Taby = window.Taby || {}));

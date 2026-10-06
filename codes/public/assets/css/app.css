@@ -3214,6 +3214,284 @@ body.sb-collapsed .sp-expand {
     color: inherit;
 }
 
+/* 컨텍스트 메뉴(contextmenu.js).
+   팝오버: 데스크톱 우클릭/⋯ 버튼 — 포인터 옆의 작은 메뉴.
+   시트: 터치 길게 누르기 — 화면이 흐려지고 대상만 또렷이 남은 채 메뉴가 옆에서 튀어나온다. */
+.ctx-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    /* 자식은 모두 absolute라 배치에는 영향이 없다 — JS가 노치 높이를 읽는 용도 */
+    padding-top: env(safe-area-inset-top);
+    pointer-events: none;
+}
+.ctx-layer.sheet {
+    pointer-events: auto;
+    touch-action: none;
+}
+.ctx-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    backdrop-filter: blur(16px) saturate(1.3);
+    opacity: 0;
+    transition: opacity 220ms var(--ease);
+}
+[data-theme="light"] .ctx-backdrop {
+    background: rgba(0, 0, 0, 0.2);
+}
+.ctx-layer.in .ctx-backdrop {
+    opacity: 1;
+}
+.ctx-menu {
+    position: absolute;
+    min-width: 168px;
+    max-width: min(280px, calc(100vw - 16px));
+    /* 하위 메뉴 전환 때 옆으로 미끄러지는 내용이 삐져나오거나 스크롤바를 만들지 않게 자른다 */
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    box-shadow: var(--shadow-pop);
+    pointer-events: auto;
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+        opacity var(--dur-1) var(--ease),
+        transform var(--dur-1) var(--ease),
+        height 280ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+/* 메뉴 내용 한 장. 하위 메뉴로 들어가면 새 장이 오른쪽에서, 뒤로 가면 왼쪽에서 들어오고
+   이전 장은 반대쪽으로 밀려 나간다(--ctx-dx는 contextmenu.js가 방향에 맞춰 넣는다). */
+.ctx-pane {
+    max-height: calc(var(--app-height) - 16px);
+    padding: var(--sp-1);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(var(--ctx-dx, 0));
+    transition:
+        transform 280ms cubic-bezier(0.3, 0.9, 0.3, 1),
+        opacity 200ms var(--ease);
+}
+.ctx-pane-in {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+}
+.ctx-pane-out {
+    opacity: 0;
+    pointer-events: none;
+}
+.ctx-layer.in .ctx-menu {
+    opacity: 1;
+    transform: none;
+}
+.ctx-layer.closing .ctx-menu {
+    opacity: 0;
+    transform: scale(0.94);
+    /* 사라지는 중인 메뉴가 그 아래 버튼의 클릭을 가로채지 않게 */
+    pointer-events: none;
+}
+.ctx-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: var(--radius-s);
+    font-size: var(--fs-m);
+    text-align: left;
+    transition: background-color var(--dur-1) var(--ease);
+}
+.ctx-item:hover,
+.ctx-item:focus-visible,
+.ctx-item.hl {
+    background: var(--hover);
+    box-shadow: none;
+    outline: none;
+}
+.ctx-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ctx-item .icon {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--text-secondary);
+}
+.ctx-item .ctx-check {
+    color: var(--accent);
+}
+.ctx-item .ctx-more {
+    transform: rotate(-90deg);
+    color: var(--text-tertiary);
+}
+.ctx-item.ctx-back {
+    justify-content: flex-start;
+    gap: var(--sp-2);
+}
+.ctx-item .ctx-back-icon {
+    transform: rotate(90deg);
+}
+.ctx-item.danger,
+.ctx-item.danger .icon {
+    color: var(--danger);
+}
+.ctx-sep {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--border);
+}
+/* 시트: 유리 재질, 44px 행, 항목 사이 실선, 그룹 사이 굵은 띠 */
+.ctx-layer.sheet .ctx-menu {
+    width: 250px;
+    max-width: calc(100vw - 24px);
+    border: 0;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface-2) 78%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(1.8);
+    backdrop-filter: blur(30px) saturate(1.8);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    transform: scale(0.3);
+    transition:
+        opacity 160ms var(--ease),
+        transform 340ms cubic-bezier(0.2, 1.25, 0.4, 1),
+        top 320ms cubic-bezier(0.3, 0.9, 0.3, 1),
+        height 280ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.ctx-layer.sheet .ctx-pane {
+    max-height: calc(var(--app-height) - 24px);
+    padding: 0;
+}
+.ctx-layer.sheet.in .ctx-menu {
+    transform: none;
+}
+.ctx-layer.sheet.closing .ctx-menu {
+    transform: scale(0.6);
+    transition:
+        opacity 160ms var(--ease),
+        transform 200ms var(--ease);
+}
+.ctx-layer.sheet .ctx-item {
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 0;
+    font-size: 16px;
+    transition: none;
+}
+.ctx-layer.sheet .ctx-item + .ctx-item {
+    border-top: 0.5px solid var(--border-strong);
+}
+.ctx-layer.sheet .ctx-item:hover {
+    background: transparent;
+}
+/* 강조는 손가락 위치를 따라가는 .hl만 쓴다(:active는 처음 누른 항목에 붙어 따라오지 않는다) */
+.ctx-layer.sheet .ctx-item.hl {
+    background: var(--border-strong);
+}
+.ctx-layer.sheet .ctx-item .icon {
+    width: 20px;
+    height: 20px;
+    color: var(--text);
+}
+.ctx-layer.sheet .ctx-item.danger .icon {
+    color: var(--danger);
+}
+.ctx-layer.sheet .ctx-item .ctx-check {
+    color: var(--accent);
+}
+.ctx-layer.sheet .ctx-sep {
+    height: 8px;
+    margin: 0;
+    background: rgba(0, 0, 0, 0.28);
+}
+[data-theme="light"] .ctx-layer.sheet .ctx-sep {
+    background: rgba(0, 0, 0, 0.08);
+}
+/* 길게 누르는 동안 대상이 살짝 눌린다 */
+.ctx-pressing {
+    transform: scale(0.96) !important;
+    transition: transform 290ms cubic-bezier(0.2, 0.7, 0.3, 1) !important;
+}
+/* 메뉴가 열리면 대상의 복제본이 흐린 배경 위로 튀어 올라 카드처럼 뜬다.
+   눌린 크기(0.96)에서 시작해 살짝 넘쳤다가 자리 잡고, 닫힐 때는 제자리로 내려앉는다. */
+.ctx-lift {
+    position: absolute;
+    overflow: hidden;
+    pointer-events: none;
+    background-color: transparent;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+    transition:
+        transform 440ms cubic-bezier(0.2, 1.45, 0.35, 1),
+        border-radius 240ms var(--ease),
+        background-color 200ms var(--ease),
+        box-shadow 300ms var(--ease),
+        height 280ms cubic-bezier(0.3, 0.9, 0.3, 1);
+    will-change: transform;
+}
+.ctx-layer.in .ctx-lift {
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+}
+.ctx-layer.in .ctx-lift.card {
+    background-color: var(--surface);
+}
+/* 닫힐 때는 튕김 없이 제자리·제 모양으로 내려앉는다. 전환이 끝난 뒤 원본과 바꿔치기된다. */
+.ctx-layer.closing .ctx-lift {
+    transition:
+        transform 220ms cubic-bezier(0.25, 0.8, 0.3, 1),
+        border-radius 220ms cubic-bezier(0.25, 0.8, 0.3, 1),
+        background-color 200ms var(--ease),
+        box-shadow 180ms var(--ease),
+        height 220ms cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+.ctx-layer.closing .ctx-lift-in {
+    transition: transform 220ms cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+.ctx-lift-in {
+    transition: transform 280ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.ctx-clone {
+    flex: none !important;
+    max-width: none !important;
+    margin: 0 !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+/* 복제본이 떠 있는 동안 원본은 자리만 지킨다 */
+.ctx-source-hidden {
+    visibility: hidden !important;
+}
+.ctx-haptic {
+    position: fixed;
+    left: -200px;
+    top: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+/* 터치 기기: 메시지 본문을 길게 눌러도 글자 선택 대신 메뉴가 뜬다.
+   메뉴의 "텍스트 선택"을 고른 메시지(.selecting)만 선택할 수 있다. */
+@media (hover: none) and (pointer: coarse) {
+    .md,
+    .bubble-text,
+    .ask-q,
+    .ask-answer {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    .msg-row.selecting .md,
+    .msg-row.selecting .bubble-text {
+        -webkit-user-select: text;
+        user-select: text;
+    }
+}
+
 /* ── 14. 라이트 테마 보정 ──────────────────────────────── */
 [data-theme="light"] .codeblock {
     border-color: rgba(0, 0, 0, 0.18);
@@ -3385,17 +3663,6 @@ body.resizing {
         opacity: 0.35;
     }
 }
-.bot-actions {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 6px;
-}
-.bot-row:hover .bot-actions,
-.bot-row:focus-within .bot-actions,
-.bot-row.menu-open .bot-actions {
-    display: inline-flex;
-}
 .btn-xs {
     width: 26px;
     height: 26px;
@@ -3487,6 +3754,7 @@ body.resizing {
     display: none;
 }
 .bot-unread {
+    flex: none;
     display: inline-grid;
     place-items: center;
     min-width: 20px;
@@ -4062,18 +4330,6 @@ body.sb-collapsed .btn-menu {
         margin-top: 2px;
         font-size: 14px;
         line-height: 1.3;
-    }
-    .bot-actions {
-        align-self: center;
-        min-width: 44px;
-        min-height: 44px;
-        align-items: center;
-        justify-content: center;
-        opacity: 1;
-    }
-    .bot-more {
-        width: 44px;
-        height: 44px;
     }
     .sb-empty {
         margin: 24px 16px;

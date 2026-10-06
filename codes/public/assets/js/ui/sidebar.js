@@ -158,21 +158,6 @@
         const unread = unreadOf(bot);
         const empty = !preview;
         const previewText = empty ? t("botNoJob") : preview;
-        const moreBtn = T.h(
-            "button",
-            {
-                class: "btn-icon btn-xs bot-more",
-                "data-tip": t("more"),
-                "aria-label": t("more"),
-                "aria-haspopup": "menu",
-                "aria-expanded": "false",
-                onclick(e) {
-                    e.stopPropagation();
-                    toggleBotMenu(moreBtn, bot);
-                },
-            },
-            [T.icon("more", "icon-sm")],
-        );
         const row = T.h(
             "div",
             {
@@ -191,24 +176,18 @@
                     ]),
                     T.h("span", { class: "bot-persona" + (empty ? " is-empty" : ""), text: previewText }),
                 ]),
-                T.h("span", { class: "bot-actions" }, [
-                    unread
-                        ? T.h("span", {
-                              class: "bot-unread",
-                              text: unread > 99 ? "99+" : String(unread),
-                              "aria-label": t("unreadCount", { n: unread }),
-                          })
-                        : null,
-                    moreBtn,
-                ]),
+                unread
+                    ? T.h("span", {
+                          class: "bot-unread",
+                          text: unread > 99 ? "99+" : String(unread),
+                          "aria-label": t("unreadCount", { n: unread }),
+                      })
+                    : null,
             ],
         );
+        // 우클릭/길게 누르기 메뉴 — 메신저처럼 행에 따로 ⋯ 버튼을 두지 않는다.
+        T.ctxmenu.attach(row, () => botMenuItems(bot));
         row.addEventListener("click", () => openBot(bot));
-        // 행 우클릭은 ⋯ 메뉴와 동일하게 동작한다(네이티브 리스트 동작).
-        row.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-            toggleBotMenu(moreBtn, bot);
-        });
         row.addEventListener("keydown", (e) => {
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
                 e.preventDefault();
@@ -297,158 +276,46 @@
         T.app?.renderRoute();
     }
 
-    let botMenu = null;
-    let botMenuBtn = null;
-
-    function closeBotMenu() {
-        if (botMenu) botMenu.remove();
-        botMenu = null;
-        if (botMenuBtn) botMenuBtn.setAttribute("aria-expanded", "false");
-        botMenuBtn = null;
-        document.querySelectorAll(".menu-open").forEach((el) => el.classList.remove("menu-open"));
-        document.removeEventListener("pointerdown", onBotMenuPointer, true);
-        document.removeEventListener("keydown", onBotMenuKey, true);
-        if (T.tooltip) T.tooltip.hide();
-    }
-
-    function onBotMenuPointer(e) {
-        if (!botMenu) return;
-        if (botMenu.contains(e.target) || (botMenuBtn && botMenuBtn.contains(e.target))) return;
-        closeBotMenu();
-    }
-
-    function onBotMenuKey(e) {
-        if (e.key === "Escape") {
-            e.stopPropagation();
-            const btn = botMenuBtn;
-            closeBotMenu();
-            btn?.focus();
-        }
-    }
-
-    function menuItem(label, onclick, opts = {}) {
-        return T.h("button", {
-            role: "menuitem",
-            class: opts.danger ? "danger" : null,
-            onclick(e) {
-                e.stopPropagation();
-                closeBotMenu();
-                onclick();
-            },
-            text: label,
-        });
-    }
-
-    // 메뉴를 기준 버튼 아래에 놓고 화면 안으로 클램프한다(내용이 바뀌면 다시 부른다).
-    function placeMenu() {
-        if (!botMenu || !botMenuBtn) return;
-        const r = botMenuBtn.getBoundingClientRect();
-        const w = botMenu.offsetWidth;
-        const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-        const top = Math.min(r.bottom + 4, T.visibleHeight() - botMenu.offsetHeight - 8);
-        botMenu.style.left = `${left}px`;
-        botMenu.style.top = `${Math.max(8, top)}px`;
-    }
-
-    function openMenuAt(btn, items, hostRow) {
-        const menu = T.h("div", { class: "menu bot-ctx-menu", role: "menu" }, items.filter(Boolean));
-        document.body.append(menu);
-        botMenu = menu;
-        botMenuBtn = btn;
-        btn.setAttribute("aria-expanded", "true");
-        hostRow?.classList.add("menu-open");
-        placeMenu();
-        document.addEventListener("pointerdown", onBotMenuPointer, true);
-        document.addEventListener("keydown", onBotMenuKey, true);
-        menu.querySelector("button")?.focus();
-        if (T.tooltip) T.tooltip.hide();
-    }
-
-    function toggleBotMenu(btn, bot) {
-        if (botMenu && botMenuBtn === btn) {
-            closeBotMenu();
-            return;
-        }
-        closeBotMenu();
-        const items = [
-            menuItem(t("botSettings"), () => {
-                // 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링된다.
-                settingsPush(bot.id);
-            }),
-        ];
-        // "폴더에 추가…"는 메뉴 안에서 폴더 고르기 화면으로 넘어간다.
-        items.push(
-            T.h("button", {
-                role: "menuitem",
-                text: t("folderAdd"),
-                onclick(e) {
-                    e.stopPropagation();
-                    showFolderPicker(bot);
-                },
-            }),
-        );
-        openMenuAt(btn, items, btn.closest(".bot-row"));
-    }
-
-    // 열린 메뉴의 내용을 폴더 목록으로 바꾼다. 지금 들어 있는 폴더에는 체크가 붙고,
-    // 다시 누르면 폴더에서 뺀다. 맨 아래 "새 폴더"는 설정 → 폴더의 만들기 폼을
-    // 이 에이전트를 미리 고른 채로 연다. 폴더가 하나도 없으면 곧장 그 폼으로 간다.
-    function showFolderPicker(bot) {
+    /* ── 컨텍스트 메뉴 항목 ─────────────────────────────────
+       우클릭과 길게 누르기가 같은 항목을 쓴다. 각 엘리먼트에 T.ctxmenu.attach로 붙인다. */
+    function botMenuItems(bot) {
+        const newFolder = () => T.settingsUI.open({ tab: "folders", folderNew: true, folderAgent: bot.id });
         const folders = state.state.folders || [];
-        if (!folders.length) {
-            closeBotMenu();
-            T.settingsUI.open({ tab: "folders", folderNew: true, folderAgent: bot.id });
-            return;
-        }
-        const current = folderOf(bot);
-        const items = folders.map((f) =>
-            T.h(
-                "button",
-                {
-                    role: "menuitemradio",
-                    class: "menu-pick",
-                    "aria-checked": String(f.id === current),
-                    onclick(e) {
-                        e.stopPropagation();
-                        closeBotMenu();
-                        void assignAgentFolder(bot.id, f.id === current ? "" : f.id);
-                    },
-                },
-                [T.h("span", { class: "menu-pick-label", text: f.name }), f.id === current ? T.icon("check") : null],
-            ),
-        );
-        items.push(
-            T.h("div", { class: "menu-sep", role: "separator" }),
-            T.h(
-                "button",
-                {
-                    role: "menuitem",
-                    onclick(e) {
-                        e.stopPropagation();
-                        closeBotMenu();
-                        T.settingsUI.open({ tab: "folders", folderNew: true, folderAgent: bot.id });
-                    },
-                },
-                [T.icon("plus"), document.createTextNode(t("folderNew"))],
-            ),
-        );
-        botMenu.replaceChildren(...items);
-        placeMenu();
-        botMenu.querySelector("button")?.focus();
+        return [
+            // 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링된다.
+            { label: t("botSettings"), icon: "settings", defer: true, onSelect: () => settingsPush(bot.id) },
+            folders.length
+                ? { label: t("folderAdd"), icon: "folder", children: () => folderPickItems(bot, newFolder) }
+                : // 폴더가 하나도 없으면 고를 것이 없다 — 곧장 만들기 폼으로 간다.
+                  { label: t("folderAdd"), icon: "folder", defer: true, onSelect: newFolder },
+        ];
     }
 
-    // 폴더 탭 우클릭/길게 누르기: 설정 → 폴더로 보낸다. folder가 없으면("전체" 탭) 폴더 목록을 연다.
-    function toggleFolderMenu(tab, folder) {
-        if (botMenu && botMenuBtn === tab) {
-            closeBotMenu();
-            return;
-        }
-        closeBotMenu();
-        openMenuAt(
-            tab,
-            [menuItem(t(folder ? "folderEdit" : "folderManage"), () => T.settingsUI.open({ tab: "folders", folderId: folder?.id || null }))],
-            tab,
-        );
+    // "폴더에 추가…" 하위 메뉴: 지금 들어 있는 폴더에는 체크가 붙고, 다시 누르면 폴더에서 뺀다.
+    // 맨 아래 "새 폴더"는 설정 → 폴더의 만들기 폼을 이 에이전트를 미리 고른 채로 연다.
+    function folderPickItems(bot, newFolder) {
+        const current = folderOf(bot);
+        return [
+            ...(state.state.folders || []).map((f) => ({
+                label: f.name,
+                checked: f.id === current,
+                onSelect: () => void assignAgentFolder(bot.id, f.id === current ? "" : f.id),
+            })),
+            { sep: true },
+            { label: t("folderNew"), icon: "plus", defer: true, onSelect: newFolder },
+        ];
+    }
+
+    // 폴더 탭: 설정 → 폴더로 보낸다. "전체" 탭은 폴더 목록을, 폴더 탭은 그 폴더의 편집 폼을 연다.
+    function tabMenuItems(folderId) {
+        return [
+            {
+                label: t(folderId ? "folderEdit" : "folderManage"),
+                icon: "settings",
+                defer: true,
+                onSelect: () => T.settingsUI.open({ tab: "folders", folderId: folderId || null }),
+            },
+        ];
     }
 
     /* ── 연결 상태 점: 끊겼을 때만 설정 옆에 빨간 점 ───────── */
@@ -521,6 +388,8 @@
                 ]),
             ],
         );
+        // 할 일 행에는 따로 할 동작이 없지만, 목록의 다른 행과 똑같이 눌리고 떠오르게 한다.
+        T.ctxmenu.attach(row, () => [{ label: t("open"), icon: "list", defer: true, onSelect: openTodos }]);
         row.addEventListener("click", openTodos);
         row.addEventListener("keydown", (e) => {
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
@@ -583,24 +452,20 @@
         }
     }
 
-    function buildTab(id, name, folder) {
+    function buildTab(id, name) {
         const tab = T.h("div", { class: "sb-tab", role: "tab", tabindex: "0", title: name, dataset: { folder: id } }, [
             T.h("span", { class: "sb-tab-in" }, [
                 T.h("span", { class: "sb-tab-name", text: name }),
                 T.h("span", { class: "sb-tab-count", hidden: true }),
             ]),
         ]);
+        T.ctxmenu.attach(tab, () => tabMenuItems(id));
         tab.addEventListener("click", () => setActiveFolder(id));
         tab.addEventListener("keydown", (e) => {
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
                 e.preventDefault();
                 setActiveFolder(id);
             }
-        });
-        // 메신저처럼 우클릭/길게 눌러 폴더 편집으로 간다.
-        tab.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-            toggleFolderMenu(tab, folder);
         });
         return tab;
     }
@@ -751,7 +616,7 @@
         const rebuilt = sig !== tabsSig;
         if (rebuilt) {
             tabsSig = sig;
-            tabsEl.replaceChildren(...tabs.map((x) => buildTab(x.id, x.name, x.folder)), tabInd);
+            tabsEl.replaceChildren(...tabs.map((x) => buildTab(x.id, x.name)), tabInd);
         }
         const active = activeFolderId();
         // 활성 표시와 배지는 제자리에서 갱신한다. 배지가 생기면 탭 폭이 바뀌므로 밑줄도 다시 맞춘다.
