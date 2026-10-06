@@ -61,7 +61,7 @@
         const w = menu.offsetWidth;
         const hgt = menu.offsetHeight;
         menu.style.left = `${Math.min(Math.max(8, x), window.innerWidth - w - 8)}px`;
-        menu.style.top = `${Math.min(Math.max(8, y), window.innerHeight - hgt - 8)}px`;
+        menu.style.top = `${Math.min(Math.max(8, y), T.visibleHeight() - hgt - 8)}px`;
         document.addEventListener("pointerdown", onDocPointer, true);
         document.addEventListener("keydown", onDocKey, true);
         menu.querySelector("button")?.focus({ preventScroll: true });

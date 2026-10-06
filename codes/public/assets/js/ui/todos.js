@@ -1427,7 +1427,7 @@
             for (const b of others) pop.append(pick(b.id, b.name, b.color, null));
         }
         requestAnimationFrame(() => {
-            if (pop.isConnected && pop.getBoundingClientRect().bottom > window.innerHeight - 8) pop.classList.add("up");
+            if (pop.isConnected && pop.getBoundingClientRect().bottom > T.visibleHeight() - 8) pop.classList.add("up");
         });
         return pop;
     }

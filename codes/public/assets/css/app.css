@@ -3731,6 +3731,13 @@ body.sb-collapsed .btn-menu {
         touch-action: pan-x pan-y;
         isolation: isolate;
     }
+
+    .onb-page,
+    .onb-modal,
+    .fv-overlay {
+        bottom: auto;
+        height: var(--app-height);
+    }
     #sidebar,
     #main {
         position: absolute;
@@ -4087,8 +4094,7 @@ body.sb-collapsed .btn-menu {
         padding-bottom: 8px;
     }
 
-    /* iOS 26+ 반투명 키보드가 비추는 앱 바탕을 입력창 색으로 맞춘다 */
-    body.kb-open {
+    body.kb-open:has(#composerInput:focus) {
         background: var(--surface-2);
     }
 
@@ -4252,9 +4258,12 @@ body.sb-collapsed .btn-menu {
     #toasts {
         top: auto;
         right: 12px;
-        bottom: calc(76px + env(safe-area-inset-bottom));
+        bottom: calc(100% - var(--app-height) + 76px + env(safe-area-inset-bottom));
         left: 12px;
         transform: none;
+    }
+    body.kb-open #toasts {
+        bottom: calc(100% - var(--app-height) + 76px);
     }
 
     /* 모바일에서는 hover 상태를 만들지 않고 탭/활성 상태만 사용한다. */

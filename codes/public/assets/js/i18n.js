@@ -71,9 +71,16 @@
         }
     }
 
+    // 키보드를 뺀 실제로 보이는 높이. iOS는 키보드가 열려도 innerHeight가 줄지 않으므로
+    // 떠 있는 메뉴/팝오버를 화면 안으로 클램프할 때는 이 값을 기준으로 한다.
+    function visibleHeight() {
+        return Math.min(window.innerHeight, window.visualViewport?.height || Infinity);
+    }
+
     T.h = h;
     T.icon = icon;
     T.copyText = copyText;
+    T.visibleHeight = visibleHeight;
 
     /* ── i18n 사전 (en / ko / ja) ──────────────────────────── */
     const DICT = {

@@ -359,7 +359,7 @@
         const r = btn.getBoundingClientRect();
         const w = menu.offsetWidth;
         const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-        const top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8);
+        const top = Math.min(r.bottom + 4, T.visibleHeight() - menu.offsetHeight - 8);
         menu.style.left = `${left}px`;
         menu.style.top = `${Math.max(8, top)}px`;
         document.addEventListener("pointerdown", onBotMenuPointer, true);

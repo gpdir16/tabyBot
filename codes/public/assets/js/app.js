@@ -21,6 +21,10 @@
     let vvFullHeight = 0;
     // 이전 동기화 시점의 높이 (높이 변화 감지용)
     let vvLastHeight = 0;
+    let revealTimer = 0;
+    const REVEAL_DELAY_MS = 120;
+    const FOCUS_MARGIN = 12;
+    const NON_TEXT_INPUT = /^(button|checkbox|radio|range|color|file|submit|reset|image|hidden)$/;
 
     /* ── 테마 ───────────────────────────────────────────────── */
     function applyTheme(theme) {
@@ -43,28 +47,18 @@
             return null;
         }
     }
-    // 모바일 키보드 대응:
-    // 1) visual viewport 높이에 맞춰 --app-height를 다시 계산하고,
-    // 2) iOS/Android가 키보드가 열리면 시각 뷰포트를 위로 밀어올리는데
-    //    (position:fixed로도 막히지 않음) 밀린 만큼(offsetTop) body를
-    //    아래로 내려 #app이 계속 보이도록 보정한다.
     function syncViewportHeight() {
+        if (window.scrollY) window.scrollTo(0, 0);
         const vv = window.visualViewport;
-        const height = vv?.height || window.innerHeight;
-        const anchoring = vvLastHeight && Math.abs(height - vvLastHeight) > 1;
-        // 레이아웃 변경 전에 "스크롤 끝에서부터의 거리"를 기록한다(거리는 컨텐츠 기준이라
-        // 뷰포트 높이와 무관). 열림/닫힘 모두 이 거리를 유지하도록 계산한다.
-        const anchors = anchoring
+        const height = Math.round(vv?.height || window.innerHeight);
+        const changed = vvLastHeight && Math.abs(height - vvLastHeight) > 1;
+        const anchors = changed
             ? [...document.querySelectorAll("#scroller, .sb-scroll")].map((el) => ({
                   el,
                   fromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
               }))
             : [];
-        // 스크롤 계산 전에 레이아웃을 최종 상태로 만든다. kb-open 패딩 변화까지
-        // 반영된 뒤 계산해야 컴포저 위 내용이 정확히 붙는다.
-        document.documentElement.style.setProperty("--app-height", `${Math.round(height)}px`);
-        // 키보드 없는 상태의 최대 높이를 기준으로 삼고, 그보다 100px 이상
-        // 줄어들면 키보드가 열린 것으로 본다 (브라우저 UI 변화는 ~80px 이하).
+        document.documentElement.style.setProperty("--app-height", `${height}px`);
         if (vv) {
             if (height > vvFullHeight) vvFullHeight = height;
             document.body.classList.toggle("kb-open", vvFullHeight - height > 100);
@@ -73,13 +67,42 @@
             document.body.classList.remove("kb-open");
         }
         vvLastHeight = height;
-        if (anchoring) {
-            // 최종 레이아웃 기준으로 하단 고정 거리를 복원한다.
+        if (changed) {
             for (const { el, fromBottom } of anchors) {
                 el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom;
             }
+            clearTimeout(revealTimer);
+            revealTimer = setTimeout(revealFocusedInput, REVEAL_DELAY_MS);
         }
         document.body.style.transform = vv?.offsetTop ? `translateY(${Math.round(vv.offsetTop)}px)` : "";
+    }
+
+    function isTextEntry(el) {
+        if (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
+        return el.tagName === "INPUT" && !NON_TEXT_INPUT.test(el.type);
+    }
+
+    function revealFocusedInput() {
+        const el = document.activeElement;
+        if (!el || !document.body.classList.contains("kb-open") || !isTextEntry(el)) return;
+        const vv = window.visualViewport;
+        const vvTop = vv?.offsetTop || 0;
+        const vvBottom = vvTop + (vv?.height || window.innerHeight);
+        for (let box = el.parentElement; box && box !== document.body; box = box.parentElement) {
+            const s = getComputedStyle(box);
+            if (s.overflowY !== "auto" && s.overflowY !== "scroll") continue;
+            if (box.scrollHeight <= box.clientHeight + 1) continue;
+            const r = el.getBoundingClientRect();
+            const b = box.getBoundingClientRect();
+            const top = Math.max(b.top + box.clientTop + parseFloat(s.paddingTop), vvTop) + FOCUS_MARGIN;
+            const bottom = Math.min(b.top + box.clientTop + box.clientHeight - parseFloat(s.paddingBottom), vvBottom) - FOCUS_MARGIN;
+            let delta = 0;
+            // 입력이 보이는 범위보다 크면 윗부분이 보이도록 위쪽 기준을 우선한다.
+            if (r.bottom > bottom) delta = Math.max(0, Math.min(r.bottom - bottom, r.top - top));
+            else if (r.top < top) delta = r.top - top;
+            if (delta) box.scrollBy({ top: delta, behavior: "smooth" });
+            return;
+        }
     }
 
     function initViewportHeight() {
@@ -97,6 +120,8 @@
         );
         window.visualViewport?.addEventListener("resize", syncViewportHeight, { passive: true });
         window.visualViewport?.addEventListener("scroll", syncViewportHeight, { passive: true });
+        window.addEventListener("scroll", syncViewportHeight, { passive: true });
+        document.addEventListener("focusin", () => requestAnimationFrame(revealFocusedInput));
     }
 
     // 컴포저(하단 유리 바) 높이를 CSS 변수로 동기화한다.
