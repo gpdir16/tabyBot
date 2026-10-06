@@ -1006,6 +1006,29 @@
         } catch (_) {}
     }
 
+    /* ── 읽음 처리 ──────────────────────────────────────────── */
+    // 사용자가 지금 이 대화를 실제로 보고 있는가: 현재 대화이고, 채팅 화면이 떠 있고
+    // (모바일은 목록이 아닌 채팅 패널), 탭이 보이는 상태.
+    const mobileMq = window.matchMedia("(max-width: 860px)");
+    function isViewing(id) {
+        if (!id || id !== state.state.currentId || document.hidden || !chatVisible()) return false;
+        return !mobileMq.matches || document.body.classList.contains("mobile-chat");
+    }
+
+    // 보고 있는 대화에 안 읽은 발화가 있으면 서버에 읽음으로 알린다(다른 기기 배지도 지워진다).
+    const readInFlight = new Set();
+    function syncRead() {
+        const id = state.state.currentId;
+        if (!isViewing(id) || state.state.offline || readInFlight.has(id)) return;
+        if (!(Number(state.state.convs.get(id)?.meta?.unread) > 0)) return;
+        readInFlight.add(id);
+        state.upsertMeta({ id, unread: 0 });
+        T.api
+            .markRead(id)
+            .catch(() => {})
+            .finally(() => readInFlight.delete(id));
+    }
+
     /* ── 헤더(봇 아바타/이름) ────────────────────────────────── */
     function refreshHeader() {
         // 컴퓨터 뷰가 열려 있으면 헤더/타이틀은 그 페이지가 소유한다.
@@ -1069,6 +1092,9 @@
             refreshHeader();
         });
 
+        state.on("conversations", syncRead);
+        state.on("current", syncRead);
+
         T.i18n.onChange(() => {
             renderConversation();
         });
@@ -1078,6 +1104,8 @@
         // 다시 보이는 시점에 마지막으로 기억한 위치를 복원한다.
         let chatShown = chatVisible();
         new MutationObserver(() => {
+            // 화면 전환(목록↔채팅, 설정 닫힘 등)으로 대화가 보이게 됐으면 읽음 처리한다.
+            syncRead();
             const shown = chatVisible();
             if (shown === chatShown) return;
             chatShown = shown;
@@ -1100,11 +1128,12 @@
             if (!document.hidden) {
                 const c = state.currentConv();
                 if (c && c.live) applySync();
+                syncRead();
             }
         });
 
         refreshHeader();
     }
 
-    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget };
+    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget, isViewing };
 })((window.Taby = window.Taby || {}));

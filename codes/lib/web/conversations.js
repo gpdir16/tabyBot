@@ -10,6 +10,7 @@ import {
     isSilentMarkedText,
     lastActivityAtFromTurns,
     loadChatHistory,
+    markChatRead,
     previewSnippetFromTurns,
     sayTextsFromMessage,
     stripMarkdownForPreview,
@@ -107,7 +108,15 @@ function readMeta(id) {
         updatedAt: toIso(updatedAt),
         // 클라이언트가 SSE 재접속 사이에 놓친 turn_done을 정합한다.
         running: isAgentSessionRunning(id),
+        // 사용자가 아직 읽지 않은 에이전트 발화 수(사이드바 배지).
+        unread: Number(manifest.unread) > 0 ? Number(manifest.unread) : 0,
     };
+}
+
+// 대화를 읽음 처리한다. 상태가 실제로 바뀌었으면 true.
+export function markConversationRead(id) {
+    if (!isValidId(id)) return false;
+    return markChatRead(id);
 }
 
 export function listConversations() {
