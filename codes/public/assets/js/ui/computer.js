@@ -1055,5 +1055,5 @@
         }
     }
 
-    T.computerUI = { init, open, hide, isOpen, routeFromPath, navigate };
+    T.computerUI = { init, open, close, hide, isOpen, routeFromPath, navigate };
 })((window.Taby = window.Taby || {}));

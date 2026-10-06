@@ -4367,6 +4367,47 @@ body.sb-collapsed .btn-menu {
     body.mobile-route-sync #main {
         transition: none !important;
     }
+    /* 뒤로/앞으로 제스처(ui/gestures.js): 끄는 동안에는 화면이 손가락에 붙어 움직이고(전환 없음),
+       손을 떼면 부드럽게 자리 잡는다. 위에 올라온 메인 화면에는 가장자리 그림자가 진다. */
+    body.gest-drag #sidebar,
+    body.gest-drag #main {
+        transition: none !important;
+    }
+    body.gest-settle #sidebar,
+    body.gest-settle #main {
+        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+    }
+    body.gest-drag:not(.gest-inner) #main,
+    body.gest-settle:not(.gest-inner) #main {
+        z-index: 30;
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+    }
+    /* 컴퓨터 화면에서 뒤로: 밑에 깔린 채팅을 다시 보이게 하고, 컴퓨터 화면만 그 위에서 밀려 나간다.
+       헤더는 채팅과 같이 쓰므로 컴퓨터 화면이 얹어 둔 버튼들은 밀리는 만큼(--gest-p) 흐려진다. */
+    body.gest-inner.computer-route #scroller,
+    body.gest-inner.computer-route #composerWrap {
+        display: block;
+    }
+    body.gest-inner .computer-page {
+        /* 헤더(같이 쓰는 영역) 아래부터 덮고, 채팅의 입력창보다는 위에 놓인다 */
+        position: absolute;
+        inset: var(--hdr-h) 0 0;
+        z-index: 7;
+        padding-top: 0;
+        background: var(--bg);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+    }
+    body.gest-settle.gest-inner .computer-page {
+        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    body.gest-inner .cp-tabs,
+    body.gest-inner .cp-status {
+        opacity: calc(1 - var(--gest-p, 0));
+    }
+    body.gest-settle.gest-inner .cp-tabs,
+    body.gest-settle.gest-inner .cp-status {
+        transition: opacity 260ms var(--ease);
+    }
     #sidebar {
         --sb-w: 100%;
         z-index: 20;
