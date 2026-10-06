@@ -704,6 +704,8 @@
                                 await T.api.accountLogout();
                             } catch (_) {}
                             T.api.setToken("");
+                            // 로그아웃한 브라우저에 대화 캐시를 남기지 않는다.
+                            state.clearSnapshot();
                             T.notifications?.syncAuth?.();
                             state.state.account = { hasAccount: true, authed: false, username: null };
                             T.app?.handleUnauthorized?.();

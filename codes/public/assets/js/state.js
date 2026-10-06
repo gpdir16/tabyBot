@@ -99,6 +99,21 @@
     function currentBot() {
         return state.currentId ? botByUuid(state.currentId) : null;
     }
+
+    // 가장 최근에 대화한 봇 — 경로 없이 앱을 열었을 때의 기본 대화.
+    // 기록이 하나도 없으면 에이전트 순서의 첫 봇으로 폴백한다.
+    function mostRecentBot() {
+        let best = null;
+        let bestAt = "";
+        for (const bot of state.bots) {
+            const at = String(state.convs.get(bot.uuid)?.meta?.updatedAt || "");
+            if (at && at > bestAt) {
+                best = bot;
+                bestAt = at;
+            }
+        }
+        return best || state.bots[0] || null;
+    }
     function sortConversations() {
         state.conversations.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
     }
@@ -332,18 +347,27 @@
         const r = await T.api.conversation(id);
         if (seq !== turnsReqSeq.get(id)) return true; // 더 새 요청이 진행 중
         const incoming = (Array.isArray(r?.turns) ? r.turns : []).map(normalizeTurn);
+        // 정본이 그대로면 다시 그리지 않는다 — 스레드 전체 재렌더(마크다운/하이라이트)가 비싸다.
+        const sig = JSON.stringify(incoming);
+        let changed = !c.loaded || sig !== c.turnsSig;
         c.turns = incoming;
+        c.turnsSig = sig;
         c.loaded = true;
+        c.fetchedAt = Date.now();
         if (r && typeof r === "object") {
             const { turns: _turns, ...meta } = r;
             if (meta && meta.id) upsertMeta(Object.assign({}, c.meta, meta));
         }
         // 정본에 흡수된 확정 pending과 이미 저장된 라이브 중간 발화를 정리한다.
-        if (c.pending.length) c.pending = c.pending.filter((p) => !p.confirmed);
+        if (c.pending.some((p) => p.confirmed)) {
+            c.pending = c.pending.filter((p) => !p.confirmed);
+            changed = true;
+        }
         if (c.live) {
             if (r.running === false) {
                 // 서버는 끝났는데 live만 남은 경우(turn_done 유실) 정본으로 정리
                 c.live = null;
+                changed = true;
                 emit("live", { id });
             } else if (c.live.intermediate?.length) {
                 const stored = new Set();
@@ -352,10 +376,12 @@
                         if (m.role === "assistant") stored.add(String(m.content || "").trim());
                     }
                 }
+                const before = c.live.intermediate.length;
                 c.live.intermediate = c.live.intermediate.filter((x) => !stored.has(String(x || "").trim()));
+                if (c.live.intermediate.length !== before) changed = true;
             }
         }
-        emit("turns", { id });
+        if (changed) emit("turns", { id });
         return true;
     }
 
@@ -514,10 +540,100 @@
         emit("conn", s);
     }
 
+    /* ── 스냅샷(즉시 표시용 로컬 캐시) ───────────────────────── */
+    // 마지막으로 본 목록/설정/현재 대화를 localStorage에 남겨, 다음 실행 때
+    // 네트워크 응답을 기다리지 않고 바로 그린다. 서버 응답이 오면 그대로 덮는다(정본은 서버).
+    const SNAP_KEY = "tabybot.snapshot.v1";
+    const SNAP_TURNS_KEY = "tabybot.snapshot.turns.v1";
+    const SNAP_TURNS_MAX = 80; // 현재 대화는 최근 턴만 — 용량 한도와 파싱 비용을 묶는다
+    const SNAP_TURNS_MAX_CHARS = 400_000;
+    let snapTimer = 0;
+
+    function writeSnapshot() {
+        snapTimer = 0;
+        if (state.offline || !state.bootstrap) return;
+        // 계정이 있는데 세션이 없으면(로그아웃 직후) 다시 쓰지 않는다.
+        if (state.account?.hasAccount && !T.api.getToken()) return;
+        try {
+            localStorage.setItem(
+                SNAP_KEY,
+                JSON.stringify({
+                    bootstrap: state.bootstrap,
+                    settings: state.settings,
+                    agents: state.bots,
+                    folders: state.folders,
+                    conversations: state.conversations,
+                    todos: { items: state.todos, suggestions: state.todoSuggestions },
+                }),
+            );
+            const c = state.currentId ? state.convs.get(state.currentId) : null;
+            if (c?.loaded) {
+                const payload = JSON.stringify({ id: state.currentId, turns: c.turns.slice(-SNAP_TURNS_MAX) });
+                if (payload.length <= SNAP_TURNS_MAX_CHARS) localStorage.setItem(SNAP_TURNS_KEY, payload);
+                else localStorage.removeItem(SNAP_TURNS_KEY);
+            }
+        } catch (_) {
+            /* 용량 초과/스토리지 차단 — 스냅샷 없이 동작한다 */
+        }
+    }
+
+    function scheduleSnapshot() {
+        if (snapTimer) return;
+        snapTimer = setTimeout(writeSnapshot, 800);
+    }
+
+    function clearSnapshot() {
+        clearTimeout(snapTimer);
+        snapTimer = 0;
+        try {
+            localStorage.removeItem(SNAP_KEY);
+            localStorage.removeItem(SNAP_TURNS_KEY);
+        } catch (_) {}
+    }
+
+    // 저장된 스냅샷을 상태에 반영한다. 반영했으면 true.
+    function restoreSnapshot() {
+        let snap = null;
+        let cached = null;
+        try {
+            snap = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+            cached = JSON.parse(localStorage.getItem(SNAP_TURNS_KEY) || "null");
+        } catch (_) {
+            return false;
+        }
+        if (!snap || !snap.bootstrap || !Array.isArray(snap.agents) || !snap.agents.length) return false;
+        state.bootstrap = snap.bootstrap;
+        emit("bootstrap");
+        if (snap.settings) setSettings(snap.settings);
+        applyAgents({ agents: snap.agents, folders: snap.folders });
+        replaceConversations(Array.isArray(snap.conversations) ? snap.conversations : []);
+        if (snap.todos) setTodos(snap.todos);
+        if (cached?.id && Array.isArray(cached.turns) && botByUuid(cached.id)) {
+            const c = conv(cached.id);
+            c.turns = cached.turns;
+            c.turnsSig = JSON.stringify(cached.turns);
+            c.loaded = true;
+            c.fetchedAt = 0; // 열 때 반드시 서버 정본으로 재검증한다
+        }
+        return true;
+    }
+
+    for (const topic of ["bots", "folders", "conversations", "settings", "turns", "current", "todos"]) on(topic, scheduleSnapshot);
+    // 탭을 닫거나 백그라운드로 보낼 때 대기 중인 스냅샷을 놓치지 않는다.
+    window.addEventListener("pagehide", () => {
+        if (snapTimer) {
+            clearTimeout(snapTimer);
+            writeSnapshot();
+        }
+    });
+
     T.state = {
         state,
         on,
         emit,
+        mostRecentBot,
+        restoreSnapshot,
+        clearSnapshot,
         conv,
         currentConv,
         setCurrent,

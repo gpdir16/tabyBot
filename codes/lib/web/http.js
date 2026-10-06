@@ -1,6 +1,8 @@
 // 의존성 없는 최소 HTTP 라우터: JSON API, SSE, 정적 파일 서빙, 선택적 세션 인증.
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
+import crypto from "node:crypto";
 
 const MIME = {
     ".html": "text/html; charset=utf-8",
@@ -20,6 +22,35 @@ const MIME = {
     ".txt": "text/plain; charset=utf-8",
     ".md": "text/markdown; charset=utf-8",
 };
+
+// 텍스트 계열만 압축한다 — 이미지/폰트는 이미 압축돼 있어 CPU만 쓴다.
+const COMPRESSIBLE = /^(text\/|application\/(json|javascript|manifest\+json)|image\/svg\+xml)/;
+const MIN_COMPRESS_BYTES = 1024;
+const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
+
+// Accept-Encoding에서 쓸 수 있는 가장 좋은 인코딩을 고른다(br은 HTTPS에서만 온다).
+function pickEncoding(req) {
+    const accept = String(req?.headers?.["accept-encoding"] || "");
+    if (/\bbr\b/.test(accept)) return "br";
+    if (/\bgzip\b/.test(accept)) return "gzip";
+    return "";
+}
+
+function compress(buffer, encoding) {
+    if (encoding === "br") {
+        return zlib.brotliCompressSync(buffer, {
+            params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buffer.length },
+        });
+    }
+    return zlib.gzipSync(buffer, { level: 6 });
+}
+
+// If-None-Match는 약한 비교로 충분하다(프록시가 W/를 붙여 돌려보내기도 한다).
+function etagMatches(req, etag) {
+    const header = String(req?.headers?.["if-none-match"] || "");
+    if (!header) return false;
+    return header.split(",").some((tag) => tag.trim().replace(/^W\//, "") === etag);
+}
 
 function compilePattern(pattern) {
     const keys = [];
@@ -70,13 +101,21 @@ export function createRouter({ publicDir, auth = {} }) {
         return presented ? verifyToken(presented) : false;
     }
 
-    function sendJson(res, status, body) {
-        const payload = JSON.stringify(body);
-        res.writeHead(status, {
+    // req를 주면 큰 응답(대화 기록 등)을 압축해 보낸다 — 느린 회선에서 체감이 크다.
+    function sendJson(res, status, body, req = null) {
+        let payload = Buffer.from(JSON.stringify(body), "utf8");
+        const headers = {
             "Content-Type": "application/json; charset=utf-8",
-            "Content-Length": Buffer.byteLength(payload),
             "Cache-Control": "no-store",
-        });
+        };
+        const encoding = payload.length >= MIN_COMPRESS_BYTES ? pickEncoding(req) : "";
+        if (encoding) {
+            payload = compress(payload, encoding);
+            headers["Content-Encoding"] = encoding;
+            headers.Vary = "Accept-Encoding";
+        }
+        headers["Content-Length"] = payload.length;
+        res.writeHead(status, headers);
         res.end(payload);
     }
 
@@ -108,29 +147,104 @@ export function createRouter({ publicDir, auth = {} }) {
         return res;
     }
 
-    function serveIndex(res) {
-        const indexPath = path.join(publicDir, "index.html");
-        const stat = fs.statSync(indexPath);
-        res.writeHead(200, {
-            "Content-Type": MIME[".html"],
-            "Content-Length": stat.size,
-            "Cache-Control": "no-cache",
-        });
-        fs.createReadStream(indexPath)
-            .on("error", () => res.destroy())
-            .pipe(res);
+    // 정적 파일 메모리 캐시: 파일이 바뀌면(mtime/size) 다시 읽는다.
+    // 셸 전체가 1MB 남짓이라 본문과 압축본을 통째로 들고 있어도 부담이 없다.
+    const staticCache = new Map();
+    function loadStatic(filePath, stat) {
+        const hit = staticCache.get(filePath);
+        if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) return hit;
+        const body = fs.readFileSync(filePath);
+        const entry = {
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            // 내용 해시 — 같은 내용이면 재배포(이미지 재빌드로 mtime만 바뀜) 후에도 캐시가 유지된다.
+            version: crypto.createHash("sha1").update(body).digest("hex").slice(0, 12),
+            body,
+            encoded: new Map(),
+        };
+        staticCache.set(filePath, entry);
+        return entry;
     }
 
-    function serveStatic(res, urlPath) {
+    function sendBuffer(req, res, { body, encoded, etag, type, cacheControl }) {
+        const headers = { "Content-Type": type, "Cache-Control": cacheControl, ETag: etag };
+        const compressible = COMPRESSIBLE.test(type) && body.length >= MIN_COMPRESS_BYTES;
+        if (compressible) headers.Vary = "Accept-Encoding";
+        if (etagMatches(req, etag)) {
+            res.writeHead(304, headers);
+            res.end();
+            return;
+        }
+        let payload = body;
+        const encoding = compressible ? pickEncoding(req) : "";
+        if (encoding) {
+            payload = encoded.get(encoding);
+            if (!payload) {
+                payload = compress(body, encoding);
+                encoded.set(encoding, payload);
+            }
+            headers["Content-Encoding"] = encoding;
+        }
+        headers["Content-Length"] = payload.length;
+        res.writeHead(200, headers);
+        res.end(payload);
+    }
+
+    // index.html의 에셋 참조를 `/assets/...?v=<버전>` 절대 경로로 바꿔 내보낸다.
+    // - 버전이 붙은 URL은 영구 캐시(immutable)라 재방문 시 네트워크를 타지 않는다.
+    // - 절대 경로라 /a/<uuid>, /s/<탭> 어디서 열어도 같은 캐시 항목을 쓴다.
+    // 파일이 바뀌면 버전이 바뀌므로 배포는 다음 로드에 바로 반영된다.
+    const ASSET_REF = /\b(src|href)="\/?(assets\/[^"?#]+)"/g;
+    let indexCache = null;
+    function buildIndex() {
+        const indexPath = path.join(publicDir, "index.html");
+        const stat = fs.statSync(indexPath);
+        const source = loadStatic(indexPath, stat);
+        const versions = new Map();
+        let signature = source.version;
+        for (const match of source.body.toString("utf8").matchAll(ASSET_REF)) {
+            const rel = match[2];
+            if (versions.has(rel)) continue;
+            let version = "";
+            try {
+                const assetPath = path.join(publicDir, rel);
+                version = loadStatic(assetPath, fs.statSync(assetPath)).version;
+            } catch {
+                // 없는 에셋은 버전 없이 둔다(요청 시 404).
+            }
+            versions.set(rel, version);
+            signature += `|${version}`;
+        }
+        if (indexCache?.signature === signature) return indexCache;
+        const html = source.body
+            .toString("utf8")
+            .replace(ASSET_REF, (_, attr, rel) => `${attr}="/${rel}${versions.get(rel) ? `?v=${versions.get(rel)}` : ""}"`);
+        const body = Buffer.from(html, "utf8");
+        indexCache = {
+            signature,
+            body,
+            encoded: new Map(),
+            etag: `"${crypto.createHash("sha1").update(body).digest("base64url").slice(0, 16)}"`,
+        };
+        return indexCache;
+    }
+
+    function serveIndex(req, res) {
+        const index = buildIndex();
+        sendBuffer(req, res, { body: index.body, encoded: index.encoded, etag: index.etag, type: MIME[".html"], cacheControl: "no-cache" });
+    }
+
+    function serveStatic(req, res, url) {
+        const urlPath = url.pathname;
         // SPA 폴백: 정적 파일이 아닌 경로(/a/<uuid> 등)는 index.html로 서빙한다.
         // 단, 하위 경로에서 상대 URL로 요청된 에셋(/a/assets/...)은 실제 파일로 되돌린다.
         const normalizedAsset = urlPath.match(/^\/(?:[^/]+\/)+?(assets\/.+)$/);
         const assetPath = normalizedAsset ? `/${normalizedAsset[1]}` : null;
-        if (!assetPath && urlPath !== "/" && !path.extname(urlPath)) {
-            serveIndex(res);
+        if (!assetPath && (urlPath === "/" || urlPath === "/index.html" || !path.extname(urlPath))) {
+            serveIndex(req, res);
             return;
         }
-        const rel = assetPath ? assetPath.slice(1) : urlPath === "/" ? "index.html" : urlPath.replace(/^\/+/, "");
+        const rel = assetPath ? assetPath.slice(1) : urlPath.replace(/^\/+/, "");
         const filePath = path.resolve(publicDir, rel);
         // 경로 탈출 방지: publicDir 바깥은 절대 서빙하지 않는다.
         if (!filePath.startsWith(path.resolve(publicDir) + path.sep) && filePath !== path.resolve(publicDir)) {
@@ -143,7 +257,7 @@ export function createRouter({ publicDir, auth = {} }) {
         } catch {
             // 확장자 없는 임의 깊은 경로도 앱으로 진입시킨다(새로고침 대응).
             if (!path.extname(rel)) {
-                serveIndex(res);
+                serveIndex(req, res);
                 return;
             }
             sendJson(res, 404, { error: "not_found" });
@@ -154,15 +268,17 @@ export function createRouter({ publicDir, auth = {} }) {
             return;
         }
         const ext = path.extname(filePath).toLowerCase();
-        const isVendor = filePath.includes(`${path.sep}vendor${path.sep}`);
-        res.writeHead(200, {
-            "Content-Type": MIME[ext] || "application/octet-stream",
-            "Content-Length": stat.size,
-            "Cache-Control": isVendor ? "public, max-age=86400" : "no-cache",
+        const entry = loadStatic(filePath, stat);
+        // 요청한 버전이 지금 파일과 같을 때만 영구 캐시를 허용한다 — 배포 도중의
+        // 옛 버전 URL이 새 내용을 영구 캐시에 박아 넣는 일을 막는다.
+        const versioned = url.searchParams.get("v") === entry.version;
+        sendBuffer(req, res, {
+            body: entry.body,
+            encoded: entry.encoded,
+            etag: `"${entry.version}"`,
+            type: MIME[ext] || "application/octet-stream",
+            cacheControl: versioned ? IMMUTABLE_CACHE : "no-cache",
         });
-        fs.createReadStream(filePath)
-            .on("error", () => res.destroy())
-            .pipe(res);
     }
 
     function openSse(req, res) {
@@ -257,8 +373,8 @@ export function createRouter({ publicDir, auth = {} }) {
                 query: Object.fromEntries(url.searchParams),
                 token: presentedToken(url, req),
                 json: () => readJsonBody(req),
-                sendJson: (status, body) => sendJson(res, status, body),
-                json200: (body) => sendJson(res, 200, body),
+                sendJson: (status, body) => sendJson(res, status, body, req),
+                json200: (body) => sendJson(res, 200, body, req),
                 json400: (error) => sendJson(res, 400, { error }),
                 json404: () => sendJson(res, 404, { error: "not_found" }),
                 json409: (error, extra = {}) => sendJson(res, 409, { error, ...extra }),
@@ -286,7 +402,7 @@ export function createRouter({ publicDir, auth = {} }) {
         }
 
         if (req.method === "GET" || req.method === "HEAD") {
-            serveStatic(req.method === "HEAD" ? headOnly(res) : res, url.pathname);
+            serveStatic(req, req.method === "HEAD" ? headOnly(res) : res, url);
             return;
         }
 

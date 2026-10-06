@@ -645,9 +645,6 @@
         return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
     }
 
-    // 턴 정규화는 state가 담당한다 — 서버 정본 응답을 여기서 다시 가공하지 않는다.
-    const normalizeTurn = (turn) => state.normalizeTurn(turn);
-
     // mem === undefined: 같은 대화 재렌더 — 지금 위치 유지. null: 하단으로. 객체: 그 위치로 복원.
     function renderConversation(mem) {
         const keep = mem === undefined ? captureScroll() : mem;
@@ -657,8 +654,9 @@
         thread.textContent = "";
         const c = state.currentConv();
 
-        // 봇 스레드 상단 안내는 항상 표시(새로고침/전환과 무관하게 일관)
-        thread.append(buildEmptyState());
+        // 봇 스레드 상단 안내는 항상 표시(새로고침/전환과 무관하게 일관).
+        // 아직 기록을 받는 중이면 비워 둔다 — 안내가 떴다가 메시지에 밀려 사라지지 않게.
+        if (!c || c.loaded || state.state.offline) thread.append(buildEmptyState());
 
         if (!c) {
             refreshHeader();
@@ -920,6 +918,8 @@
     }
 
     /* ── 대화 열기 ──────────────────────────────────────────── */
+    const REVALIDATE_AFTER_MS = 3000;
+
     async function open(id, opt) {
         const o = opt || {};
         const token = Symbol("open");
@@ -939,26 +939,24 @@
             }
         } catch (_) {}
 
-        if (id != null) {
+        // 먼저 그린다 — 캐시된 턴이 있으면 그대로, 없으면 빈 스레드. 로드를 기다렸다 그리면
+        // 그동안 이전 대화가 화면에 남아 "다른 대화가 떴다가 바뀌는" 것처럼 보인다.
+        // 그 대화에서 마지막으로 보던 위치로 돌아간다. 기억이 없으면 하단.
+        renderConversation(id != null ? scrollMem.get(String(id)) || null : null);
+
+        if (id != null && !state.state.offline) {
             const c = state.conv(id);
-            if (!c.loaded) {
+            // 캐시는 낡았을 수 있다 — 방금 받은 게 아니면 서버 정본으로 재검증한다.
+            // 내용이 같으면 refreshTurns가 재렌더를 건너뛴다.
+            if (!c.loaded || Date.now() - (c.fetchedAt || 0) > REVALIDATE_AFTER_MS) {
                 try {
-                    const r = await T.api.conversation(id);
-                    c.turns = (r.turns || []).map(normalizeTurn);
-                    c.loaded = true;
-                    if (r && typeof r === "object") {
-                        const { turns: _turns, ...meta } = r;
-                        state.upsertMeta(Object.assign({}, c.meta, meta));
-                    }
-                    state.emit("conversations");
+                    await state.refreshTurns(id);
                 } catch (err) {
-                    T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+                    if (!c.loaded) T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
                 }
             }
         }
         if (open._token !== token) return; // 로드 중 다른 대화로 전환됨
-        // 그 대화에서 마지막으로 보던 위치로 돌아간다. 기억이 없으면 하단.
-        renderConversation(id != null ? scrollMem.get(String(id)) || null : null);
 
         // 1회성 파라미터 적용: 특정 메시지 이동(m)
         if (o.params?.m != null) {

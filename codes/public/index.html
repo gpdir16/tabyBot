@@ -14,7 +14,10 @@
         <link rel="apple-touch-icon" href="/assets/icons/icon-192-maskable.png" />
         <title>tabyBot</title>
         <link rel="stylesheet" href="assets/vendor/highlight-github-dark.min.css" />
-        <link rel="stylesheet" href="assets/vendor/xterm/xterm.css" />
+        <!-- 지연 로드(터미널 탭을 열 때 computer.js가 주입): 브라우저는 모르는 rel을 무시한다 -->
+        <link rel="lazy-style" data-group="xterm" href="assets/vendor/xterm/xterm.css" />
+        <link rel="lazy-script" data-group="xterm" href="assets/vendor/xterm/xterm.js" />
+        <link rel="lazy-script" data-group="xterm" href="assets/vendor/xterm/xterm-addon-fit.js" />
         <link rel="stylesheet" href="assets/css/app.css" />
         <!-- 벤더 라이브러리: UMD/IIFE 전역(marked / DOMPurify / hljs). 모듈 스크립트보다 먼저 로드 -->
         <script src="assets/vendor/marked.umd.min.js"></script>
@@ -325,8 +328,6 @@
         <script src="assets/js/ui/composer.js"></script>
         <script src="assets/js/ui/settings.js"></script>
         <script src="assets/js/ui/todos.js"></script>
-        <script src="assets/vendor/xterm/xterm.js"></script>
-        <script src="assets/vendor/xterm/xterm-addon-fit.js"></script>
         <script src="assets/js/ui/computer.js"></script>
         <script src="assets/js/ui/onboarding.js"></script>
         <script src="assets/js/app.js"></script>

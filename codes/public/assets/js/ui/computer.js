@@ -761,6 +761,41 @@
     }
 
     /* ── 터미널(xterm.js) ─────────────────────────────────── */
+    // xterm(약 290KB)은 터미널 탭을 처음 열 때만 받는다 — 앱 시작 경로에서 뺀다.
+    // index.html의 <link rel="lazy-script|lazy-style" data-group="xterm">가 URL을 들고 있다.
+    let xtermLoading = null;
+    function loadXterm() {
+        if (window.Terminal && window.FitAddon?.FitAddon) return Promise.resolve(true);
+        if (xtermLoading) return xtermLoading;
+        const refs = [...document.querySelectorAll('link[data-group="xterm"]')];
+        for (const ref of refs.filter((r) => r.rel === "lazy-style")) {
+            document.head.append(T.h("link", { rel: "stylesheet", href: ref.getAttribute("href") }));
+        }
+        xtermLoading = refs
+            .filter((r) => r.rel === "lazy-script")
+            .reduce(
+                (chain, ref) =>
+                    chain.then(
+                        () =>
+                            new Promise((resolve, reject) => {
+                                const el = T.h("script", { src: ref.getAttribute("href") });
+                                el.onload = resolve;
+                                el.onerror = reject;
+                                document.head.append(el);
+                            }),
+                    ),
+                Promise.resolve(),
+            )
+            .then(
+                () => true,
+                () => {
+                    xtermLoading = null; // 다음 시도에서 다시 받는다
+                    return false;
+                },
+            );
+        return xtermLoading;
+    }
+
     function ensureTerm() {
         if (term) return true;
         // 벤더 xterm 에셋이 안 올라온 경우(캐시된 예전 index.html, 에셋 404 등)
@@ -805,6 +840,14 @@
     }
 
     function connectTerminal() {
+        if (!term && !window.Terminal) {
+            setMsg(termMsg, t("computerConnecting"));
+            void loadXterm().then((ok) => {
+                if (!ok) setMsg(termMsg, t("computerTerminalUnavailable"));
+                else if (isOpen() && activeTab === "terminal") connectTerminal();
+            });
+            return;
+        }
         if (!ensureTerm()) return;
         try {
             termFit.fit();
