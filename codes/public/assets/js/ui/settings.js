@@ -39,13 +39,15 @@
     let mcpEditing = null; // { mode:"new" } | { mode:"edit", name }
     let armSkillDelete = null; // "<source>:<name>" — 삭제 확인 2단계
     let armMcpDelete = null; // name — 삭제 확인 2단계
+    let folderEditing = null; // { mode:"new" } | { mode:"edit", id }
+    let armFolderDelete = null; // 폴더 id — 삭제 확인 2단계
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
+    const TABS = ["general", "folders", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
     function routeFromPath() {
-        const m = /^\/s\/(general|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
+        const m = /^\/s\/(general|folders|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
         if (!m) return null;
         const tab = m[1];
         let agentId = null;
@@ -94,6 +96,12 @@
         armMcpDelete = null;
         skillEditing = null;
         mcpEditing = null;
+        // open({tab:"folders", folderId}) — 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
+        // open({tab:"folders", folderNew, folderAgent}) — "폴더에 추가… → 새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
+        folderEditing = null;
+        if (tab === "folders" && o.folderNew) folderEditing = { mode: "new", agentId: o.folderAgent || null };
+        else if (tab === "folders" && o.folderId) folderEditing = { mode: "edit", id: o.folderId };
+        armFolderDelete = null;
         armCompressAll = false;
         advOpen = null;
         modelAdvOpen = false;
@@ -153,6 +161,8 @@
         mcpEditing = null;
         armSkillDelete = null;
         armMcpDelete = null;
+        folderEditing = null;
+        armFolderDelete = null;
         page.replaceChildren();
         if (mobileFromList) {
             mobileFromList = false;
@@ -244,6 +254,7 @@
         const agents = agentList();
         const nav = T.h("nav", { class: "sp-nav", role: "tablist", "aria-label": t("settings") }, [
             tabBtn("general", t("general")),
+            tabBtn("folders", t("folders")),
             tabBtn("provider", t("provider")),
             tabBtn("model", t("model")),
             tabBtn("account", t("account")),
@@ -266,6 +277,7 @@
 
         const body = T.h("div", { class: "sp-body" });
         if (openTab === "general") buildGeneral(body);
+        else if (openTab === "folders") buildFolders(body);
         else if (openTab === "provider") buildProvider(body);
         else if (openTab === "model") buildModel(body);
         else if (openTab === "account") buildAccount(body);
@@ -434,14 +446,6 @@
             T.h("div", { class: "set-row" }, [
                 T.h("div", { class: "set-label", text: t("updateCheck") }),
                 switchEl(s.updateCheckEnabled, (v) => put({ updateCheckEnabled: v }), t("updateCheck")),
-            ]),
-        );
-
-        // 전체 탭에서 폴더 소속 에이전트 제외
-        sec.append(
-            T.h("div", { class: "set-row" }, [
-                T.h("div", { class: "set-label", text: t("allTabExcludesFoldered") }),
-                switchEl(s.allTabExcludesFoldered, (v) => put({ allTabExcludesFoldered: v }), t("allTabExcludesFoldered")),
             ]),
         );
 
@@ -2038,6 +2042,237 @@
         body.append(msec);
     }
 
+    /* ── 폴더 탭 ────────────────────────────────────────────
+       폴더 만들기·이름 변경·순서·삭제·소속 에이전트 지정은 전부 여기서 한다.
+       사이드바의 폴더 탭은 보기 전환만 담당한다. */
+    function folderList() {
+        return state.state.folders || [];
+    }
+
+    function folderMembers(folderId) {
+        return agentList().filter((a) => (a.folder || "") === folderId);
+    }
+
+    function applyFolderResult(r) {
+        state.applyAgents(r);
+    }
+
+    function folderRow(f, idx, total) {
+        const members = folderMembers(f.id);
+        const move = (dir) => {
+            const ids = folderList().map((x) => x.id);
+            const to = idx + dir;
+            if (to < 0 || to >= ids.length) return;
+            [ids[idx], ids[to]] = [ids[to], ids[idx]];
+            T.api
+                .orderFolders(ids)
+                .then(applyFolderResult)
+                .catch((err) => T.toast.show("error", T.api.errorText(err, t("saveFailed"))));
+        };
+        const arrow = (dir, label, disabled) => {
+            const btn = T.h(
+                "button",
+                {
+                    class: "btn-icon btn-xs folder-move" + (dir < 0 ? " up" : ""),
+                    type: "button",
+                    "aria-label": label,
+                    "data-tip": label,
+                    onclick: () => move(dir),
+                },
+                [T.icon("chevron", "icon-sm")],
+            );
+            btn.disabled = disabled;
+            return btn;
+        };
+        const delBtn = T.h("button", {
+            class: "btn ghost" + (armFolderDelete === f.id ? " danger" : ""),
+            text: armFolderDelete === f.id ? t("deleteConfirm") : t("delete"),
+            onclick() {
+                if (armFolderDelete !== f.id) {
+                    armFolderDelete = f.id;
+                    delBtn.classList.add("danger");
+                    delBtn.textContent = t("deleteConfirm");
+                    return;
+                }
+                delBtn.disabled = true;
+                T.api
+                    .deleteFolder(f.id)
+                    .then((r) => {
+                        armFolderDelete = null;
+                        applyFolderResult(r);
+                    })
+                    .catch((err) => {
+                        delBtn.disabled = false;
+                        T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                    });
+            },
+        });
+        return T.h("div", { class: "ext-row" }, [
+            T.h("div", { class: "ext-main" }, [
+                T.h("div", { class: "ext-name" }, [T.h("span", { class: "ext-nm", text: f.name })]),
+                T.h("div", {
+                    class: "ext-sub",
+                    text: members.length ? members.map((a) => a.name).join(", ") : t("folderNoAgents"),
+                }),
+            ]),
+            T.h("div", { class: "ext-actions" }, [
+                arrow(-1, t("folderMoveUp"), idx === 0),
+                arrow(1, t("folderMoveDown"), idx === total - 1),
+                T.h("button", {
+                    class: "btn ghost",
+                    text: t("edit"),
+                    onclick() {
+                        folderEditing = { mode: "edit", id: f.id };
+                        armFolderDelete = null;
+                        build();
+                    },
+                }),
+                delBtn,
+            ]),
+        ]);
+    }
+
+    function folderForm() {
+        const editing = folderEditing;
+        const isNew = editing.mode === "new";
+        const folder = isNew ? null : folderList().find((f) => f.id === editing.id);
+        const close = () => {
+            folderEditing = null;
+            build();
+        };
+        if (!isNew && !folder) {
+            // 다른 기기에서 지워진 폴더 — 목록으로 돌아간다.
+            folderEditing = null;
+            return T.h("div", { class: "set-desc", text: t("foldersEmpty") });
+        }
+        const form = T.h("div", { class: "agent-editor ext-form" });
+        form.append(formHead(isNew ? t("folderNew") : folder.name, close));
+
+        const nameInput = T.h("input", {
+            class: "input",
+            type: "text",
+            value: folder?.name || "",
+            placeholder: t("folderNamePh"),
+            maxlength: "32",
+            "aria-label": t("folderName"),
+        });
+        nameInput.addEventListener("keydown", (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter" && !e.isComposing) saveBtn.click();
+        });
+        form.append(fieldOf(t("folderName"), nameInput));
+
+        // 소속 에이전트: 에이전트는 폴더 하나에만 들어간다 — 다른 폴더 소속이면 그 이름을 보여 준다.
+        const names = new Map(folderList().map((f) => [f.id, f.name]));
+        const picks = new Map();
+        const list = T.h("div", { class: "folder-agents" });
+        for (const a of agentList()) {
+            const inThis = !isNew && (a.folder || "") === folder.id;
+            const other = !inThis && a.folder && names.has(a.folder) ? names.get(a.folder) : "";
+            const box = T.h("input", { type: "checkbox", "aria-label": a.name });
+            box.checked = inThis || (isNew && editing.agentId === a.id);
+            picks.set(a.id, { box, was: inThis });
+            list.append(
+                T.h("label", { class: "folder-agent" }, [
+                    T.h("span", {
+                        class: "bot-avatar",
+                        text: ([...String(a.name || "?").trim()][0] || "?").toUpperCase(),
+                        style: /^#[0-9a-f]{6}$/i.test(String(a.color || "")) ? `background:${a.color}` : null,
+                    }),
+                    T.h("span", { class: "folder-agent-meta" }, [
+                        T.h("span", { class: "folder-agent-name", text: a.name || "?" }),
+                        other ? T.h("span", { class: "ext-sub", text: t("folderAgentIn", { name: other }) }) : null,
+                    ]),
+                    box,
+                    T.h("span", { class: "folder-check", "aria-hidden": "true" }, [T.icon("check", "icon-sm")]),
+                ]),
+            );
+        }
+        form.append(fieldOf(t("folderAgents"), list, t("folderAgentsDesc")));
+
+        const actions = T.h("div", { class: "editor-actions" });
+        const saveBtn = T.h("button", {
+            class: "btn primary",
+            text: t("save"),
+            async onclick() {
+                const name = nameInput.value.trim();
+                if (!name) {
+                    nameInput.focus();
+                    return;
+                }
+                saveBtn.disabled = true;
+                // 응답마다 전체 스냅샷이 오므로 마지막 것만 반영한다 — 중간 반영은 폼을 다시 그려 깜빡인다.
+                let last = null;
+                try {
+                    let id = folder?.id;
+                    if (isNew) {
+                        last = await T.api.createFolder({ name });
+                        id = last?.folder?.id;
+                    } else if (name !== folder.name) {
+                        last = await T.api.updateFolder(id, { name });
+                    }
+                    if (id) {
+                        for (const [agentId, { box, was }] of picks) {
+                            if (box.checked === was) continue;
+                            last = await T.api.updateAgent(agentId, { folder: box.checked ? id : "" });
+                        }
+                    }
+                    folderEditing = null;
+                    if (last) applyFolderResult(last);
+                    build();
+                } catch (err) {
+                    // 일부만 저장됐을 수 있다 — 거기까지의 상태를 반영하고 폼은 열어 둔다.
+                    if (last) applyFolderResult(last);
+                    saveBtn.disabled = false;
+                    T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                }
+            },
+        });
+        actions.append(saveBtn, T.h("button", { class: "btn ghost", text: t("cancel"), onclick: close }));
+        form.append(actions);
+        if (isNew) requestAnimationFrame(() => nameInput.focus());
+        return form;
+    }
+
+    function buildFolders(body) {
+        const s = state.state.settings || {};
+        const sec = T.h("div", { class: "set-section" });
+        sec.append(T.h("div", { class: "set-desc", text: t("foldersDesc") }));
+        if (folderEditing) {
+            sec.append(folderForm());
+            body.append(sec);
+            return;
+        }
+        const folders = folderList();
+        if (!folders.length) sec.append(T.h("div", { class: "set-desc", text: t("foldersEmpty") }));
+        else folders.forEach((f, i) => sec.append(folderRow(f, i, folders.length)));
+        sec.append(
+            T.h("div", { class: "ext-add" }, [
+                T.h(
+                    "button",
+                    {
+                        class: "btn ghost",
+                        onclick() {
+                            folderEditing = { mode: "new" };
+                            armFolderDelete = null;
+                            build();
+                        },
+                    },
+                    [T.icon("plus"), document.createTextNode(t("folderNew"))],
+                ),
+            ]),
+        );
+        sec.append(T.h("hr", { class: "divider" }));
+        // 전체 탭에서 폴더 소속 에이전트 제외
+        sec.append(
+            T.h("div", { class: "set-row" }, [
+                T.h("div", { class: "set-label", text: t("allTabExcludesFoldered") }),
+                switchEl(s.allTabExcludesFoldered, (v) => put({ allTabExcludesFoldered: v }), t("allTabExcludesFoldered")),
+            ]),
+        );
+        body.append(sec);
+    }
+
     function buildAgents(body) {
         if (editingAgent === "__new__") {
             body.append(agentEditor(null));
@@ -2318,6 +2553,7 @@
     function init() {
         state.on("settings", rebuildIfIdle);
         state.on("bots", rebuildIfIdle);
+        state.on("folders", rebuildIfIdle);
         state.on("pwa", rebuildIfIdle);
         // OAuth 결과는 시트가 닫혀 있어도 반영한다(설정 갱신 + 토스트).
         state.on("oauth_done", (p) => {

@@ -356,16 +356,52 @@ function sanitizeTurnStats(stats) {
     };
 }
 
+// 사용자가 마지막으로 읽은 시각(readAt) 뒤에 도착한 에이전트 발화 수.
+// 화면에 버블로 보이는 것만 센다 — 침묵 마커·빈 본문·툴 호출의 내부 메모는 제외.
+function unreadCountFromTurns(turns, readAt) {
+    let count = 0;
+    for (const turn of turns || []) {
+        for (const m of turn?.messages || []) {
+            if (m?.role !== "assistant") continue;
+            const at = String(m.at || turn.at || "");
+            if (!at || at <= readAt) continue;
+            if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+                count += sayTextsFromMessage(m).filter((text) => !isSilentMarkedText(text)).length;
+                continue;
+            }
+            const text = typeof m.content === "string" ? m.content.trim() : "";
+            if ((text && !isSilentMarkedText(text)) || m.attachments?.length) count += 1;
+        }
+    }
+    return count;
+}
+
 function writePreview(chatId, turns) {
     try {
         const manifest = loadManifest(chatId);
         if (!manifest) return;
+        // 읽음 표시가 없던 대화(이전 버전에서 넘어온 기록)는 지금까지를 읽은 것으로 본다.
+        if (typeof manifest.readAt !== "string") manifest.readAt = manifest.lastActivityAt || lastActivityAtFromTurns(turns) || "";
         const text = previewSnippetFromTurns(turns);
         if (text) manifest.preview = text;
         const lastAt = lastActivityAtFromTurns(turns);
         if (lastAt) manifest.lastActivityAt = lastAt;
+        manifest.unread = unreadCountFromTurns(turns, manifest.readAt);
         saveManifest(chatId, manifest);
     } catch (_) {}
+}
+
+// 대화를 읽음으로 표시한다. 안 읽은 발화가 있었으면 true.
+export function markChatRead(chatId) {
+    const manifest = loadManifest(chatId);
+    if (!manifest) return false;
+    const had = Number(manifest.unread) > 0;
+    // 시계 오차로 방금 저장된 발화가 readAt보다 뒤에 남지 않게 마지막 발화 시각도 함께 본다.
+    const now = new Date().toISOString();
+    manifest.readAt = manifest.lastActivityAt && manifest.lastActivityAt > now ? manifest.lastActivityAt : now;
+    manifest.unread = 0;
+    saveManifest(chatId, manifest);
+    return had;
 }
 
 const PENDING_USER_PREFIX = "The user sent additional message(s) while you were working:";

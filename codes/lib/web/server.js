@@ -455,6 +455,13 @@ export function startWebServer() {
         ctx.json200({ ok: true });
     });
 
+    // 읽음 처리 — 다른 기기의 배지도 지워지게 목록 변경을 알린다.
+    router.add("POST", "/api/conversations/:id/read", (ctx) => {
+        const changed = conversationsStore.markConversationRead(ctx.params.id);
+        if (changed) emit({ type: "conversations_changed" });
+        ctx.json200({ ok: true });
+    });
+
     router.add("POST", "/api/conversations/:id/stop", (ctx) => {
         ctx.json200({ ok: stopConversation(ctx.params.id) });
     });

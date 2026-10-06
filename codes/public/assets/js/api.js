@@ -117,6 +117,7 @@
             if (Array.isArray(attachmentIds) && attachmentIds.length) body.attachmentIds = attachmentIds;
             return request("/api/conversations/" + enc(id) + "/messages", { method: "POST", json: body });
         },
+        markRead: (id) => request("/api/conversations/" + enc(id) + "/read", { method: "POST", json: {} }),
         stopConversation: (id) => request("/api/conversations/" + enc(id) + "/stop", { method: "POST", json: {} }),
         searchMessages: (q) => request("/api/search/messages?q=" + enc(q || "")),
         eventsPoll: (since, recentMs) => request("/api/events/poll?since=" + enc(since || 0) + (recentMs ? "&recentMs=" + enc(recentMs) : "")),

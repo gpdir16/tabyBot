@@ -145,10 +145,17 @@
         return Promise.all(jobs);
     }
 
-    // 봇 행: 아바타 + 이름 + 대화 미리보기 + 실행중 점 + ⋯ 메뉴
+    // 안 읽은 에이전트 발화 수. 지금 보고 있는 대화는 읽은 것으로 친다(읽음 처리가 곧 따라온다).
+    function unreadOf(bot) {
+        if (T.chat?.isViewing?.(bot.uuid)) return 0;
+        return Number(state.state.convs.get(bot.uuid)?.meta?.unread) || 0;
+    }
+
+    // 봇 행: 아바타 + 이름 + 대화 미리보기 + 실행중 점 + 안읽음 배지 + ⋯ 메뉴
     function buildRow(bot) {
         const live = state.conv(bot.uuid)?.live;
         const preview = previewOf(bot);
+        const unread = unreadOf(bot);
         const empty = !preview;
         const previewText = empty ? t("botNoJob") : preview;
         const moreBtn = T.h(
@@ -174,7 +181,6 @@
                 role: "button",
                 "aria-label": `${bot.name}. ${previewText}`.trim(),
                 tabindex: "0",
-                draggable: "true",
             },
             [
                 T.h("span", { class: "bot-avatar", text: initials(bot.name), style: `background:${safeColor(bot.color)}` }),
@@ -185,7 +191,16 @@
                     ]),
                     T.h("span", { class: "bot-persona" + (empty ? " is-empty" : ""), text: previewText }),
                 ]),
-                T.h("span", { class: "bot-actions" }, [moreBtn]),
+                T.h("span", { class: "bot-actions" }, [
+                    unread
+                        ? T.h("span", {
+                              class: "bot-unread",
+                              text: unread > 99 ? "99+" : String(unread),
+                              "aria-label": t("unreadCount", { n: unread }),
+                          })
+                        : null,
+                    moreBtn,
+                ]),
             ],
         );
         row.addEventListener("click", () => openBot(bot));
@@ -199,30 +214,6 @@
                 e.preventDefault();
                 openBot(bot);
             }
-        });
-        row.addEventListener("dragstart", (e) => {
-            dragPayload = { type: "agent", id: bot.id };
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", bot.id);
-        });
-        row.addEventListener("dragend", () => {
-            dragPayload = null;
-            clearDrops();
-        });
-        // 다른 에이전트 위에 놓으면 그 행과 같은 폴더로 배정한다.
-        row.addEventListener("dragover", (e) => {
-            if (dragPayload?.type !== "agent" || dragPayload.id === bot.id) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            row.classList.add("drop-ok");
-        });
-        row.addEventListener("dragleave", () => row.classList.remove("drop-ok"));
-        row.addEventListener("drop", (e) => {
-            e.preventDefault();
-            row.classList.remove("drop-ok");
-            const p = dragPayload;
-            dragPayload = null;
-            if (p?.type === "agent" && p.id !== bot.id) void assignAgentFolder(p.id, folderOf(bot));
         });
         return row;
     }
@@ -348,6 +339,17 @@
         });
     }
 
+    // 메뉴를 기준 버튼 아래에 놓고 화면 안으로 클램프한다(내용이 바뀌면 다시 부른다).
+    function placeMenu() {
+        if (!botMenu || !botMenuBtn) return;
+        const r = botMenuBtn.getBoundingClientRect();
+        const w = botMenu.offsetWidth;
+        const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+        const top = Math.min(r.bottom + 4, T.visibleHeight() - botMenu.offsetHeight - 8);
+        botMenu.style.left = `${left}px`;
+        botMenu.style.top = `${Math.max(8, top)}px`;
+    }
+
     function openMenuAt(btn, items, hostRow) {
         const menu = T.h("div", { class: "menu bot-ctx-menu", role: "menu" }, items.filter(Boolean));
         document.body.append(menu);
@@ -355,12 +357,7 @@
         botMenuBtn = btn;
         btn.setAttribute("aria-expanded", "true");
         hostRow?.classList.add("menu-open");
-        const r = btn.getBoundingClientRect();
-        const w = menu.offsetWidth;
-        const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-        const top = Math.min(r.bottom + 4, T.visibleHeight() - menu.offsetHeight - 8);
-        menu.style.left = `${left}px`;
-        menu.style.top = `${Math.max(8, top)}px`;
+        placeMenu();
         document.addEventListener("pointerdown", onBotMenuPointer, true);
         document.addEventListener("keydown", onBotMenuKey, true);
         menu.querySelector("button")?.focus();
@@ -379,61 +376,79 @@
                 settingsPush(bot.id);
             }),
         ];
-        // 폴더 이동: 폴더가 있으면 목록을 보여주고, 항상 "새 폴더로 이동"을 단다.
-        const folders = state.state.folders || [];
-        const current = folderOf(bot);
-        if (folders.length) {
-            items.push(T.h("div", { class: "menu-sep", role: "separator" }));
-            for (const f of folders) {
-                if (f.id === current) continue;
-                items.push(menuItem(`${f.name}`, () => void assignAgentFolder(bot.id, f.id)));
-            }
-            if (current) items.push(menuItem(t("folderUnassign"), () => void assignAgentFolder(bot.id, "")));
-        }
+        // "폴더에 추가…"는 메뉴 안에서 폴더 고르기 화면으로 넘어간다.
         items.push(
-            menuItem(t("folderToNew"), () => {
-                pendingAssign = bot.id;
-                editingFolder = "new";
-                render();
+            T.h("button", {
+                role: "menuitem",
+                text: t("folderAdd"),
+                onclick(e) {
+                    e.stopPropagation();
+                    showFolderPicker(bot);
+                },
             }),
         );
         openMenuAt(btn, items, btn.closest(".bot-row"));
     }
 
-    function toggleFolderMenu(btn, folder, hostEl) {
-        if (botMenu && botMenuBtn === btn) {
+    // 열린 메뉴의 내용을 폴더 목록으로 바꾼다. 지금 들어 있는 폴더에는 체크가 붙고,
+    // 다시 누르면 폴더에서 뺀다. 맨 아래 "새 폴더"는 설정 → 폴더의 만들기 폼을
+    // 이 에이전트를 미리 고른 채로 연다. 폴더가 하나도 없으면 곧장 그 폼으로 간다.
+    function showFolderPicker(bot) {
+        const folders = state.state.folders || [];
+        if (!folders.length) {
+            closeBotMenu();
+            T.settingsUI.open({ tab: "folders", folderNew: true, folderAgent: bot.id });
+            return;
+        }
+        const current = folderOf(bot);
+        const items = folders.map((f) =>
+            T.h(
+                "button",
+                {
+                    role: "menuitemradio",
+                    class: "menu-pick",
+                    "aria-checked": String(f.id === current),
+                    onclick(e) {
+                        e.stopPropagation();
+                        closeBotMenu();
+                        void assignAgentFolder(bot.id, f.id === current ? "" : f.id);
+                    },
+                },
+                [T.h("span", { class: "menu-pick-label", text: f.name }), f.id === current ? T.icon("check") : null],
+            ),
+        );
+        items.push(
+            T.h("div", { class: "menu-sep", role: "separator" }),
+            T.h(
+                "button",
+                {
+                    role: "menuitem",
+                    onclick(e) {
+                        e.stopPropagation();
+                        closeBotMenu();
+                        T.settingsUI.open({ tab: "folders", folderNew: true, folderAgent: bot.id });
+                    },
+                },
+                [T.icon("plus"), document.createTextNode(t("folderNew"))],
+            ),
+        );
+        botMenu.replaceChildren(...items);
+        placeMenu();
+        botMenu.querySelector("button")?.focus();
+    }
+
+    // 폴더 탭 우클릭/길게 누르기: 설정 → 폴더로 보낸다. folder가 없으면("전체" 탭) 폴더 목록을 연다.
+    function toggleFolderMenu(tab, folder) {
+        if (botMenu && botMenuBtn === tab) {
             closeBotMenu();
             return;
         }
         closeBotMenu();
-        const folders = state.state.folders || [];
-        const idx = folders.findIndex((f) => f.id === folder.id);
-        const items = [
-            menuItem(t("folderRename"), () => {
-                editingFolder = folder.id;
-                render();
-            }),
-            idx > 0 ? menuItem(t("folderLeft"), () => void moveFolderBefore(folder.id, folders[idx - 1].id)) : null,
-            idx < folders.length - 1
-                ? menuItem(t("folderRight"), () => void moveFolderBefore(folder.id, idx + 2 < folders.length ? folders[idx + 2].id : null))
-                : null,
-            T.h("div", { class: "menu-sep", role: "separator" }),
-            menuItem(
-                t("folderDelete"),
-                () => {
-                    void (async () => {
-                        try {
-                            const r = await T.api.deleteFolder(folder.id);
-                            state.applyAgents(r);
-                        } catch (err) {
-                            T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-                        }
-                    })();
-                },
-                { danger: true },
-            ),
-        ];
-        openMenuAt(btn, items, hostEl || btn);
+        openMenuAt(
+            tab,
+            [menuItem(t(folder ? "folderEdit" : "folderManage"), () => T.settingsUI.open({ tab: "folders", folderId: folder?.id || null }))],
+            tab,
+        );
     }
 
     /* ── 연결 상태 점: 끊겼을 때만 설정 옆에 빨간 점 ───────── */
@@ -522,22 +537,30 @@
     }
 
     /* ── 에이전트 폴더 탭 ───────────────────────────
-       메신저 폴더 패턴: 목록 위 가로 탭으로 필터링한다. "전체" 탭은 고정,
-       폴더 탭은 드래그로 순서 변경, 에이전트 행을 탭 위에 놓으면 배정된다.
-       활성 탭·이름 편집은 로컬 상태, 실제 데이터는 state.folders/bot.folder. */
+       메신저 폴더 패턴: 목록 위 가로 텍스트 탭으로 필터링한다. "전체" 탭은 고정.
+       활성 탭 아래에 밑줄 표시가 미끄러져 따라간다. 탭은 보기 전환만 하고,
+       폴더 만들기·이름·순서·소속은 설정 → 폴더에서 다룬다.
+       활성 탭은 로컬 상태, 실제 데이터는 state.folders/bot.folder. */
     const ACTIVE_TAB_KEY = "tabybot.sidebar.folder.active";
-    let dragPayload = null; // {type:"agent"|"folder", id}
-    let editingFolder = null; // 폴더 id(이름 변경) | "new"(생성) | null
-    let pendingAssign = null; // 새 폴더 생성이 끝나면 그 안에 넣을 에이전트 id
 
     // 지워진 폴더를 가리키면 "전체"로 되돌린다 — 저장값은 존재하는 폴더만 인정.
     function activeFolderId() {
         const id = lsGet(ACTIVE_TAB_KEY) || "";
         return id && (state.state.folders || []).some((f) => f.id === id) ? id : "";
     }
+    // 폴더를 바꾼다. 탭 클릭·스와이프·가로 스크롤 모두 여기로 온다 —
+    // 새 목록이 넘어간 방향(오른쪽 탭이면 오른쪽)에서 미끄러져 들어온다.
     function setActiveFolder(id) {
+        const order = ["", ...(state.state.folders || []).map((f) => f.id)];
+        const dir = order.indexOf(id || "") - order.indexOf(activeFolderId());
         lsSet(ACTIVE_TAB_KEY, id || "");
         render();
+        listEl.style.transition = "";
+        listEl.style.transform = "";
+        listEl.classList.remove("slide-next", "slide-prev");
+        if (!dir) return;
+        void listEl.offsetWidth;
+        listEl.classList.add(dir > 0 ? "slide-next" : "slide-prev");
     }
 
     // 존재하는 폴더 id만 인정한다 — 지워진 폴더를 가리키는 봇은 미분류로 본다.
@@ -560,221 +583,194 @@
         }
     }
 
-    // dragId 폴더를 beforeId 앞으로 옮긴다. beforeId=null이면 맨 끝.
-    async function moveFolderBefore(dragId, beforeId) {
-        const ids = (state.state.folders || []).map((f) => f.id).filter((id) => id !== dragId);
-        let idx = beforeId == null ? ids.length : ids.indexOf(beforeId);
-        if (idx < 0) idx = ids.length;
-        ids.splice(idx, 0, dragId);
-        try {
-            const r = await T.api.orderFolders(ids);
-            state.applyAgents(r);
-        } catch (err) {
-            T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-        }
-    }
-
-    function clearDrops() {
-        listEl.querySelectorAll(".drop-ok").forEach((el) => el.classList.remove("drop-ok"));
-        tabsEl?.querySelectorAll(".drop-ok").forEach((el) => el.classList.remove("drop-ok"));
-    }
-
-    // 탭을 드롭 대상으로 만든다.
-    // 에이전트 드롭 → agentFolder 배정, 폴더 드롭 → folderBefore 앞으로 순서 이동.
-    function attachTabDrop(el, { agentFolder, folderBefore }) {
-        el.addEventListener("dragover", (e) => {
-            if (!dragPayload) return;
-            if (dragPayload.type === "folder" && dragPayload.id === folderBefore) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            el.classList.add("drop-ok");
-        });
-        el.addEventListener("dragleave", () => el.classList.remove("drop-ok"));
-        el.addEventListener("drop", (e) => {
-            e.preventDefault();
-            el.classList.remove("drop-ok");
-            const p = dragPayload;
-            dragPayload = null;
-            if (!p) return;
-            if (p.type === "agent") void assignAgentFolder(p.id, agentFolder);
-            else if (p.type === "folder" && p.id !== folderBefore) void moveFolderBefore(p.id, folderBefore);
-        });
-    }
-
-    /* 폴더 생성/이름 변경은 모달 없이 탭 자리에 인라인 입력으로 처리한다. */
-    function buildFolderTabEditor(f) {
-        const input = T.h("input", {
-            class: "sb-tab-input",
-            type: "text",
-            value: f?.name || "",
-            placeholder: t("folderNamePh"),
-            maxlength: "32",
-            spellcheck: "false",
-            "aria-label": t("folderNamePh"),
-        });
-        const tab = T.h("span", { class: "sb-tab editing" }, [input]);
-        let done = false;
-        const finish = (cancel) => {
-            if (done) return;
-            done = true;
-            editingFolder = null;
-            render();
-            if (cancel) return;
-            const name = input.value.trim();
-            if (!name) {
-                pendingAssign = null;
-                return;
-            }
-            void (async () => {
-                try {
-                    if (f) {
-                        const r = await T.api.updateFolder(f.id, { name });
-                        state.applyAgents(r);
-                    } else {
-                        const r = await T.api.createFolder({ name });
-                        state.applyAgents(r);
-                        if (r?.folder?.id) {
-                            setActiveFolder(r.folder.id);
-                            if (pendingAssign) {
-                                const rr = await T.api.updateAgent(pendingAssign, { folder: r.folder.id });
-                                state.applyAgents(rr);
-                            }
-                        }
-                    }
-                } catch (err) {
-                    T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-                }
-                pendingAssign = null;
-            })();
-        };
-        input.addEventListener("keydown", (e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") finish(false);
-            else if (e.key === "Escape") finish(true);
-        });
-        input.addEventListener("blur", () => finish(false));
-        requestAnimationFrame(() => input.focus());
-        return tab;
-    }
-
-    function buildFolderTab(f, count, active) {
-        const menuBtn = T.h(
-            "button",
-            {
-                class: "btn-icon",
-                "aria-label": t("more"),
-                "aria-haspopup": "menu",
-                "aria-expanded": "false",
-                onclick(e) {
-                    e.stopPropagation();
-                    toggleFolderMenu(menuBtn, f, tab);
-                },
-            },
-            [T.icon("more", "icon-sm")],
-        );
-        const tab = T.h(
-            "div",
-            {
-                class: "sb-tab" + (active ? " active" : ""),
-                role: "tab",
-                tabindex: "0",
-                draggable: "true",
-                "aria-selected": String(active),
-                title: f.name,
-            },
-            [document.createTextNode(f.name), T.h("span", { class: "sb-tab-count", text: String(count) }), active ? menuBtn : null],
-        );
-        tab.addEventListener("click", () => setActiveFolder(f.id));
+    function buildTab(id, name, folder) {
+        const tab = T.h("div", { class: "sb-tab", role: "tab", tabindex: "0", title: name, dataset: { folder: id } }, [
+            T.h("span", { class: "sb-tab-in" }, [
+                T.h("span", { class: "sb-tab-name", text: name }),
+                T.h("span", { class: "sb-tab-count", hidden: true }),
+            ]),
+        ]);
+        tab.addEventListener("click", () => setActiveFolder(id));
         tab.addEventListener("keydown", (e) => {
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
                 e.preventDefault();
-                setActiveFolder(f.id);
+                setActiveFolder(id);
             }
         });
-        // 메신저처럼 우클릭/길게눌러도 관리 메뉴가 열리게 한다.
+        // 메신저처럼 우클릭/길게 눌러 폴더 편집으로 간다.
         tab.addEventListener("contextmenu", (e) => {
             e.preventDefault();
-            toggleFolderMenu(tab, f, tab);
+            toggleFolderMenu(tab, folder);
         });
-        tab.addEventListener("dragstart", (e) => {
-            dragPayload = { type: "folder", id: f.id };
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", f.id);
-        });
-        tab.addEventListener("dragend", () => {
-            dragPayload = null;
-            clearDrops();
-        });
-        attachTabDrop(tab, { agentFolder: f.id, folderBefore: f.id });
         return tab;
     }
 
+    // 밑줄 표시를 활성 탭의 글자 폭에 맞춰 옮긴다. animate=false면 전환 없이 바로 놓는다.
+    const tabInd = T.h("span", { class: "sb-tab-ind", "aria-hidden": "true" });
+    function placeTabIndicator(animate) {
+        const tab = tabsEl.querySelector(".sb-tab.active");
+        const inner = tab?.querySelector(".sb-tab-in");
+        // 접힌 사이드바 등 레이아웃이 없을 때는 건드리지 않는다(ResizeObserver가 다시 부른다).
+        if (!inner || !tab.offsetWidth) return;
+        tabInd.classList.toggle("no-anim", !animate);
+        tabInd.style.width = `${inner.offsetWidth}px`;
+        // offsetLeft는 position:relative인 탭 바 기준이다.
+        tabInd.style.transform = `translateX(${inner.offsetLeft}px)`;
+        if (!animate) {
+            void tabInd.offsetWidth; // 전환 없이 반영한 뒤 다음 이동부터 다시 애니메이션
+            tabInd.classList.remove("no-anim");
+        }
+        // 활성 탭이 가로 스크롤 밖에 있으면 보이는 범위로 들인다.
+        const left = tab.offsetLeft - 12;
+        const right = tab.offsetLeft + tab.offsetWidth + 12;
+        if (left < tabsEl.scrollLeft) tabsEl.scrollTo({ left, behavior: animate ? "smooth" : "auto" });
+        else if (right > tabsEl.scrollLeft + tabsEl.clientWidth)
+            tabsEl.scrollTo({ left: right - tabsEl.clientWidth, behavior: animate ? "smooth" : "auto" });
+    }
+
+    /* 폴더 전환 제스처: 목록을 좌우로 밀거나(터치) 가로로 스크롤하면(트랙패드/Shift+휠)
+       옆 폴더로 넘어간다. 검색 중이거나 폴더가 없으면 동작하지 않는다. */
+    // dir: +1 = 다음(오른쪽) 탭, -1 = 이전 탭. 끝이면 null.
+    function neighborFolder(dir) {
+        const folders = state.state.folders || [];
+        if (query || !folders.length) return null;
+        const order = ["", ...folders.map((f) => f.id)];
+        const to = order.indexOf(activeFolderId()) + dir;
+        return to >= 0 && to < order.length ? order[to] : null;
+    }
+
+    function stepFolder(dir) {
+        const next = neighborFolder(dir);
+        if (next === null) return false;
+        setActiveFolder(next);
+        return true;
+    }
+
+    function initFolderSwipe() {
+        const SWIPE_LOCK_PX = 10; // 방향을 정하는 최소 이동
+        const SWIPE_COMMIT_PX = 64; // 이만큼 밀면 넘어간다
+        const SWIPE_FLICK_PX_MS = 0.45; // 빠르게 튕기면 짧은 거리도 인정
+        let sw = null;
+        listEl.addEventListener(
+            "touchstart",
+            (e) => {
+                sw = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: e.timeStamp, lock: null, dx: 0 } : null;
+            },
+            { passive: true },
+        );
+        listEl.addEventListener(
+            "touchmove",
+            (e) => {
+                if (!sw || e.touches.length !== 1) return;
+                const dx = e.touches[0].clientX - sw.x;
+                const dy = e.touches[0].clientY - sw.y;
+                if (sw.lock === null) {
+                    if (Math.abs(dx) > SWIPE_LOCK_PX && Math.abs(dx) > Math.abs(dy) * 1.5) sw.lock = "x";
+                    else if (Math.abs(dy) > SWIPE_LOCK_PX) sw.lock = "y";
+                }
+                if (sw.lock !== "x") return;
+                sw.dx = dx;
+                // 손가락을 따라 움직인다. 넘어갈 폴더가 없는 방향은 뻑뻑하게(고무줄).
+                const open = neighborFolder(dx < 0 ? 1 : -1) !== null;
+                listEl.classList.remove("slide-next", "slide-prev");
+                listEl.style.transition = "none";
+                listEl.style.transform = `translateX(${open ? dx : dx * 0.2}px)`;
+            },
+            { passive: true },
+        );
+        const end = (e) => {
+            const cur = sw;
+            sw = null;
+            if (!cur || cur.lock !== "x") return;
+            const dir = cur.dx < 0 ? 1 : -1;
+            const speed = Math.abs(cur.dx) / Math.max(1, e.timeStamp - cur.at);
+            const commit = e.type === "touchend" && (Math.abs(cur.dx) > SWIPE_COMMIT_PX || (speed > SWIPE_FLICK_PX_MS && Math.abs(cur.dx) > 24));
+            if (commit && stepFolder(dir)) return;
+            listEl.style.transition = "transform 200ms var(--ease)";
+            listEl.style.transform = "";
+        };
+        listEl.addEventListener("touchend", end, { passive: true });
+        listEl.addEventListener("touchcancel", end, { passive: true });
+
+        // 가로 스크롤: 한 번의 제스처(관성 포함)에 한 칸만 넘어가게, 입력이 잠잠해질 때까지 잠근다.
+        const WHEEL_COMMIT_PX = 50;
+        const WHEEL_IDLE_MS = 160;
+        let wheelAcc = 0;
+        let wheelLocked = false;
+        let wheelIdle = 0;
+        listEl.addEventListener(
+            "wheel",
+            (e) => {
+                if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+                if (query || !(state.state.folders || []).length) return;
+                // 브라우저의 "뒤로 가기" 스와이프가 대신 먹지 않게 한다.
+                e.preventDefault();
+                clearTimeout(wheelIdle);
+                wheelIdle = setTimeout(() => {
+                    wheelAcc = 0;
+                    wheelLocked = false;
+                }, WHEEL_IDLE_MS);
+                if (wheelLocked) return;
+                wheelAcc += e.deltaX;
+                if (Math.abs(wheelAcc) < WHEEL_COMMIT_PX) return;
+                stepFolder(wheelAcc > 0 ? 1 : -1);
+                wheelLocked = true;
+                wheelAcc = 0;
+            },
+            { passive: false },
+        );
+        listEl.addEventListener("animationend", () => listEl.classList.remove("slide-next", "slide-prev"));
+    }
+
+    // 사이드바는 스트리밍 중에도 자주 다시 그려진다 — 탭 구성이 그대로면 DOM을 유지해
+    // 밑줄 애니메이션과 가로 스크롤 위치가 끊기지 않게 한다.
+    let tabsSig = null;
     function renderTabs() {
         if (!tabsEl) return;
         const folders = state.state.folders || [];
-        const show = folders.length > 0 || editingFolder === "new";
-        tabsEl.hidden = !show;
-        tabsEl.replaceChildren();
-        if (!show) return;
+        tabsEl.hidden = !folders.length;
+        if (!folders.length) {
+            tabsEl.replaceChildren();
+            tabsSig = null;
+            return;
+        }
 
-        const active = activeFolderId();
+        // 배지는 메신저처럼 "안 읽은 대화 수"다 — 0이면 숨긴다.
+        // allTabExcludesFoldered가 켜져 있으면 "전체"는 미분류 에이전트만 센다.
         const counts = new Map();
         for (const b of state.state.bots) {
+            if (!unreadOf(b)) continue;
             const f = folderOf(b);
             if (f) counts.set(f, (counts.get(f) || 0) + 1);
+            if (!f || !allExcludesFoldered()) counts.set("", (counts.get("") || 0) + 1);
         }
+        const tabs = [{ id: "", name: t("folderAll"), folder: null }];
+        for (const f of folders) tabs.push({ id: f.id, name: f.name, folder: f });
 
-        // 고정 "전체" 탭 — 에이전트를 여기 놓으면 폴더에서 뺀다.
-        // allTabExcludesFoldered가 켜져 있으면 미분류 에이전트 수만 센다.
-        const allCount = allExcludesFoldered() ? state.state.bots.filter((b) => !folderOf(b)).length : state.state.bots.length;
-        const allTab = T.h(
-            "div",
-            {
-                class: "sb-tab" + (active === "" ? " active" : ""),
-                role: "tab",
-                tabindex: "0",
-                "aria-selected": String(active === ""),
-            },
-            [document.createTextNode(t("folderAll")), T.h("span", { class: "sb-tab-count", text: String(allCount) })],
-        );
-        allTab.addEventListener("click", () => setActiveFolder(""));
-        allTab.addEventListener("keydown", (e) => {
-            if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
-                e.preventDefault();
-                setActiveFolder("");
+        const sig = JSON.stringify(tabs.map((x) => [x.id, x.name]));
+        const rebuilt = sig !== tabsSig;
+        if (rebuilt) {
+            tabsSig = sig;
+            tabsEl.replaceChildren(...tabs.map((x) => buildTab(x.id, x.name, x.folder)), tabInd);
+        }
+        const active = activeFolderId();
+        // 활성 표시와 배지는 제자리에서 갱신한다. 배지가 생기면 탭 폭이 바뀌므로 밑줄도 다시 맞춘다.
+        let moved = false;
+        for (const tab of tabsEl.querySelectorAll(".sb-tab")) {
+            const on = tab.dataset.folder === active;
+            if (tab.classList.contains("active") !== on) moved = true;
+            tab.classList.toggle("active", on);
+            tab.setAttribute("aria-selected", String(on));
+            const n = counts.get(tab.dataset.folder) || 0;
+            const badge = tab.querySelector(".sb-tab-count");
+            const text = n > 99 ? "99+" : String(n);
+            if (badge.hidden !== !n || (n && badge.textContent !== text)) {
+                badge.hidden = !n;
+                badge.textContent = n ? text : "";
+                moved = true;
             }
-        });
-        attachTabDrop(allTab, { agentFolder: "", folderBefore: folders[0]?.id || null });
-        tabsEl.append(allTab);
-
-        for (const f of folders) {
-            if (editingFolder === f.id) {
-                tabsEl.append(buildFolderTabEditor(f));
-                continue;
-            }
-            tabsEl.append(buildFolderTab(f, counts.get(f.id) || 0, active === f.id));
         }
-
-        if (editingFolder === "new") {
-            tabsEl.append(buildFolderTabEditor(null));
-        } else {
-            const add = T.h(
-                "button",
-                {
-                    class: "sb-tab sb-tab-add",
-                    type: "button",
-                    "data-tip": t("folderNew"),
-                    "aria-label": t("folderNew"),
-                    onclick() {
-                        pendingAssign = null;
-                        editingFolder = "new";
-                        render();
-                    },
-                },
-                [T.icon("plus", "icon-sm")],
-            );
-            tabsEl.append(add);
-        }
+        if (rebuilt || moved) placeTabIndicator(!rebuilt);
     }
 
     // 검색 히트 행: 에이전트 아바타 + 이름/시각 + 매치 스니펫
@@ -1010,6 +1006,10 @@
         state.on("todos", render);
         T.i18n.onChange(syncMobileNavigation);
 
+        // 사이드바 폭 변경·펼침·글꼴 로드로 탭 위치가 바뀌면 밑줄을 다시 맞춘다.
+        if (tabsEl && window.ResizeObserver) new ResizeObserver(() => placeTabIndicator(false)).observe(tabsEl);
+
+        initFolderSwipe();
         initResize();
         renderConn();
         render();
