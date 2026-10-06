@@ -2230,7 +2230,9 @@
         });
         actions.append(saveBtn, T.h("button", { class: "btn ghost", text: t("cancel"), onclick: close }));
         form.append(actions);
-        if (isNew) requestAnimationFrame(() => nameInput.focus());
+        // 모바일에서는 자동 포커스를 하지 않는다 — 설정 패널이 미끄러져 들어오는 중에 포커스하면
+        // iOS가 입력을 보이게 하려고 화면을 밀어 전환이 깨지고 패널이 반쯤 잘린다.
+        if (isNew && !window.matchMedia("(max-width: 860px)").matches) requestAnimationFrame(() => nameInput.focus());
         return form;
     }
 
