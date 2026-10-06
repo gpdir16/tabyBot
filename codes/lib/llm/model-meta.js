@@ -39,7 +39,7 @@ export async function ensureModelMeta(provider) {
     }
 
     let contextWindow = defaultContext;
-    // Copilot "auto"는 모델 목록에 없는 가상 라우팅 id — 요청마다 큐레이션된
+    // Copilot "auto"는 모델 목록에 없는 가상 라우팅 id: 요청마다 큐레이션된
     // 비전 모델 풀에서 고른다. false로 두면 첨부/스크린샷이 조용히 버려진다.
     let supportsVision = provider.model === "auto" ? true : findModelVisionSupport(null, provider.model);
     try {

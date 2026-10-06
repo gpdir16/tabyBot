@@ -3,7 +3,7 @@
 #   argv: [shell, cwd, cols, rows]
 #   fd 0: PTY로 전달할 입력(raw bytes)
 #   fd 1: PTY 출력(raw bytes)
-#   fd 3: 제어 채널 — 줄 단위 JSON ({"type":"resize","cols":N,"rows":N})
+#   fd 3: 제어 채널. 줄 단위 JSON ({"type":"resize","cols":N,"rows":N})
 import os
 import sys
 import json

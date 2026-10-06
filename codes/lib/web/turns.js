@@ -40,17 +40,17 @@ export function isSilentReply(result) {
     return Boolean(result?.silent) && !result?.text?.trim();
 }
 
-// 읽기 전용 도구 — 이것들만 쓰고 침묵한 자동 턴은 히스토리에 남기지 않는다.
+// 읽기 전용 도구: 이것들만 쓰고 침묵한 자동 턴은 히스토리에 남기지 않는다.
 const OBSERVATION_TOOLS = new Set(["file_read", "session_search", "todo_list", "skills_read", "bg_status", "bg_list"]);
 
 // 자동 턴 중 "아무 일도 안 한" 턴만 저장을 건너뛴다. 무응답이어도 상태를 바꾼
 // 도구를 썼거나 유저에게 말을 걸었거나 도중에 유저 메시지가 끼어든 턴은
-// 에이전트 연속성을 위해 남긴다 — 도중에 한 말도 유저가 이미 본 발화다.
+// 에이전트 연속성을 위해 남긴다. 도중에 한 말도 유저가 이미 본 발화다.
 // 무의미한 체크인까지 쌓이면 히스토리가 불어나 다음 자동 턴의 입력 비용까지 키운다.
 function isUnremarkableAutoTurn(result) {
     for (const m of result?.turnMessages || []) {
         if (m?.role === "user") {
-            if (Array.isArray(m.content)) return false; // 이미지 관측 등 — 도구가 무언가 수행했다
+            if (Array.isArray(m.content)) return false; // 이미지 관측 등: 도구가 무언가 수행했다
             const text = typeof m.content === "string" ? m.content : "";
             if (text && !text.includes(SCHEDULED_TURN_MARKER) && !isInternalStoredMessage(m)) return false;
         }
@@ -60,7 +60,7 @@ function isUnremarkableAutoTurn(result) {
                 if (name && !OBSERVATION_TOOLS.has(name)) return false;
             }
             const text = typeof m.content === "string" ? m.content.trim() : "";
-            // 툴 호출에 붙은 본문은 사용자에게 가지 않는 내부 메모 — 턴의 가치를 올리지 않는다.
+            // 툴 호출에 붙은 본문은 사용자에게 가지 않는 내부 메모: 턴의 가치를 올리지 않는다.
             // (user_say 호출은 위 도구 판정에서 이미 유의미로 걸러진다)
             if (text && !isSilentMarkedText(text) && !m.tool_calls?.length) return false;
         }
@@ -140,7 +140,7 @@ export async function runTurn({
                     emit({ type: "delta", conversationId: sessionKey, text, full });
                 },
                 onCheckpoint: automated
-                    ? undefined // 자동 턴은 중간 체크포인트를 쓰지 않는다 — 무의미 턴이면 통째로 저장을 건너뛴다.
+                    ? undefined // 자동 턴은 중간 체크포인트를 쓰지 않는다. 무의미 턴이면 통째로 저장을 건너뛴다.
                     : (turnMessages) => {
                           if (!getConversationMeta(sessionKey)) return;
                           checkpointChatTurn(sessionKey, turnMessages, {
@@ -299,7 +299,7 @@ ${isJob ? `Scheduled job` : `Agent todo`} "${item.title}"${when}. This is an aut
 Task:
 ${body}
 
-Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"), and do not post progress updates mid-run ("checking the page", "it loaded, extracting now"). Like a coworker, report only the finished job. Text written next to tool calls never reaches the user — if something cannot wait, send it with the user_say tool. If there is nothing to tell the user, reply with ONLY __SILENT__ as the entire message.`;
+Follow the task for when to speak. If it does not say to report empty results, stay silent unless there is a real finding or a failure the user must know. Do not narrate negative checks (no "I looked", "nothing new", "the list is empty"), and do not post progress updates mid-run ("checking the page", "it loaded, extracting now"). Like a coworker, report only the finished job. Text written next to tool calls never reaches the user. If something cannot wait, send it with the user_say tool. If there is nothing to tell the user, reply with ONLY __SILENT__ as the entire message.`;
 }
 
 // 능동 체크인: 봇의 메인 스레드에서 조용히 깨어 할 말이 있을 때만 게시한다.
@@ -310,7 +310,7 @@ export function setProactiveHandler() {
         const result = await runTurn({
             sessionKey,
             agentId: agent.id,
-            userText: `${SCHEDULED_TURN_MARKER}\nAutomatic proactive check-in — not a user message.\n\n${CHECKIN_PROMPT}`,
+            userText: `${SCHEDULED_TURN_MARKER}\nAutomatic proactive check-in, not a user message.\n\n${CHECKIN_PROMPT}`,
             quietEmpty: true,
             automated: true,
         });
@@ -329,7 +329,6 @@ export function setTodoJobHandler() {
         emit,
         async runAgent({ agent, item, sessionKey }) {
             const lang = loadUserConfig().language || "en";
-            const isJob = (item.list || "user") !== "user";
             ensureConversation(sessionKey);
             try {
                 const result = await runTurn({
@@ -347,7 +346,7 @@ export function setTodoJobHandler() {
                         emit({
                             type: "notice",
                             level: "error",
-                            text: `${isJob ? "⏰" : "❌"} ${item.title}: ${result.errorDetail || result.error}`,
+                            text: `${item.title}: ${result.errorDetail || result.error}`,
                             conversationId: sessionKey,
                         });
                     }
@@ -357,7 +356,7 @@ export function setTodoJobHandler() {
                 emit({
                     type: "notice",
                     level: "info",
-                    text: `${isJob ? "⏰" : "✅"} ${item.title}: ${body.slice(0, 400)}`,
+                    text: `${item.title}: ${body.slice(0, 400)}`,
                     conversationId: sessionKey,
                 });
                 emit({ type: "conversations_changed" });
@@ -367,7 +366,7 @@ export function setTodoJobHandler() {
                 emit({
                     type: "notice",
                     level: "error",
-                    text: `${isJob ? "⏰" : "❌"} ${item.title}: ${err?.message || String(err)}`,
+                    text: `${item.title}: ${err?.message || String(err)}`,
                     conversationId: sessionKey,
                 });
                 return { error: err?.message || String(err), silent: true };

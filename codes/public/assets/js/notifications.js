@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — PWA 알림/설치.
+/* tabyBot 웹 클라이언트: PWA 알림/설치.
    - 탭이 숨겨져 있으면 Notification API로 즉시 표시
    - 브라우저가 닫혀 있으면 서비스 워커 웹 푸시로 전달
    - 설치 프롬프트(beforeinstallprompt)는 설정 시트에서 노출 */
@@ -155,7 +155,7 @@
             if (enabled()) void ensurePush();
         });
         navigator.serviceWorker?.addEventListener?.("message", (ev) => {
-            // 캐시된 셸로 먼저 떴는데 서버에 새 버전이 있다 — 바로 적용할지 경고창으로 묻는다.
+            // 캐시된 셸로 먼저 떴는데 서버에 새 버전이 있다. 바로 적용할지 경고창으로 묻는다.
             if (ev.data?.type === "shell-updated") {
                 T.notices.alert({
                     key: "app-updated",

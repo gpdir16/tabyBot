@@ -2,9 +2,9 @@ import { emit } from "../web/bus.js";
 import { loadUserConfig } from "../config-loader.js";
 
 function formatUpdateNotice(update, lang) {
-    if (lang === "ko") return `🆕 새 버전이 출시되었습니다: ${update.tagName} — ${update.releaseUrl}`;
-    if (lang === "ja") return `🆕 新しいバージョンがリリースされました: ${update.tagName} — ${update.releaseUrl}`;
-    return `🆕 A new version is available: ${update.tagName} — ${update.releaseUrl}`;
+    if (lang === "ko") return `새 버전 ${update.tagName}이 출시되었습니다. ${update.releaseUrl}`;
+    if (lang === "ja") return `新しいバージョン ${update.tagName} がリリースされました。${update.releaseUrl}`;
+    return `Version ${update.tagName} is available. ${update.releaseUrl}`;
 }
 
 export function sendUpdateNotification(update) {

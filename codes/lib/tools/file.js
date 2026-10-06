@@ -157,7 +157,7 @@ export async function executeFileRead(args, ctx) {
         endLine = limit;
     }
 
-    // Re-read dedup — same path + range + mtime within one turn returns a stub.
+    // Re-read dedup. Same path + range + mtime within one turn returns a stub.
     const cacheKey = `${resolved}:${startLine ?? 1}:${endLine ?? "end"}:${stat.mtimeMs}`;
     if (fileReadCache.has(cacheKey)) {
         const prev = fileReadCache.get(cacheKey);
@@ -166,7 +166,7 @@ export async function executeFileRead(args, ctx) {
             startLine: prev.start,
             endLine: prev.end,
             totalLines: prev.totalLines,
-            content: `[Already read in this turn — content suppressed to save context. Re-read with a different startLine/endLine if you need it again, or use the previous result.]`,
+            content: `[Already read in this turn. Content suppressed to save context. Re-read with a different startLine/endLine if you need it again, or use the previous result.]`,
             deduped: true,
         };
     }
@@ -256,7 +256,7 @@ function applyHunk(fileLines, hunk, offset = 0) {
     const startPos = hunk.oldStart - 1 + offset;
     const oldSlice = result.slice(startPos, startPos + hunk.oldCount);
     if (oldSlice.join("\n") !== oldLines.join("\n")) {
-        return { ok: false, error: "Context mismatch — file changed since last read. Re-read the file first." };
+        return { ok: false, error: "Context mismatch. The file changed since the last read. Re-read the file first." };
     }
     result.splice(startPos, hunk.oldCount, ...newLines);
     return { ok: true, result, offset: offset + newLines.length - hunk.oldCount };

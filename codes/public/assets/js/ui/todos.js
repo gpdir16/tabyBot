@@ -1148,8 +1148,8 @@
             chip("every", t("todosWhenEvery")),
             chip("cron", t("todosWhenCron")),
         ];
-        if (draft.keepMode === "everyKeep") chips.push(chip("everyKeep", everyLabel(draft.every || "—"), draft.mode === "everyKeep"));
-        if (draft.keepMode === "cronKeep") chips.push(chip("cronKeep", cronLabel(draft.cron) || draft.cron || "—", draft.mode === "cronKeep"));
+        if (draft.keepMode === "everyKeep") chips.push(chip("everyKeep", everyLabel(draft.every || "-"), draft.mode === "everyKeep"));
+        if (draft.keepMode === "cronKeep") chips.push(chip("cronKeep", cronLabel(draft.cron) || draft.cron || "-", draft.mode === "cronKeep"));
 
         const wrap = T.h("div", { class: "td-when-editor" }, [T.h("div", { class: "td-chips" }, chips)]);
 
@@ -1738,7 +1738,7 @@
                     t("todosEditHint"),
                 ]
                     .filter(Boolean)
-                    .join(" — "),
+                    .join(", "),
             },
             [
                 job && !done ? pauseBtn(item) : checkBtn(item, checked),
@@ -1812,14 +1812,14 @@
                     .slice(0, 120);
             if (patch.title != null && patch.title !== target?.title) {
                 changes.push(t("todosFieldTitle"));
-                previews.unshift(`${t("todosFieldTitle")}: ${clipVal(patch.title) || "—"}`);
+                previews.unshift(`${t("todosFieldTitle")}: ${clipVal(patch.title) || "-"}`);
             }
             if (patch.cron != null || patch.every != null || patch.at != null || patch.clearWhen) changes.push(t("todosFieldWhen"));
             if (patch.timezone != null) {
                 changes.push(t("todosFieldTz"));
-                previews.push(`${t("todosFieldTz")}: ${clipVal(patch.timezone) || "—"}`);
+                previews.push(`${t("todosFieldTz")}: ${clipVal(patch.timezone) || "-"}`);
             }
-            if (patch.prompt != null) previews.push(`${t("todosFieldPrompt")}: ${clipVal(patch.prompt) || "—"}`);
+            if (patch.prompt != null) previews.push(`${t("todosFieldPrompt")}: ${clipVal(patch.prompt) || "-"}`);
             if (changes.length) subs.push(`${t("todosSuggestChanges")}: ${changes.join(", ")}`);
         }
 
@@ -2416,7 +2416,7 @@
             timezone: msg?.timezone,
         });
         if (w) parts.push(w);
-        return parts.filter(Boolean).join(" — ").slice(0, 180);
+        return parts.filter(Boolean).join(", ").slice(0, 180);
     }
 
     T.todosUI = { init, open, hide, isOpen, routeFromPath, addFromComposer, describeDue };

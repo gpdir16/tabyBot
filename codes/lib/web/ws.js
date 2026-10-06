@@ -38,7 +38,7 @@ class WsConn {
     }
 
     on(event, fn) {
-        // 이벤트당 여러 리스너를 허용한다 — 나중에 등록한 핸들러가
+        // 이벤트당 여러 리스너를 허용한다. 나중에 등록한 핸들러가
         // 앞의 것을 덮어쓰지 않게 Set으로 모은다.
         let set = this.handlers.get(event);
         if (!set) {

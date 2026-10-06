@@ -14,7 +14,7 @@ export function assistantMessageToPlain(message) {
         const name = tc.function?.name;
         if (!name) throw new Error("tool_call missing function.name");
         if (!tc.id) {
-            throw new Error(`tool_call missing id (function=${name}) — provider is not OpenAI-compatible`);
+            throw new Error(`tool_call missing id (function=${name}). The provider is not OpenAI-compatible`);
         }
         return {
             id: tc.id,

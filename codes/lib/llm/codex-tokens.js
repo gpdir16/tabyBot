@@ -108,7 +108,7 @@ export async function refreshCodexToken(refreshToken) {
 }
 
 export async function ensureFreshToken(stored) {
-    if (!stored) throw new Error("No Codex OAuth tokens. Use /config → Codex to log in with your ChatGPT account.");
+    if (!stored) throw new Error("No Codex OAuth tokens. Log in with your ChatGPT account from the Provider tab in Settings.");
     const now = Date.now();
     const margin = 60_000;
     if (stored.expiresAt && now < stored.expiresAt - margin && stored.accessToken) {

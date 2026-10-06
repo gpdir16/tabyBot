@@ -62,7 +62,7 @@ function readMeta(id) {
     const manifest = readJson(mPath);
     if (!manifest?.activeSessionId) return null;
     const createdAt = statTime(mPath, "birthtimeMs") || statTime(mPath);
-    // 목록 정렬은 실제 발화 시각(lastActivityAt)이 정본이다 — mtime은
+    // 목록 정렬은 실제 발화 시각(lastActivityAt)이 정본이다. mtime은
     // 압축·백필 같은 내부 쓰기에도 갱신돼 최신 순서를 깨뜨린다.
     let lastActivityAt = typeof manifest.lastActivityAt === "string" ? manifest.lastActivityAt : "";
     let turnsCache = null;
@@ -156,7 +156,7 @@ function publicUserMessage(message) {
 }
 function toDisplayTurns(rawTurns) {
     const turns = [];
-    // 실행 중 주입된 큐 메시지 텍스트 — 같은 발화의 단독 pending 턴이 남아 있으면
+    // 실행 중 주입된 큐 메시지 텍스트: 같은 발화의 단독 pending 턴이 남아 있으면
     // 화면에 두 번 보이므로, 이미 래핑 본문으로 표시된 텍스트는 여기서 기억한다.
     const queuedSeen = new Set();
     for (const turn of rawTurns || []) {
@@ -172,13 +172,13 @@ function toDisplayTurns(rawTurns) {
         }
         const messages = [];
         for (const m of rawMessages) {
-            // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다 —
+            // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다.
             // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
             if (m?.role === "user" && Array.isArray(m.content)) continue;
             // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
             if (m?.role === "tool") continue;
             if (m?.role === "assistant") {
-                // 툴 호출이 딸린 메시지의 본문은 내부 메모 — user_say 호출의
+                // 툴 호출이 딸린 메시지의 본문은 내부 메모: user_say 호출의
                 // text 인자만 사용자용 발화로 꺼내 버블로 남긴다.
                 if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
                     for (const said of sayTextsFromMessage(m)) {
@@ -189,7 +189,7 @@ function toDisplayTurns(rawTurns) {
                 }
                 const text = String(m.content || "").trim();
                 if (!text && !m.attachments?.length) continue;
-                // 침묵 마커는 그 메시지 하나만 숨긴다 — 이미 보낸 중간 발화까지 소급 회수하지 않는다.
+                // 침묵 마커는 그 메시지 하나만 숨긴다. 이미 보낸 중간 발화까지 소급 회수하지 않는다.
                 if (isSilentMarkedText(text)) continue;
                 messages.push(m?.attachments ? publicUserMessage(m) : m);
                 continue;
@@ -241,7 +241,7 @@ export function getConversationDetail(id) {
 }
 
 // 메시지 전문 검색: 모든 에이전트의 활성 세션에서 표시용 발화 텍스트를 찾는다.
-// 반환 인덱스는 toDisplayTurns 기준 — 클라이언트는 같은 순서로 턴을 받으므로
+// 반환 인덱스는 toDisplayTurns 기준: 클라이언트는 같은 순서로 턴을 받으므로
 // turnIndex/messageIndex로 곧장 그 행을 찾을 수 있다.
 export function searchMessages(query, { limit = 30 } = {}) {
     const q = String(query || "")

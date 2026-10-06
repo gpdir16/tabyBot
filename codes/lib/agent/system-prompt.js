@@ -39,7 +39,7 @@ export function buildEnvironmentPromptVars() {
 export function buildFilesystemPromptBlock() {
     const docker = isDockerRuntime();
     const lines = [
-        docker ? "### Filesystem map (container — read before file/shell work)" : "### Filesystem map (local install — read before file/shell work)",
+        docker ? "### Filesystem map (container, read before file/shell work)" : "### Filesystem map (local install, read before file/shell work)",
         "",
         docker
             ? "You run **inside a Docker container**. Container paths are separate from the user's host machine."

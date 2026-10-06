@@ -14,8 +14,8 @@ Source of truth for development: `AGENTS.md`
 ## Table of Contents
 
 1. Two separate systems
-2. CLI search (`camofox search`) — 8 engines
-3. API macros (`@macro query`) — 14 macros
+2. CLI search (`camofox search`), 8 engines
+3. API macros (`@macro query`), 14 macros
 4. CLI-only vs API-only vs both
 5. Examples
 6. Common pitfalls
@@ -38,7 +38,7 @@ Source of truth for development: `AGENTS.md`
 
 ---
 
-## 2) CLI search (`camofox search`) — 8 engines
+## 2) CLI search (`camofox search`): 8 engines
 
 Supported CLI `--engine` values:
 
@@ -59,7 +59,7 @@ camofox search "playwright intercept response" --engine google --user research
 
 ---
 
-## 3) API macros (`@macro query`) — 14 macros
+## 3) API macros (`@macro query`): 14 macros
 
 From `src/utils/macros.ts`:
 
@@ -100,19 +100,19 @@ curl -sS -X POST "http://127.0.0.1:9377/tabs/$TAB_ID/navigate" \
 | YouTube       | `youtube`         | `@youtube_search`                     | both           |
 | Amazon        | `amazon`          | `@amazon_search`                      | both           |
 | Reddit        | `reddit`          | `@reddit_search`, `@reddit_subreddit` | both           |
-| Bing          | `bing`            | —                                     | CLI-only       |
-| DuckDuckGo    | `duckduckgo`      | —                                     | CLI-only       |
-| GitHub        | `github`          | —                                     | CLI-only       |
-| StackOverflow | `stackoverflow`   | —                                     | CLI-only       |
-| Wikipedia     | —                 | `@wikipedia_search`                   | API-only       |
-| Twitter/X     | —                 | `@twitter_search`                     | API-only       |
-| Yelp          | —                 | `@yelp_search`                        | API-only       |
-| Spotify       | —                 | `@spotify_search`                     | API-only       |
-| Netflix       | —                 | `@netflix_search`                     | API-only       |
-| LinkedIn      | —                 | `@linkedin_search`                    | API-only       |
-| Instagram     | —                 | `@instagram_search`                   | API-only       |
-| TikTok        | —                 | `@tiktok_search`                      | API-only       |
-| Twitch        | —                 | `@twitch_search`                      | API-only       |
+| Bing          | `bing`            | n/a                                   | CLI-only       |
+| DuckDuckGo    | `duckduckgo`      | n/a                                   | CLI-only       |
+| GitHub        | `github`          | n/a                                   | CLI-only       |
+| StackOverflow | `stackoverflow`   | n/a                                   | CLI-only       |
+| Wikipedia     | n/a               | `@wikipedia_search`                   | API-only       |
+| Twitter/X     | n/a               | `@twitter_search`                     | API-only       |
+| Yelp          | n/a               | `@yelp_search`                        | API-only       |
+| Spotify       | n/a               | `@spotify_search`                     | API-only       |
+| Netflix       | n/a               | `@netflix_search`                     | API-only       |
+| LinkedIn      | n/a               | `@linkedin_search`                    | API-only       |
+| Instagram     | n/a               | `@instagram_search`                   | API-only       |
+| TikTok        | n/a               | `@tiktok_search`                      | API-only       |
+| Twitch        | n/a               | `@twitch_search`                      | API-only       |
 
 ---
 
@@ -156,7 +156,7 @@ curl -sS -X POST "http://127.0.0.1:9377/tabs/$TAB_ID/navigate" \
 
 ## 7) Raw HTTP search (no browser)
 
-When only quick result links/snippets are needed — e.g. finding a URL before opening it — DuckDuckGo's HTML endpoint works over plain `curl` in `terminal_run`, no browser tab:
+When only quick result links/snippets are needed, for example to find a URL before opening it, DuckDuckGo's HTML endpoint works over plain `curl` in `terminal_run`, no browser tab:
 
 ```bash
 curl -sS -A "Mozilla/5.0" "https://html.duckduckgo.com/html/?q=<urlencoded query>"

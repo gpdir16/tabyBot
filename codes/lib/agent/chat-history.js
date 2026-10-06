@@ -21,7 +21,7 @@ const INTERNAL_USER_HINTS = new Set([
 ]);
 
 const RECOVERABLE_TURN_STATUSES = new Set(["pending", "in_progress", "interrupted"]);
-// 새 턴 체크포인트가 거슬러 합쳐도 되는 상태 — interrupted는 복구 실행에서만 합친다.
+// 새 턴 체크포인트가 거슬러 합쳐도 되는 상태: interrupted는 복구 실행에서만 합친다.
 const PENDING_MERGE_STATUSES = new Set(["pending", "in_progress"]);
 
 export function conversationDir(chatId) {
@@ -84,7 +84,7 @@ function ensureManifest(chatId) {
         return manifest;
     }
 
-    // 매니페스트가 깨졌을 때 기존 세션 파일을 덮어쓰지 않는다 — 디스크에 남은
+    // 매니페스트가 깨졌을 때 기존 세션 파일을 덮어쓰지 않는다. 디스크에 남은
     // sNNNNNN.json 중 가장 큰 번호 다음으로 새 세션을 잡는다.
     let maxSeq = 0;
     try {
@@ -164,7 +164,7 @@ export function isInternalStoredMessage(message) {
     return message?.role === "user" && INTERNAL_USER_HINTS.has(message.content);
 }
 
-// 모델이 __SILENT__ 마커를 메시지 앞/뒤에 붙인 경우도 침묵 의사로 인정한다 —
+// 모델이 __SILENT__ 마커를 메시지 앞/뒤에 붙인 경우도 침묵 의사로 인정한다.
 // 정확히 일치하지 않아서 잡담이 사용자에게 배달되는 것을 막는다.
 export function isSilentMarkedText(text) {
     const t = typeof text === "string" ? text.trim() : "";
@@ -207,7 +207,7 @@ export function stripMarkdownForPreview(text) {
 function previewTextFromMessage(message) {
     if (!message || (message.role !== "user" && message.role !== "assistant")) return "";
     if (isInternalStoredMessage(message)) return "";
-    // 툴 호출이 딸린 발화는 내부 메모 — 프리뷰에는 user_say로 보낸 말만 쓴다.
+    // 툴 호출이 딸린 발화는 내부 메모: 프리뷰에는 user_say로 보낸 말만 쓴다.
     if (message.role === "assistant" && message.tool_calls?.length) {
         const said = sayTextsFromMessage(message)
             .filter((t) => !isSilentMarkedText(t))
@@ -234,7 +234,7 @@ export function previewSnippetFromTurns(turns) {
     return "";
 }
 
-// 히스토리에서 가장 최근 발화 시각을 찾는다 — 목록 정렬(updatedAt)의 정본이다.
+// 히스토리에서 가장 최근 발화 시각을 찾는다. 목록 정렬(updatedAt)의 정본이다.
 // 파일 mtime은 압축·백필 같은 내부 쓰기에도 바뀌므로 정렬 근거로 쓰지 않는다.
 export function lastActivityAtFromTurns(turns) {
     for (let i = (turns || []).length - 1; i >= 0; i--) {
@@ -256,7 +256,7 @@ export function extractTurnMessages(messages, fromIndex) {
         .slice(fromIndex)
         .filter((m) => !isInternalStoredMessage(m))
         .map((m) => {
-            // 첫 추출 시각을 발화 시각으로 — 원본에 남겨 다음 체크포인트에서도 유지한다.
+            // 첫 추출 시각을 발화 시각으로 쓴다. 원본에 남겨 다음 체크포인트에서도 유지한다.
             if (typeof m.at !== "string" || !m.at) m.at = new Date().toISOString();
             return cloneStoredMessage(m);
         });
@@ -278,7 +278,7 @@ export function compressedSummaryTurn(summary) {
         messages: [
             {
                 role: "system",
-                content: `## Earlier conversation (compressed summary — your own past context, not a user message)\n\n${summary.trim()}`,
+                content: `## Earlier conversation (compressed summary of your own past context, not a user message)\n\n${summary.trim()}`,
             },
         ],
     };
@@ -357,7 +357,7 @@ function sanitizeTurnStats(stats) {
 }
 
 // 사용자가 마지막으로 읽은 시각(readAt) 뒤에 도착한 에이전트 발화 수.
-// 화면에 버블로 보이는 것만 센다 — 침묵 마커·빈 본문·툴 호출의 내부 메모는 제외.
+// 화면에 버블로 보이는 것만 센다. 침묵 마커·빈 본문·툴 호출의 내부 메모는 제외.
 function unreadCountFromTurns(turns, readAt) {
     let count = 0;
     for (const turn of turns || []) {
@@ -425,7 +425,7 @@ function userContentsFromTurnMessages(turnMessages) {
 }
 
 // 턴 메시지에 이미 포함된 큐 발화의 단독 pending 턴을 뒤에서부터 소비한다.
-// 반환값은 제거된 pending 턴의 user 메시지들 — 첨부 복구에 쓴다.
+// 반환값은 제거된 pending 턴의 user 메시지들: 첨부 복구에 쓴다.
 function consumeQueuedUserTurns(turns, turnMessages) {
     const incomingUsers = userContentsFromTurnMessages(turnMessages);
     const popped = [];
@@ -457,7 +457,7 @@ function consumeQueuedUserTurns(turns, turnMessages) {
     return popped;
 }
 
-// 소비된 pending 턴에 붙어 있던 첨부를 주입된 user 메시지로 옮긴다 —
+// 소비된 pending 턴에 붙어 있던 첨부를 주입된 user 메시지로 옮긴다.
 // 큐에 실린 업로드가 히스토리에서 사라지지 않게.
 function rescuePoppedAttachments(popped, messages) {
     for (const pm of popped) {
@@ -492,10 +492,10 @@ export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null }
 
     const turns = loadChatHistory(chatId);
     // 실행 중 보낸 메시지가 이 체크포인트에 래핑 주입돼 있으면 단독 pending 턴을
-    // 여기서 소비한다 — 턴 완료까지 남겨 두면 화면에 같은 발화가 두 번 보인다.
+    // 여기서 소비한다. 턴 완료까지 남겨 두면 화면에 같은 발화가 두 번 보인다.
     const consumedPending = consumeQueuedUserTurns(turns, turnMessages);
     let targetIndex = turns.length - 1;
-    // 복구 실행(baseMessages 있음)이 아니면 interrupted 턴까지 거슬러 합치지 않는다 —
+    // 복구 실행(baseMessages 있음)이 아니면 interrupted 턴까지 거슬러 합치지 않는다.
     // 이전 턴의 메시지가 새 턴 체크포인트로 교체되며 유실되는 것을 막기 위해서다.
     const mergeable = Array.isArray(baseMessages) ? RECOVERABLE_TURN_STATUSES : PENDING_MERGE_STATUSES;
     while (targetIndex > 0 && mergeable.has(turns[targetIndex - 1]?.status)) targetIndex -= 1;
@@ -598,7 +598,7 @@ export function appendChatTurn(chatId, turnMessages, extra = {}) {
 
     const last = turns[turns.length - 1];
     // 복구 턴은 기존 체크포인트와 새 실행분을 하나의 완료 턴으로 확정한다.
-    // interrupted 턴은 복구 실행(baseMessages 있음)에서만 확정 대상이다 — 새 턴이
+    // interrupted 턴은 복구 실행(baseMessages 있음)에서만 확정 대상이다. 새 턴이
     // 미완료 이전 턴을 덮어쓰며 사용자 메시지를 지우는 것을 막는다.
     if (last && (last.status === "in_progress" || (last.status === "interrupted" && Array.isArray(extra.baseMessages)))) {
         const completedMessages = Array.isArray(extra.baseMessages)
@@ -675,7 +675,7 @@ export function formatPastSessionsForPrompt(chatId) {
             const parts = [`session ${s.id}`, `${turnCount} turns`];
             if (s.archiveReason === "context_compression") parts.push("archived before context compression");
             if (s.closedAt) parts.push(`closed ${s.closedAt}`);
-            return `- \`${rel}\` — ${parts.join(", ")}`;
+            return `- \`${rel}\`: ${parts.join(", ")}`;
         })
         .join("\n");
 }

@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 사이드바(봇 라스터).
+/* tabyBot 웹 클라이언트: 사이드바(봇 라스터).
    메신저 패러다임: 대화 상대는 봇이다. 각 행은 하나의 봇(동료)이고,
    클릭하면 그 봇과의 끊기지 않는 스레드가 열린다. 검색은 봇 필터,
    리사이즈/축소를 지원한다. */
@@ -94,9 +94,9 @@
         return "";
     }
 
-    // 마지막 발화 → 없으면 "아직 맡은 일이 없어요". 미리보기 줄은 항상 채운다.
-    // 최신 순: 확인 전 낙관 메시지 → 실행 중 발화(중간 say/스트리밍) → 서버 메타 →
-    // 봇 목록 스냅샷 → 캐시된 턴.
+    // 마지막 발화를 보여 주고, 없으면 "아직 맡은 일이 없어요"로 미리보기 줄을 채운다.
+    // 다음 순서로 먼저 있는 것을 쓴다: 확인 전 낙관 메시지, 실행 중 발화(중간 say/스트리밍),
+    // 서버 메타, 봇 목록 스냅샷, 캐시된 턴.
     function previewOf(bot) {
         const c = state.conv(bot.uuid);
         const pending = c?.pending || [];
@@ -185,7 +185,7 @@
                     : null,
             ],
         );
-        // 우클릭/길게 누르기 메뉴 — 메신저처럼 행에 따로 ⋯ 버튼을 두지 않는다.
+        // 우클릭/길게 누르기 메뉴: 메신저처럼 행에 따로 ⋯ 버튼을 두지 않는다.
         T.ctxmenu.attach(row, () => botMenuItems(bot));
         row.addEventListener("click", () => openBot(bot));
         row.addEventListener("keydown", (e) => {
@@ -269,7 +269,7 @@
         T.app?.renderRoute();
     }
 
-    // 설정 페이지 내비게이션 — 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다.
+    // 설정 페이지 내비게이션: 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다.
     function settingsPush(agentId) {
         const path = agentId == null ? "/s/general" : agentId === "__new__" ? "/s/agents/new" : `/s/agents/${agentId}`;
         history.pushState(null, "", path);
@@ -286,13 +286,13 @@
             { label: t("botSettings"), icon: "settings", defer: true, onSelect: () => settingsPush(bot.id) },
             folders.length
                 ? { label: t("folderAdd"), icon: "folder", children: () => folderPickItems(bot, newFolder) }
-                : // 폴더가 하나도 없으면 고를 것이 없다 — 곧장 만들기 폼으로 간다.
+                : // 폴더가 하나도 없으면 고를 것이 없다. 곧장 만들기 폼으로 간다.
                   { label: t("folderAdd"), icon: "folder", defer: true, onSelect: newFolder },
         ];
     }
 
     // "폴더에 추가…" 하위 메뉴: 지금 들어 있는 폴더에는 체크가 붙고, 다시 누르면 폴더에서 뺀다.
-    // 맨 아래 "새 폴더"는 설정 → 폴더의 만들기 폼을 이 에이전트를 미리 고른 채로 연다.
+    // 맨 아래 "새 폴더"는 설정의 폴더 탭에 있는 만들기 폼을 이 에이전트를 미리 고른 채로 연다.
     function folderPickItems(bot, newFolder) {
         const current = folderOf(bot);
         return [
@@ -306,7 +306,7 @@
         ];
     }
 
-    // 폴더 탭: 설정 → 폴더로 보낸다. "전체" 탭은 폴더 목록을, 폴더 탭은 그 폴더의 편집 폼을 연다.
+    // 폴더 탭: 설정의 폴더 탭으로 보낸다. "전체" 탭은 폴더 목록을, 폴더 탭은 그 폴더의 편집 폼을 연다.
     function tabMenuItems(folderId) {
         return [
             {
@@ -329,7 +329,7 @@
             if (lost) dot.setAttribute("title", label);
             else dot.removeAttribute("title");
         }
-        settingsBtn.setAttribute("aria-label", lost ? `${t("settings")} — ${label}` : t("settings"));
+        settingsBtn.setAttribute("aria-label", lost ? `${t("settings")}, ${label}` : t("settings"));
     }
     // 라우트에 맞춰 선택 표시를 동기화한다: /s/면 설정 행이, /a/면 해당 봇 행이 '선택'된다.
     function syncRoute() {
@@ -408,16 +408,16 @@
     /* ── 에이전트 폴더 탭 ───────────────────────────
        메신저 폴더 패턴: 목록 위 가로 텍스트 탭으로 필터링한다. "전체" 탭은 고정.
        활성 탭 아래에 밑줄 표시가 미끄러져 따라간다. 탭은 보기 전환만 하고,
-       폴더 만들기·이름·순서·소속은 설정 → 폴더에서 다룬다.
+       폴더 만들기·이름·순서·소속은 설정의 폴더 탭에서 다룬다.
        활성 탭은 로컬 상태, 실제 데이터는 state.folders/bot.folder. */
     const ACTIVE_TAB_KEY = "tabybot.sidebar.folder.active";
 
-    // 지워진 폴더를 가리키면 "전체"로 되돌린다 — 저장값은 존재하는 폴더만 인정.
+    // 지워진 폴더를 가리키면 "전체"로 되돌린다. 저장값은 존재하는 폴더만 인정.
     function activeFolderId() {
         const id = lsGet(ACTIVE_TAB_KEY) || "";
         return id && (state.state.folders || []).some((f) => f.id === id) ? id : "";
     }
-    // 폴더를 바꾼다. 탭 클릭·스와이프·가로 스크롤 모두 여기로 온다 —
+    // 폴더를 바꾼다. 탭 클릭·스와이프·가로 스크롤 모두 여기로 온다.
     // 새 목록이 넘어간 방향(오른쪽 탭이면 오른쪽)에서 미끄러져 들어온다.
     function setActiveFolder(id) {
         const order = ["", ...(state.state.folders || []).map((f) => f.id)];
@@ -432,7 +432,7 @@
         listEl.classList.add(dir > 0 ? "slide-next" : "slide-prev");
     }
 
-    // 존재하는 폴더 id만 인정한다 — 지워진 폴더를 가리키는 봇은 미분류로 본다.
+    // 존재하는 폴더 id만 인정한다. 지워진 폴더를 가리키는 봇은 미분류로 본다.
     function folderOf(bot) {
         const f = String(bot?.folder || "");
         return f && (state.state.folders || []).some((x) => x.id === f) ? f : "";
@@ -587,7 +587,7 @@
         listEl.addEventListener("animationend", () => listEl.classList.remove("slide-next", "slide-prev"));
     }
 
-    // 사이드바는 스트리밍 중에도 자주 다시 그려진다 — 탭 구성이 그대로면 DOM을 유지해
+    // 사이드바는 스트리밍 중에도 자주 다시 그려진다. 탭 구성이 그대로면 DOM을 유지해
     // 밑줄 애니메이션과 가로 스크롤 위치가 끊기지 않게 한다.
     let tabsSig = null;
     function renderTabs() {
@@ -600,7 +600,7 @@
             return;
         }
 
-        // 배지는 메신저처럼 "안 읽은 대화 수"다 — 0이면 숨긴다.
+        // 배지는 메신저처럼 "안 읽은 대화 수"다. 0이면 숨긴다.
         // allTabExcludesFoldered가 켜져 있으면 "전체"는 미분류 에이전트만 센다.
         const counts = new Map();
         for (const b of state.state.bots) {
@@ -693,12 +693,12 @@
     }
 
     /* ── 렌더 ───────────────────────────────────────────────── */
-    // 폴더 탭이 활성이면 그 폴더 소속만 — 검색 중에는 폴더 무관 전체 결과.
+    // 폴더 탭이 활성이면 그 폴더 소속만 보여 준다. 검색 중에는 폴더와 무관하게 전체 결과를 보여 준다.
     function render() {
         if (!listEl) return;
         listEl.replaceChildren();
         renderTabs();
-        // 최근 메시지 순 — 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
+        // 최근 메시지 순: 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
         const bots = state.state.bots.filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
         const active = query ? "" : activeFolderId();
@@ -740,7 +740,7 @@
         }
     }
     // 프라이빗 모드/스토리지 차단 브라우저에서 localStorage 접근이 SecurityError를
-    // 던진다 — 사이드바 초기화 전체가 죽지 않게 접근마다 가드한다.
+    // 던진다. 사이드바 초기화 전체가 죽지 않게 접근마다 가드한다.
     const lsGet = (k) => {
         try {
             return localStorage.getItem(k);
@@ -855,7 +855,7 @@
             hydratePreviews();
         });
         state.on("status", render); // 실행중 점
-        // 스트리밍 중 미리보기 갱신 — 토큰마다 전체를 다시 그리지 않게 짧게 묶는다.
+        // 스트리밍 중 미리보기 갱신: 토큰마다 전체를 다시 그리지 않게 짧게 묶는다.
         let deltaTimer = null;
         state.on("delta", () => {
             if (deltaTimer) return;

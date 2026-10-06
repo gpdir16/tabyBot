@@ -24,7 +24,7 @@ services:
         # Persistent state (config, memory, MCP, scheduling). Defaults: codes/templates/user
         volumes:
             - tabybot-user:/app/user
-        # 호스트 측은 기본으로 모든 인터페이스에 연다 — 이 머신만 쓰려면 TABYBOT_BIND=127.0.0.1.
+        # 호스트 측은 기본으로 모든 인터페이스에 연다. 이 머신만 쓰려면 TABYBOT_BIND=127.0.0.1.
         # LAN에 열릴 때는 첫 접속 화면에서 계정을 만들어 로그인을 요구하는 걸 권장.
         ports:
             - "${TABYBOT_BIND:-0.0.0.0}:${TABYBOT_PORT:-8999}:8999"

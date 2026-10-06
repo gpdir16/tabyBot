@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 봇 컴퓨터 뷰(/c/<uuid>).
+/* tabyBot 웹 클라이언트: 봇 컴퓨터 뷰(/c/<uuid>).
    공유 X 디스플레이(브라우저·GUI 앱) JPEG 스트림 + 봇별 PTY 터미널.
    화면 스트림은 /ws/computer/screen, 터미널은 /ws/computer/terminal?agent=<id>.
    화면은 봇이 아닌 컨테이너 공용 데스크톱이지만 터미널·브라우저 프로필은 봇별로 갈린다. */
@@ -45,7 +45,7 @@
     let stickyCtrl = false;
     let stickyAlt = false;
 
-    // 키보드 → xdotool. 인쇄 가능 문자는 type, 특수키는 key(+수정자).
+    // 키보드 입력을 xdotool로 보낸다. 인쇄 가능 문자는 type, 특수키는 key(+수정자).
     const KEYMAP = {
         Enter: "Return",
         Backspace: "BackSpace",
@@ -77,7 +77,7 @@
         return !!page && !page.hidden;
     }
 
-    // 봇 헤더 클릭 → 이 경로로. 설정 open()과 같은 push 패턴.
+    // 봇 헤더를 클릭하면 이 경로로 간다. 설정 open()과 같은 push 패턴.
     function navigate(uuid) {
         if (!uuid) return;
         open({ uuid });
@@ -115,7 +115,7 @@
         });
         const tabs = T.h("div", { class: "cp-tabs", role: "tablist" }, [tabScreen, tabTerm]);
 
-        /* 화면 탭 — 화면 안에 브라우저 주소창이 있으므로 별도 URL 바는 두지 않는다 */
+        /* 화면 탭: 화면 안에 브라우저 주소창이 있으므로 별도 URL 바는 두지 않는다 */
         // 모바일용: 공유 화면에 키를 보낼 가상 키보드 입력기. canvas는 tabindex라
         // 가상키보드가 안 뜨므로 숨은 textarea를 대신 포커스한다.
         const kbdInput = T.h("textarea", {
@@ -182,7 +182,7 @@
             T.h("div", { class: "cp-termkeyswrap" }, [termKeys]),
         ]);
 
-        /* 헤더는 채팅과 같은 #header 요소를 쓴다 — open()에서 backBtn/status/tabs를 주입한다 */
+        /* 헤더는 채팅과 같은 #header 요소를 쓴다. open()에서 backBtn/status/tabs를 주입한다 */
         page.append(screenPane, termPane);
         els = {
             backBtn,
@@ -214,7 +214,7 @@
                 sendScreen({ type: "key", key: sym, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey });
                 e.preventDefault();
             } else if (e.key === "Unidentified" || e.key === "Process") {
-                return; // IME 합성 중 — input 이벤트가 처리한다
+                return; // IME 합성 중: input 이벤트가 처리한다
             }
         });
         kbdInput.addEventListener("blur", () => {
@@ -242,7 +242,7 @@
 
     /* ── 로컬 핀치줌(원격 전송 아님) + 가상 커서 ──────────── */
     function applyZoom(s2, px, py) {
-        // (px,py): 스테이지 기준 좌표의 고정점 — 그 지점 아래 원격 픽셀이 움직이지 않게
+        // (px,py): 스테이지 기준 좌표의 고정점. 그 지점 아래 원격 픽셀이 움직이지 않게
         const w = canvas.clientWidth || 1;
         const h = canvas.clientHeight || 1;
         const lx = (px - zoom.tx) / zoom.s;
@@ -270,7 +270,7 @@
         const cr = canvas.getBoundingClientRect();
         const sr = els.screenStage.getBoundingClientRect();
         const s = Math.min(cr.width / screenDims.w, cr.height / screenDims.h) || 1;
-        // 캔버스는 contain 레터박스 — 실제 영상 영역의 오프셋을 더한다
+        // 캔버스는 contain 레터박스: 실제 영상 영역의 오프셋을 더한다
         const x = cr.left - sr.left + (cr.width - screenDims.w * s) / 2 + cursor.x * s;
         const y = cr.top - sr.top + (cr.height - screenDims.h * s) / 2 + cursor.y * s;
         els.cursor.style.transform = `translate(${Math.round(x - 1)}px, ${Math.round(y - 1)}px)`;
@@ -404,7 +404,7 @@
 
     // 화면 제스처 엔진.
     //  - 마우스: 절대 좌표 그대로(기존 데스크톱 동작)
-    //  - 터치·트랙패드 모드: 맥북 트랙패드식 — 한 손가락=커서, 탭=클릭, 탭 후 드래그=드래그,
+    //  - 터치·트랙패드 모드: 맥북 트랙패드식. 한 손가락=커서, 탭=클릭, 탭 후 드래그=드래그,
     //    두 손가락 탭=우클릭, 두 손가락 이동=스크롤, 핀치=로컬 확대(원격 전송 아님)
     //  - 터치·직접 모드: 탭=그 지점 클릭, 드래그=스크롤, 길게 누르고 드래그=원격 드래그
     function bindScreenInput(el) {
@@ -420,7 +420,7 @@
         const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
         function effScale() {
-            // transform이 반영된 실제 표시 배율 — 손가락 델타를 원격 픽셀로 환산
+            // transform이 반영된 실제 표시 배율: 손가락 델타를 원격 픽셀로 환산
             const r = el.getBoundingClientRect();
             return Math.min(r.width / screenDims.w, r.height / screenDims.h) || 1;
         }
@@ -457,7 +457,7 @@
             } catch {}
             ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (ptrs.size === 2) {
-                // 두 번째 손가락 → 핀치 줌 + 두 손가락 스크롤(양쪽 모드 공통)
+                // 두 번째 손가락이 닿으면 핀치 줌과 두 손가락 스크롤(양쪽 모드 공통)
                 clearTimeout(lpTimer);
                 down = null;
                 const [a, b] = [...ptrs.values()];
@@ -492,7 +492,7 @@
         el.addEventListener("pointermove", (e) => {
             const prev = ptrs.get(e.pointerId);
             if (!prev) {
-                // 누르지 않은 마우스 이동 = 호버 — 원격 커서를 절대 좌표로 옮긴다.
+                // 누르지 않은 마우스 이동 = 호버: 원격 커서를 절대 좌표로 옮긴다.
                 if (e.pointerType === "mouse") {
                     const p = screenPoint(e);
                     if (p) {
@@ -617,7 +617,7 @@
             "wheel",
             (e) => {
                 if (e.ctrlKey || e.metaKey) {
-                    // 데스크톱 트랙패드 핀치는 ctrl+wheel로 들어온다 — 로컬 확대만
+                    // 데스크톱 트랙패드 핀치는 ctrl+wheel로 들어온다. 로컬 확대만
                     const sp = stagePt(e.clientX, e.clientY);
                     applyZoom(clamp(zoom.s * (e.deltaY < 0 ? 1.1 : 1 / 1.1), 1, 5), sp.x, sp.y);
                 } else {
@@ -633,7 +633,7 @@
 
         el.addEventListener("keydown", (e) => {
             if (e.metaKey && (e.key === "c" || e.key === "v" || e.key === "a" || e.key === "x")) return; // OS 단축키
-            // IME 조합 중엔 keydown이 중간 글자를 보낸다 — 조합 완료 후 input이 확정
+            // IME 조합 중엔 keydown이 중간 글자를 보낸다. 조합 완료 후 input이 확정
             // 문자를내므로 여기서도내면 중복 입력이 된다.
             if (e.isComposing || e.key === "Process" || e.key === "Unidentified") return;
             const sym = KEYMAP[e.key];
@@ -718,7 +718,7 @@
         syncStickyBtns();
     }
     // 스티키 수정자를 시퀀스에 적용하고 소비한다(xterm 수정자 파라미터 규약:
-    // 1 + Shift? + Alt*2 + Ctrl*4 — Shift는 모바일 키보드가 자체 처리).
+    // 1 + Shift? + Alt*2 + Ctrl*4: Shift는 모바일 키보드가 자체 처리).
     function consumeSticky(seq, kind) {
         let out = seq;
         if (stickyCtrl || stickyAlt) {
@@ -741,7 +741,7 @@
             const btn = T.h("button", {
                 class: "cp-tk",
                 text: k.label,
-                // 포커스가 빠지면 가상 키보드와 함께 이 바도 닫힌다 — 포커스 유지 필수.
+                // 포커스가 빠지면 가상 키보드와 함께 이 바도 닫힌다. 포커스 유지 필수.
                 onpointerdown: (e) => e.preventDefault(),
                 onmousedown: (e) => e.preventDefault(),
                 onclick: () => {
@@ -761,7 +761,7 @@
     }
 
     /* ── 터미널(xterm.js) ─────────────────────────────────── */
-    // xterm(약 290KB)은 터미널 탭을 처음 열 때만 받는다 — 앱 시작 경로에서 뺀다.
+    // xterm(약 290KB)은 터미널 탭을 처음 열 때만 받는다. 앱 시작 경로에서 뺀다.
     // index.html의 <link rel="lazy-script|lazy-style" data-group="xterm">가 URL을 들고 있다.
     let xtermLoading = null;
     function loadXterm() {
@@ -878,7 +878,7 @@
                     if (msg.cols && msg.rows && term.cols && term.rows && (msg.cols !== term.cols || msg.rows !== term.rows)) {
                         ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
                     }
-                    // 탭을 막 전환했을 때만 포커스한다 — 자동 재접속 때마다
+                    // 탭을 막 전환했을 때만 포커스한다. 자동 재접속 때마다
                     // 키보드가 열리거나 다른 입력(URL 바 등)의 포커스를 뺏지 않게.
                     if (focusTermOnReady) {
                         focusTermOnReady = false;
@@ -977,7 +977,7 @@
         }
         if (hdrName) hdrName.textContent = name;
         els.status.textContent = "";
-        document.title = name ? `${name} — ${t("computer")} — tabyBot` : "tabyBot";
+        document.title = name ? `${name} · ${t("computer")} · tabyBot` : "tabyBot";
 
         if (!bot) {
             showScreenMsg(t("computerNoBot"), false);
@@ -1007,7 +1007,7 @@
 
     function hide() {
         if (!page || page.hidden) return;
-        // 페이지 안의 포커스를 먼저 뺀다 — 숨겨진 요소에 포커스가 남으면
+        // 페이지 안의 포커스를 먼저 뺀다. 숨겨진 요소에 포커스가 남으면
         // iOS 키보드가 죽은 입력기를 가리켜 돌아온 뒤 컴포저가 입력을 못 받는다.
         if (page.contains(document.activeElement)) document.activeElement.blur();
         if (els.kbdInput) {
@@ -1044,7 +1044,7 @@
     function init() {
         page = document.getElementById("computerPage");
         if (!page) return;
-        // 헤더 오른쪽의 컴퓨터 버튼 → 컴퓨터 뷰
+        // 헤더 오른쪽의 컴퓨터 버튼은 컴퓨터 뷰를 연다.
         const hdr = document.getElementById("btnHdrComputer");
         if (hdr) {
             hdr.addEventListener("click", () => {

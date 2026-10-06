@@ -18,7 +18,7 @@ async function shutdown() {
 
 // Docker에서는 공유 Xvfb 화면을 부팅 시 미리 띄운다.
 // camofox(CAMOFOX_HEADLESS=false)가 DISPLAY로 이 화면에 렌더링되고,
-// xvfb_gui 앱도 같은 화면 위에 뜬다 — 웹 "컴퓨터" 뷰가 바로 그 화면을 비춘다.
+// xvfb_gui 앱도 같은 화면 위에 뜬다. 웹 "컴퓨터" 뷰가 바로 그 화면을 비춘다.
 function startSharedDisplay() {
     if (!isDockerRuntime()) return;
     if (!process.env.DISPLAY) process.env.DISPLAY = `:${DISPLAY}`;

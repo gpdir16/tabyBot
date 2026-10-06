@@ -40,7 +40,7 @@ export function readAgentMemoryFile(agentId) {
 export function formatAgentMemoryFilesListForPrompt(agentId) {
     if (!agentId) return "";
     const dir = agentMemoryDir(agentId);
-    if (!fs.existsSync(dir)) return "- (none yet — create files under this agent's memory/ folder)";
+    if (!fs.existsSync(dir)) return "- (none yet. Create files under this agent's memory/ folder)";
     const items = fs
         .readdirSync(dir)
         .filter((f) => f.endsWith(".md"))
@@ -48,9 +48,9 @@ export function formatAgentMemoryFilesListForPrompt(agentId) {
         .map((name) => {
             const summary = readMemoryFileSummary(path.join(dir, name));
             const short = summary.length > 120 ? `${summary.slice(0, 120)}…` : summary;
-            return `- **${name.replace(/\.md$/, "")}** — ${short}`;
+            return `- **${name.replace(/\.md$/, "")}**: ${short}`;
         });
-    if (!items.length) return "- (none yet — create files under this agent's memory/ folder)";
+    if (!items.length) return "- (none yet. Create files under this agent's memory/ folder)";
     return items.join("\n");
 }
 

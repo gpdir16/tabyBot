@@ -1,5 +1,5 @@
 // 단일 계정 인증: user/auth.json에 계정(scrypt 해시)과 세션을 영속화한다.
-// 세션 토큰은 sha256으로 해시해 저장한다 — 파일이 유출돼도 원본 토큰은 모른다.
+// 세션 토큰은 sha256으로 해시해 저장한다. 파일이 유출돼도 원본 토큰은 모른다.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,7 +16,7 @@ const PASSWORD_MIN = 4;
 const PASSWORD_MAX = 256;
 
 // 로그인 스로틀(인메모리, IP 키별): 실패가 쌓일수록 실패 응답을 지연하고
-// 동시 진행 로그인 수를 제한한다. 잠금은 없다 — 성공은 항상 즉시 통과하므로
+// 동시 진행 로그인 수를 제한한다. 잠금은 없다. 성공은 항상 즉시 통과하므로
 // 제3자가 부정 시도로 계정 주인의 접속을 막을 수 없다.
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_INFLIGHT = 3;
@@ -217,7 +217,7 @@ export async function login({ key = "", username, password } = {}) {
     const a = attemptEntry(k);
     const now = Date.now();
     while (a.fails.length && a.fails[0] <= now - LOGIN_WINDOW_MS) a.fails.shift();
-    // 같은 출발지가 슬롯을 독점하지 못하게 한다 — 지연 중에도 슬롯을 잡으므로
+    // 같은 출발지가 슬롯을 독점하지 못하게 한다. 지연 중에도 슬롯을 잡으므로
     // 이 상한이 브루트포스의 실질 처리량을 정한다.
     if (a.inflight >= LOGIN_MAX_INFLIGHT) return { error: "too_many_attempts", retryAfter: 10 };
     a.inflight++;

@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 중앙 상태 스토어.
+/* tabyBot 웹 클라이언트: 중앙 상태 스토어.
    대화 캐시(턴/라이브 스트림), 설정, 연결 상태를 보관하고
    토피 기반 구독(on/emit)으로 UI 모듈에 변경을 알린다. */
 (function (T) {
@@ -100,7 +100,7 @@
         return state.currentId ? botByUuid(state.currentId) : null;
     }
 
-    // 가장 최근에 대화한 봇 — 경로 없이 앱을 열었을 때의 기본 대화.
+    // 가장 최근에 대화한 봇: 경로 없이 앱을 열었을 때의 기본 대화.
     // 기록이 하나도 없으면 에이전트 순서의 첫 봇으로 폴백한다.
     function mostRecentBot() {
         let best = null;
@@ -219,7 +219,7 @@
         return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [] };
     }
 
-    // 목록 정렬(updatedAt)을 새 활동 시각으로 맞춘다 — 정본은 뒤따르는
+    // 목록 정렬(updatedAt)을 새 활동 시각으로 맞춘다. 정본은 뒤따르는
     // refreshTurns/upsertMeta가 서버 값으로 덮는다.
     function touchMeta(c, id) {
         c.meta = Object.assign({}, c.meta, { id, updatedAt: new Date().toISOString() });
@@ -236,7 +236,7 @@
         return c;
     }
 
-    // 침묵 마커가 붙은 발화는 사용자용이 아니다 — 버블로 굳히거나 기록에 남기지 않고 버린다.
+    // 침묵 마커가 붙은 발화는 사용자용이 아니다. 버블로 굳히거나 기록에 남기지 않고 버린다.
     function isSilentMarkedText(t) {
         const s = typeof t === "string" ? t.trim() : "";
         return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
@@ -245,10 +245,10 @@
     function applyStatus(id, phase, detail, elapsedMs) {
         const c = ensureLive(id);
         if (phase) c.live.phase = phase;
-        // 툴 호출에 붙은 텍스트는 사용자에게 가지 않는 내부 메모 — 버리기만 한다.
+        // 툴 호출에 붙은 텍스트는 사용자에게 가지 않는 내부 메모: 버리기만 한다.
         // 사용자용 중간 발화는 user_say 호출(applySay)로만 들어온다.
         if (phase === "tools") c.live.text = "";
-        // 툴 라운드 경계는 서버 체크포인트/펜딩 메시지 병합 시점과 겹친다 —
+        // 툴 라운드 경계는 서버 체크포인트/펜딩 메시지 병합 시점과 겹친다.
         // 정본을 다시 읽어 실행 중 메시지 위치를 새로고침 상태와 맞춘다.
         if (phase === "tools") void refreshTurns(id).catch(() => {});
         c.live.detail = detail || "";
@@ -263,7 +263,7 @@
         emit("delta", { id });
     }
 
-    // user_say 도구 호출 — 모델이 명시적으로 사용자에게 보낸 중간 발화만 버블로 쌓는다.
+    // user_say 도구 호출: 모델이 명시적으로 사용자에게 보낸 중간 발화만 버블로 쌓는다.
     function applySay(id, text) {
         const s = String(text || "");
         if (!s.trim() || isSilentMarkedText(s)) return;
@@ -337,7 +337,7 @@
         };
     }
 
-    // 대화당 최신 요청만 반영 — 오래된 응답이 정본을 덮지 않도록 세대 번호로 가드.
+    // 대화당 최신 요청만 반영: 오래된 응답이 정본을 덮지 않도록 세대 번호로 가드.
     const turnsReqSeq = new Map();
     async function refreshTurns(id) {
         const c = conv(id);
@@ -347,7 +347,7 @@
         const r = await T.api.conversation(id);
         if (seq !== turnsReqSeq.get(id)) return true; // 더 새 요청이 진행 중
         const incoming = (Array.isArray(r?.turns) ? r.turns : []).map(normalizeTurn);
-        // 정본이 그대로면 다시 그리지 않는다 — 스레드 전체 재렌더(마크다운/하이라이트)가 비싸다.
+        // 정본이 그대로면 다시 그리지 않는다. 스레드 전체 재렌더(마크다운/하이라이트)가 비싸다.
         const sig = JSON.stringify(incoming);
         let changed = !c.loaded || sig !== c.turnsSig;
         c.turns = incoming;
@@ -389,7 +389,7 @@
         const c = conv(id);
         if (!c) return;
         const attachmentIds = attachments.map((a) => a.id).filter(Boolean);
-        // 낙관적으로 추가한 내 메시지와 일치하면 확정 표시 — 정본이 도착할 때까지
+        // 낙관적으로 추가한 내 메시지와 일치하면 확정 표시: 정본이 도착할 때까지
         // 버블을 유지하기 위해 confirmed 플래그만 세우고 refreshTurns에서 제거한다.
         const idx = c.pending.findIndex(
             (p) =>
@@ -417,7 +417,7 @@
                 ok = await refreshTurns(id);
             } catch (_) {}
             if (ok) return;
-            // 정본 읽기 실패 폴백 — 기존처럼 로컬에 붙여 메시지가 안 보이는 일은 막는다.
+            // 정본 읽기 실패 폴백: 기존처럼 로컬에 붙여 메시지가 안 보이는 일은 막는다.
             c.pending = c.pending.filter((p) => !p.confirmed);
             const last = c.turns[c.turns.length - 1];
             const lastMsg = last && last.messages && last.messages[last.messages.length - 1];
@@ -444,7 +444,7 @@
         const hadLive = !!c.live;
         const liveSnap = c.live;
         const fallback = liveSnap && typeof liveSnap.text === "string" ? liveSnap.text : "";
-        // user_say로 이미 전달된 중간 발화는 메신저 기록에 남긴다 —
+        // user_say로 이미 전달된 중간 발화는 메신저 기록에 남긴다.
         // 라이브에서 이미 보여준 말을 완료 시점에 지우지 않는다.
         const intermediate = (liveSnap ? liveSnap.intermediate : []).filter((t) => !isSilentMarkedText(t));
         void (async () => {
@@ -453,9 +453,9 @@
                 ok = await refreshTurns(id);
             } catch (_) {}
             if (!ok) {
-                // 정본 읽기 실패 폴백 — 라이브 내용을 로컬 턴으로 승격한다.
+                // 정본 읽기 실패 폴백: 라이브 내용을 로컬 턴으로 승격한다.
                 if (silent) {
-                    // 침묵 마커는 마지막 답변 한 개만 숨긴다 — 이미 보여준 중간 발화는
+                    // 침묵 마커는 마지막 답변 한 개만 숨긴다. 이미 보여준 중간 발화는
                     // 회수하지 않고 그대로 메신저 기록에 남긴다.
                     if (intermediate.length) {
                         const last = c.turns[c.turns.length - 1];
@@ -496,7 +496,7 @@
                     }
                 }
             }
-            // 정본이 턴을 저장한 뒤에만 live를 해제한다 — 답 버블이 깜빡 사라지지 않게.
+            // 정본이 턴을 저장한 뒤에만 live를 해제한다. 답 버블이 깜빡 사라지지 않게.
             if (c.live === liveSnap) c.live = null;
             emit("live", { id });
             emit("turn_done", { id, error: error != null ? error : null, finalized: hadLive });
@@ -545,7 +545,7 @@
     // 네트워크 응답을 기다리지 않고 바로 그린다. 서버 응답이 오면 그대로 덮는다(정본은 서버).
     const SNAP_KEY = "tabybot.snapshot.v1";
     const SNAP_TURNS_KEY = "tabybot.snapshot.turns.v1";
-    const SNAP_TURNS_MAX = 80; // 현재 대화는 최근 턴만 — 용량 한도와 파싱 비용을 묶는다
+    const SNAP_TURNS_MAX = 80; // 현재 대화는 최근 턴만 저장해 용량 한도와 파싱 비용을 묶는다
     const SNAP_TURNS_MAX_CHARS = 400_000;
     let snapTimer = 0;
 
@@ -573,7 +573,7 @@
                 else localStorage.removeItem(SNAP_TURNS_KEY);
             }
         } catch (_) {
-            /* 용량 초과/스토리지 차단 — 스냅샷 없이 동작한다 */
+            /* 용량 초과/스토리지 차단: 스냅샷 없이 동작한다 */
         }
     }
 

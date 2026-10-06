@@ -1,8 +1,8 @@
-/* tabyBot 웹 클라이언트 — 온보딩.
+/* tabyBot 웹 클라이언트: 온보딩.
    앱 전체를 덮는 전용 풀페이지(#onboardingPage). 서버가
    bootstrap.configured === false일 때만 연다(오프라인/401과는 별개).
    진행 구조: STEPS 배열 + draft 한 덩어리. 단계마다 title/desc/build/done.
-   1 언어 → 2 프로바이더+인증 → 3 모델 → 4 NSFW·승인 정책.
+   단계는 1 언어, 2 프로바이더와 인증, 3 모델, 4 NSFW·승인 정책 순이다.
    컨트롤은 설정과 같은 공통 요소(select, provider-card, radio-row, input)를 쓴다. */
 (function (T) {
     "use strict";
@@ -520,7 +520,7 @@
             return wrap;
         }
 
-        // ready — 검색 + 라디오 목록
+        // ready: 검색 + 라디오 목록
         const filter = T.h("input", {
             class: "input",
             type: "text",

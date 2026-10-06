@@ -100,7 +100,7 @@ export function clearGithubCopilotTokens() {
 }
 
 export async function ensureFreshGithubCopilotToken(stored = loadStored()) {
-    if (!stored) throw new Error("No GitHub Copilot OAuth tokens. Use /config → GitHub Copilot to log in.");
+    if (!stored) throw new Error("No GitHub Copilot OAuth tokens. Log in from the Provider tab in Settings.");
     if (stored.copilotAccessToken && stored.expiresAt > Date.now() + EXPIRY_MARGIN_MS) {
         return { accessToken: stored.copilotAccessToken, baseURL: stored.baseURL || getBaseURL(null, stored.copilotAccessToken) };
     }

@@ -1,7 +1,7 @@
-/* tabyBot 웹 클라이언트 — 부트스트랩.
-   테마/i18n 초기화 → 모듈 init → bootstrap/settings/bots 로드
-   → configured=false면 온보딩, 401이면 토큰 화면, 실패 시 오프라인 모드
-   → SSE 연결. file:// 에서는 네트워크 시도 없이 오프라인 모드로 진입한다. */
+/* tabyBot 웹 클라이언트: 부트스트랩.
+   테마와 i18n을 초기화하고, 모듈을 init한 뒤, bootstrap/settings/bots를 받는다.
+   configured=false면 온보딩을, 401이면 로그인 화면을 띄우고, 실패하면 오프라인 모드로 간다.
+   그다음 SSE를 연결한다. file:// 에서는 네트워크 시도 없이 오프라인 모드로 진입한다. */
 (function (T) {
     "use strict";
 
@@ -10,7 +10,7 @@
 
     const THEME_KEY = "tabybot.theme";
     let booted = false;
-    // 스냅샷(로컬 캐시)으로 화면을 이미 그렸는지 — 재시도 부트에서 다시 그리지 않는다.
+    // 스냅샷(로컬 캐시)으로 화면을 이미 그렸는지. 재시도 부트에서 다시 그리지 않는다.
     let painted = false;
     // 부트 재시도 중 이전 비동기 결과가 최신 화면을 덮지 않도록 한다.
     let bootToken = 0;
@@ -178,7 +178,7 @@
                 await T.api.bootstrap();
             } catch (e) {
                 if (e instanceof T.api.ApiError && e.status === 401) {
-                    // 서버는 살아있다 — 오프라인이 아니라 인증 문제.
+                    // 서버는 살아있다. 오프라인이 아니라 인증 문제.
                     state.state.offline = false;
                     handleUnauthorized();
                     return;
@@ -199,7 +199,7 @@
         state.setConn("disconnected");
         // 스냅샷으로 이미 그렸다면 그 언어를 유지한다.
         T.i18n.init(state.state.bootstrap?.language || null);
-        // 서버에 닿지 않는다 — 확인이 필요한 일이라 경고창으로 알린다(복구되면 boot가 거둔다).
+        // 서버에 닿지 않는다. 확인이 필요한 일이라 경고창으로 알린다(복구되면 boot가 거둔다).
         T.notices.alert({ key: "offline", text: err ? T.api.errorText(err, t("offlineNote")) : t("offlineNote") });
         if (location.protocol !== "file:") scheduleOfflineRetry();
     }
@@ -264,7 +264,7 @@
         } catch (_) {}
 
         const token = ++bootToken;
-        // 경로가 가리키는 대화(없으면 가장 최근 대화)는 스냅샷 표시 전에 잡아 둔다 —
+        // 경로가 가리키는 대화(없으면 가장 최근 대화)는 스냅샷 표시 전에 잡아 둔다.
         // chat.open이 주소를 /a/<uuid>로 바꾸므로 그 뒤에는 "경로 없이 열었다"를 알 수 없다.
         const pathBot = botUuidFromPath();
 
@@ -277,7 +277,7 @@
         }
 
         try {
-            // 2) 부트 데이터는 한 번에 병렬로 받는다 — 순차 왕복은 느린 회선에서 그대로 지연이 된다.
+            // 2) 부트 데이터는 한 번에 병렬로 받는다. 순차 왕복은 느린 회선에서 그대로 지연이 된다.
             const [acctR, bsR, settingsR, agentsR, convsR, todosR] = await Promise.allSettled([
                 T.api.accountState(),
                 T.api.bootstrap(),
@@ -354,7 +354,7 @@
         }
     }
 
-    // 현재 경로에 맞는 화면을 띄운다. 스냅샷 표시와 서버 응답 반영 양쪽에서 호출된다 —
+    // 현재 경로에 맞는 화면을 띄운다. 스냅샷 표시와 서버 응답 반영 양쪽에서 호출된다.
     // 이미 맞는 화면이 떠 있으면 다시 열지 않는다.
     async function showRoute(pathBot, token) {
         const bots = state.state.bots;
@@ -373,7 +373,7 @@
                 if (booted) await opened;
                 else void opened;
             } else if (booted) {
-                // 스냅샷으로 이미 열어 둔 대화 — 서버 정본으로 재검증만 한다.
+                // 스냅샷으로 이미 열어 둔 대화: 서버 정본으로 재검증만 한다.
                 void T.chat.refreshCurrent?.();
             }
             if (token !== bootToken) return;
@@ -392,7 +392,7 @@
         if (cr && !T.computerUI.isOpen?.()) T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
     }
 
-    // 한가할 때 나머지 대화 기록을 미리 받아 둔다 — 목록에서 누르면 바로 뜬다.
+    // 한가할 때 나머지 대화 기록을 미리 받아 둔다. 목록에서 누르면 바로 뜬다.
     // 최근 대화부터, 한 번에 하나씩(부트 직후 회선을 독점하지 않게).
     const PREFETCH_MAX = 8;
     function prefetchThreads() {
@@ -461,7 +461,7 @@
         renderRoute();
     });
 
-    // "/" → 컴포저 포커스. 입력 요소 내부와 채팅이 아닌 라우트(설정/할일/컴퓨터)에서는 무시.
+    // "/" 키는 컴포저에 포커스를 준다. 입력 요소 내부와 채팅이 아닌 라우트(설정/할일/컴퓨터)에서는 무시.
     document.addEventListener("keydown", (e) => {
         const tag = document.activeElement?.tagName;
         const typing = tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable;

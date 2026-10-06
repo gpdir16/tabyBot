@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 컴포저.
+/* tabyBot 웹 클라이언트: 컴포저.
    pill 컨테이너(자동성장), 파일 첨부(선택/드래그앤드롭/paste),
    업로드 칩 미리보기, Enter 전송 / Shift+Enter 줄바꿈(IME 조합 보호). */
 (function (T) {
@@ -17,7 +17,7 @@
 
     const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
-    // 모바일 구분은 화면 크기(≤860px)로 한다 — sidebar.js와 동일 기준. 좁은 화면엔 Shift가 없으므로 Enter 전송 대신 기본 줄바꿈 유지
+    // 모바일 구분은 화면 크기(≤860px)로 한다. sidebar.js와 동일 기준. 좁은 화면엔 Shift가 없으므로 Enter 전송 대신 기본 줄바꿈 유지
     const touchMq = window.matchMedia?.("(max-width: 860px)");
 
     // attachments: [{ id: string|null, name, mime, size, objUrl, uploading }]

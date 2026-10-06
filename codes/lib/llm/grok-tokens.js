@@ -111,11 +111,11 @@ export async function refreshGrokToken(refreshToken) {
         const desc = data.error_description || data.error || "";
         if (res.status === 403) {
             throw new Error(
-                "Grok OAuth account is signed in but this request was not allowed. Use /config → Grok to log in again, or try a different model.",
+                "Grok OAuth account is signed in but this request was not allowed. Log in again from the Provider tab in Settings, or try a different model.",
             );
         }
         if (res.status === 400 || res.status === 401) {
-            throw new Error("Grok OAuth token expired or was revoked. Use /config → Grok to log in again.");
+            throw new Error("Grok OAuth token expired or was revoked. Log in again from the Provider tab in Settings.");
         }
         throw new Error(`Grok token refresh failed: ${res.status} ${desc}`.trim());
     }
@@ -134,7 +134,7 @@ export async function refreshGrokToken(refreshToken) {
 let refreshInFlight = null;
 
 export async function ensureFreshToken(stored, { forceRefresh = false } = {}) {
-    if (!stored) throw new Error("No Grok OAuth tokens. Use /config → Grok to log in.");
+    if (!stored) throw new Error("No Grok OAuth tokens. Log in from the Provider tab in Settings.");
     if (!forceRefresh && isFresh(stored)) return { accessToken: stored.accessToken };
     if (!stored.refreshToken) {
         if (!forceRefresh && stored.accessToken && (!stored.expiresAt || Date.now() < stored.expiresAt)) {

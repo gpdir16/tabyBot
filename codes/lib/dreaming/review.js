@@ -25,18 +25,18 @@ function activeSessionFilePath(sessionKey) {
 }
 
 function buildReviewPrompt({ sessionFile, agentName }) {
-    return `You are running a background self-improvement review — the user did not send this message and will never see your reply.
+    return `You are running a background self-improvement review. The user did not send this message and will never see your reply.
 
 A session by agent "${agentName}" just finished non-trivial work. Its full transcript is at:
 \`${sessionFile}\`
-(JSON: {turns: [{at, status, messages}]}) — focus on the most recent completed turn(s).
+(JSON: {turns: [{at, status, messages}]}). Focus on the most recent completed turn(s).
 
 Decide whether the session produced something reusable for future sessions:
 - a non-trivial technique or workflow that will recur
 - a fix, workaround, or recovery from an error
 - an explicit user correction or preference worth codifying
 
-If yes: create or update a skill under \`${skillsDirPath()}/<slug>/SKILL.md\` — YAML frontmatter (name, description) plus concise markdown a future run can follow. Check the Available skills list in your system prompt first, and prefer patching an existing related skill over creating a near-duplicate. Create the directory first (mkdir -p via terminal_run), then write the file.
+If yes: create or update a skill under \`${skillsDirPath()}/<slug>/SKILL.md\` with YAML frontmatter (name, description) plus concise markdown a future run can follow. Check the Available skills list in your system prompt first, and prefer patching an existing related skill over creating a near-duplicate. Create the directory first (mkdir -p via terminal_run), then write the file.
 
 If the session surfaced a durable user fact or correction not yet in memory, you may also patch the memory files.
 
@@ -63,13 +63,13 @@ async function runSessionReview({ sessionKey, agentId }) {
         appendDreamDiary(`## ${stamp} review (${agentId})\n- failed: ${result.errorDetail || result.error}`);
     } else {
         appendDreamDiary(
-            `## ${stamp} review (${agentId})\n- reviewed ${path.basename(sessionFile)} — ${result?.silent ? "no changes reported" : "completed"}`,
+            `## ${stamp} review (${agentId})\n- reviewed ${path.basename(sessionFile)}: ${result?.silent ? "no changes reported" : "completed"}`,
         );
     }
 }
 
 export function maybeScheduleSessionReview({ sessionKey, agentId, result, automated = false }) {
-    // 백그라운드(자동) 턴은 리뷰/학습 대상에서 제외 — 체크인·잡이 리뷰를 연쇄 발동시키지 않게 한다.
+    // 백그라운드(자동) 턴은 리뷰/학습 대상에서 제외: 체크인·잡이 리뷰를 연쇄 발동시키지 않게 한다.
     if (automated) return;
     if (getReviewConfig().enabled === false) return;
     if (!result || result.error === "stopped_by_user") return;

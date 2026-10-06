@@ -1,7 +1,7 @@
-/* tabyBot 웹 클라이언트 — 설정 페이지.
+/* tabyBot 웹 클라이언트: 설정 페이지.
    경로 기반 라우팅(/s/<탭>, /s/agents/<id>)으로 현재 화면을 공유/복원한다.
    변경은 즉시 PUT(낙관적 반영 + 실패 시 롤백 + 토스트).
-   provider.apiKey는 쓰기 전용 — 응답에 절대 포함되지 않는다. */
+   provider.apiKey는 쓰기 전용. 응답에 절대 포함되지 않는다. */
 (function (T) {
     "use strict";
 
@@ -24,7 +24,7 @@
     let modelFilter = "";
     let providerChoice = null;
     let keyEditing = false; // 저장된 API 키를 다시 입력하는 중인지
-    let credsEditing = null; // 계정 편집 중인 항목 — "username" | "password" | null
+    let credsEditing = null; // 계정 편집 중인 항목: "username" | "password" | null
     let oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
     let advOpen = null; // 에이전트 편집기의 고급 설정 펼침. null이면 페르소나 유무로 초기화
     let modelAdvOpen = false; // 모델 탭의 고급 설정 펼침
@@ -37,10 +37,10 @@
     let mcpFailed = false;
     let skillEditing = null; // { mode:"new" } | { mode:"edit"|"view", name, source, builtin, content }
     let mcpEditing = null; // { mode:"new" } | { mode:"edit", name }
-    let armSkillDelete = null; // "<source>:<name>" — 삭제 확인 2단계
-    let armMcpDelete = null; // name — 삭제 확인 2단계
+    let armSkillDelete = null; // "<source>:<name>". 삭제 확인 2단계
+    let armMcpDelete = null; // name: 삭제 확인 2단계
     let folderEditing = null; // { mode:"new" } | { mode:"edit", id }
-    let armFolderDelete = null; // 폴더 id — 삭제 확인 2단계
+    let armFolderDelete = null; // 폴더 id: 삭제 확인 2단계
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
     const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
@@ -74,7 +74,7 @@
         } catch (_) {}
     }
 
-    /* ── 렌더링(뷰 레이어) — 히스토리는 호출자/라우터가 담당한다 ──
+    /* ── 렌더링(뷰 레이어): 히스토리는 호출자/라우터가 담당한다 ──
        채팅의 T.chat.open과 동일한 역할: 경로에 맞게 화면을 그린다. */
     function open(opt) {
         // open({tab, agentId}) 또는 open("model") 형태 모두 지원
@@ -98,8 +98,8 @@
         armMcpDelete = null;
         skillEditing = null;
         mcpEditing = null;
-        // open({tab:"folders", folderId}) — 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
-        // open({tab:"folders", folderNew, folderAgent}) — "폴더에 추가… → 새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
+        // open({tab:"folders", folderId}). 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
+        // open({tab:"folders", folderNew, folderAgent}). "폴더에 추가…" 안의 "새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
         armNoticesClear = false;
         folderEditing = null;
         if (tab === "folders" && o.folderNew) folderEditing = { mode: "new", agentId: o.folderAgent || null };
@@ -146,7 +146,7 @@
         page.hidden = true;
         document.body.classList.remove("settings-route");
         // OAuth 대기 중 페이지를 닫아도 폴링이 백그라운드로 계속 도는 걸 막는다.
-        // oauthPending은 유지 — 다시 열면 oauthSection이 폴링을 재개한다.
+        // oauthPending은 유지. 다시 열면 oauthSection이 폴링을 재개한다.
         stopOauthPoll();
         openTab = null;
         modelsCache = null;
@@ -182,13 +182,13 @@
         T.app?.renderRoute();
     }
 
-    /* 페이지를 내린다 — 히스토리/모바일 전환은 라우터가 담당한다. */
+    /* 페이지를 내린다. 히스토리/모바일 전환은 라우터가 담당한다. */
     function hide() {
         close({ updateUrl: false });
     }
 
     /* ── 낙관적 PUT ─────────────────────────────────────────── */
-    // 봇 라스터는 /api/agents 기준 — CRUD 후 갱신한다.
+    // 봇 라스터는 /api/agents 기준: CRUD 후 갱신한다.
     async function refreshBots() {
         try {
             const r = await T.api.agents();
@@ -226,7 +226,7 @@
 
         const head = T.h("header", { class: "sp-head" }, [
             // 데스크톱에서 사이드바가 접힌 상태로 설정에 들어오면 채팅 헤더(메뉴 버튼)가
-            // 숨겨져 다시 펼칠 방법이 없다 — 접힌 때만 보이는 펼치기 버튼을 둔다.
+            // 숨겨져 다시 펼칠 방법이 없다. 접힌 때만 보이는 펼치기 버튼을 둔다.
             T.h(
                 "button",
                 {
@@ -396,7 +396,7 @@
             ]),
         );
 
-        // 시간대 — 스케줄(체크인·스윕·투두) 기준. 비우면 서버 시간대(도커는 UTC).
+        // 시간대: 스케줄(체크인·스윕·투두) 기준. 비우면 서버 시간대(도커는 UTC).
         const tzs =
             typeof Intl.supportedValuesOf === "function"
                 ? Intl.supportedValuesOf("timeZone")
@@ -546,7 +546,7 @@
         sec.append(editor);
 
         if (!acct.hasAccount) {
-            // 아직 계정이 없다 — 만들면 다음 접속부터 로그인이 필요해진다.
+            // 아직 계정이 없다. 만들면 다음 접속부터 로그인이 필요해진다.
             editor.append(T.h("p", { class: "set-desc", text: t("authNoAccountDesc") }));
             const u = accountInput("text", t("authUsername"), "username");
             const p = accountInput("password", t("authPassword"), "new-password");
@@ -628,7 +628,7 @@
             });
 
         if (credsEditing === "username") {
-            // 이름 변경 — 현재 비밀번호로 본인 확인.
+            // 이름 변경: 현재 비밀번호로 본인 확인.
             const u = accountInput("text", t("authUsername"), "username");
             u.value = acct.username || "";
             const cur = accountInput("password", t("authCurrentPassword"), "current-password");
@@ -645,7 +645,7 @@
                 ]),
             );
         } else if (credsEditing === "password") {
-            // 비밀번호 변경 — 현재 비밀번호 + 새 비밀번호 확인.
+            // 비밀번호 변경: 현재 비밀번호 + 새 비밀번호 확인.
             const cur = accountInput("password", t("authCurrentPassword"), "current-password");
             const np = accountInput("password", t("authNewPassword"), "new-password");
             const nc = accountInput("password", t("authPasswordConfirm"), "new-password");
@@ -663,7 +663,7 @@
                 ]),
             );
         } else {
-            // 저장된 계정 정보 — 라벨 아래 읽기 전용 입력칸, 변경할 항목마다 별도의 변경 버튼.
+            // 저장된 계정 정보: 라벨 아래 읽기 전용 입력칸, 변경할 항목마다 별도의 변경 버튼.
             const loc = { ko: "ko-KR", ja: "ja-JP" }[T.i18n.getLang()] || "en-US";
             const ro = (label, value, type = "text") => {
                 const el = accountInput(type, label, "off");
@@ -902,7 +902,7 @@
 
         sec.append(T.h("hr", { class: "divider" }));
 
-        // 고급 — 컨텍스트 한도와 모델 전환 시 오염 방지 옵션
+        // 고급: 컨텍스트 한도와 모델 전환 시 오염 방지 옵션
         const mAdvPanel = T.h("div", { class: "adv-panel" });
         mAdvPanel.hidden = !modelAdvOpen;
         const mAdvBtn = T.h(
@@ -920,7 +920,7 @@
             [T.icon("chevron", "icon-sm"), T.h("span", { text: t("advanced") })],
         );
 
-        // 컨텍스트 채움 한도 — 이 비율부터 오래된 대화를 요약으로 압축한다.
+        // 컨텍스트 채움 한도: 이 비율부터 오래된 대화를 요약으로 압축한다.
         // 옵션에는 현재 모델 윈도우 기준 실제 압축 시작 토큰 수를 함께 표시한다.
         const ctxPct = Number(s.contextTriggerPercent) || 75;
         const ctxWindow = Number(s.contextWindow) || 128000;
@@ -954,7 +954,7 @@
             T.h("div", { class: "set-desc", text: t("compressOnModelChangeDesc") }),
         );
 
-        // 모든 봇의 세션 즉시 압축 — 모델 전환 전 컨텍스트 오염 방지.
+        // 모든 봇의 세션 즉시 압축: 모델 전환 전 컨텍스트 오염 방지.
         // 기록 재작성 + LLM 호출이 드는 작업이므로 2단계 확인을 거친다.
         // 진행 상태(sessionsCompressing)는 서버가 SSE로 알려 새로고침해도 유지된다.
         const compressing = Boolean(s.sessionsCompressing);
@@ -1004,7 +1004,7 @@
         return Boolean(meta && /-oauth$/.test(String(meta.type || "")));
     }
 
-    // 모델 목록 캐시 무효화 — 키/URL 변경 후 공통으로 쓴다.
+    // 모델 목록 캐시 무효화: 키/URL 변경 후 공통으로 쓴다.
     function resetModels() {
         modelsReq++;
         modelsLoading = false;
@@ -1067,7 +1067,7 @@
             // pending이 사라졌으면(다른 경로에서 완료/취소) 종료.
             if (!oauthPending || oauthPending.kind !== kind) return;
             oauthPollTries++;
-            // 5분 후 포기 — 디바이스 코드 만료와 맞춘다.
+            // 5분 후 포기: 디바이스 코드 만료와 맞춘다.
             if (oauthPollTries > 100) return;
             T.api
                 .authStatus()
@@ -1243,7 +1243,7 @@
                 },
             });
             if (provider.apiKeySet) {
-                // 교체 취소 — 입력칸과 같은 줄에 둔다.
+                // 교체 취소: 입력칸과 같은 줄에 둔다.
                 row.append(
                     T.h("button", {
                         class: "btn ghost",
@@ -1362,7 +1362,7 @@
                                 T.h("div", { class: "model-label", text: m.label || m.id }),
                                 T.h("div", { class: "model-id", text: m.id }),
                             ]),
-                            // 비전 지원 모델만 배지를 표시 — 없으면 텍스트 전용
+                            // 비전 지원 모델만 배지를 표시: 없으면 텍스트 전용
                             m.supportsVision === true
                                 ? T.h("span", { class: "model-vision", "data-tip": t("visionSupported") }, [
                                       T.icon("eye"),
@@ -1406,7 +1406,7 @@
     }
 
     /* ── 자기 개선 탭: 백그라운드 자동화(체크인·드림 스윕·세션 리뷰) ──
-       전부 선택형 — cron 문법이나 숫자 단위를 사용자에게 요구하지 않는다.
+       전부 선택형. cron 문법이나 숫자 단위를 사용자에게 요구하지 않는다.
        세부 값(idleMin·maxOpsPerRun·timezone 등)은 config 파일로만 조정한다. */
     function siRow(label, control) {
         return T.h("div", { class: "set-row" }, [T.h("div", { class: "set-label", text: label }), T.h("div", { class: "set-control" }, [control])]);
@@ -1617,7 +1617,7 @@
     function skillRow(sk) {
         const key = `${sk.source}:${sk.name}`;
         const actions = T.h("div", { class: "ext-actions" });
-        // 보기/편집 버튼 하나로 내용을 연다 — 시스템 스킬은 읽기 전용 뷰로만 열린다.
+        // 보기/편집 버튼 하나로 내용을 연다. 시스템 스킬은 읽기 전용 뷰로만 열린다.
         actions.append(
             T.h("button", {
                 class: "btn ghost",
@@ -1679,7 +1679,7 @@
         ]);
     }
 
-    // 스킬/MCP 편집 폼 공통 뼈대 — 제목 + 닫기 X + 필드 나열.
+    // 스킬/MCP 편집 폼 공통 뼈대: 제목 + 닫기 X + 필드 나열.
     function formHead(title, onClose) {
         return T.h("div", { class: "form-head" }, [
             T.h("div", { class: "form-title", text: title }),
@@ -1873,7 +1873,7 @@
         argsInput.addEventListener("keydown", (e) => e.stopPropagation());
         form.append(fieldOf(t("mcpArgs"), argsInput, t("mcpArgsDesc")));
 
-        // env 값은 서버가 내려주지 않는다(비밀) — 기존 키는 빈 값이면 유지, 새 값이면 교체, ✕면 삭제.
+        // env 값은 서버가 내려주지 않는다(비밀): 기존 키는 빈 값이면 유지, 새 값이면 교체, ✕면 삭제.
         const removedKeys = new Set();
         const envList = T.h("div", { class: "env-list" });
         function envRow(key, existing) {
@@ -1959,7 +1959,7 @@
                     const key = row.querySelector(".env-key").value.trim();
                     const val = row.querySelector(".env-val").value;
                     if (!key) continue;
-                    // 기존 키의 빈 값은 "유지"다 — 새 키만 빈 값 그대로 저장한다.
+                    // 기존 키의 빈 값은 "유지"다. 새 키만 빈 값 그대로 저장한다.
                     if (row.dataset.existing) {
                         if (val !== "") env[key] = val;
                     } else env[key] = val;
@@ -2146,7 +2146,7 @@
             build();
         };
         if (!isNew && !folder) {
-            // 다른 기기에서 지워진 폴더 — 목록으로 돌아간다.
+            // 다른 기기에서 지워진 폴더면 목록으로 돌아간다.
             folderEditing = null;
             return T.h("div", { class: "set-desc", text: t("foldersEmpty") });
         }
@@ -2167,7 +2167,7 @@
         });
         form.append(fieldOf(t("folderName"), nameInput));
 
-        // 소속 에이전트: 에이전트는 폴더 하나에만 들어간다 — 다른 폴더 소속이면 그 이름을 보여 준다.
+        // 소속 에이전트: 에이전트는 폴더 하나에만 들어간다. 다른 폴더 소속이면 그 이름을 보여 준다.
         const names = new Map(folderList().map((f) => [f.id, f.name]));
         const picks = new Map();
         const list = T.h("div", { class: "folder-agents" });
@@ -2206,7 +2206,7 @@
                     return;
                 }
                 saveBtn.disabled = true;
-                // 응답마다 전체 스냅샷이 오므로 마지막 것만 반영한다 — 중간 반영은 폼을 다시 그려 깜빡인다.
+                // 응답마다 전체 스냅샷이 오므로 마지막 것만 반영한다. 중간 반영은 폼을 다시 그려 깜빡인다.
                 let last = null;
                 try {
                     let id = folder?.id;
@@ -2226,7 +2226,7 @@
                     if (last) applyFolderResult(last);
                     build();
                 } catch (err) {
-                    // 일부만 저장됐을 수 있다 — 거기까지의 상태를 반영하고 폼은 열어 둔다.
+                    // 일부만 저장됐을 수 있다. 거기까지의 상태를 반영하고 폼은 열어 둔다.
                     if (last) applyFolderResult(last);
                     saveBtn.disabled = false;
                     T.toast.show("error", T.api.errorText(err, t("saveFailed")));
@@ -2235,7 +2235,7 @@
         });
         actions.append(saveBtn, T.h("button", { class: "btn ghost", text: t("cancel"), onclick: close }));
         form.append(actions);
-        // 모바일에서는 자동 포커스를 하지 않는다 — 설정 패널이 미끄러져 들어오는 중에 포커스하면
+        // 모바일에서는 자동 포커스를 하지 않는다. 설정 패널이 미끄러져 들어오는 중에 포커스하면
         // iOS가 입력을 보이게 하려고 화면을 밀어 전환이 깨지고 패널이 반쯤 잘린다.
         if (isNew && !window.matchMedia("(max-width: 860px)").matches) requestAnimationFrame(() => nameInput.focus());
         return form;
@@ -2324,7 +2324,7 @@
         }
         const agent = agentList().find((a) => a.id === editingAgent);
         if (!agent) {
-            body.append(T.h("div", { class: "empty-note", text: "—" }));
+            body.append(T.h("div", { class: "empty-note", text: "-" }));
             return;
         }
         body.append(agentEditor(agent));
@@ -2612,7 +2612,7 @@
                     if (s) state.setSettings(s);
                 })
                 .catch(() => {});
-            // 다른 창에서 로그인을 마치고 돌아온 결과 — 그사이 화면을 보고 있지 않았을 수 있어 경고창으로 알린다.
+            // 다른 창에서 로그인을 마치고 돌아온 결과: 그사이 화면을 보고 있지 않았을 수 있어 경고창으로 알린다.
             T.notices.alert({ text: p.ok ? t("oauthSuccess") : t("errorPrefix") + ": " + (p.detail || t("oauthFailed")) });
             modelsReq++;
             modelsLoading = false;

@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 파일 미리보기 뷰어.
+/* tabyBot 웹 클라이언트: 파일 미리보기 뷰어.
    첨부 클릭 시 새 탭/바로 다운로드 대신 앱 안 모달로 연다.
    이미지/영상/오디오/PDF는 인라인으로, 텍스트 계열은 fetch로 읽어
    <pre>에 표시한다. 다운로드/새 탭은 뷰어 안의 보조 동작. */
@@ -29,7 +29,7 @@
         return "other";
     }
 
-    // /api/files URL이면 inline 렌더를 요청한다 — 서버가 허용 타입만 inline으로 보낸다.
+    // /api/files URL이면 inline 렌더를 요청한다. 서버가 허용 타입만 inline으로 보낸다.
     function inlineUrl(url) {
         if (!/^\/api\/files\//.test(url)) return url;
         return url + (url.includes("?") ? "&" : "?") + "inline=1";

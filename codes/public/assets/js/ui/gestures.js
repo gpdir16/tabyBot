@@ -1,11 +1,11 @@
-/* tabyBot 웹 클라이언트 — 뒤로/앞으로 제스처(모바일).
+/* tabyBot 웹 클라이언트: 뒤로/앞으로 제스처(모바일).
    OS가 제공하는 "밀어서 뒤로/앞으로"(iOS 화면 가장자리 스와이프)는 막고, 앱이 같은 제스처를
    직접 처리한다. OS 것은 화면 전체를 스냅샷으로 밀어내지만, 앱이 처리하면 화면이 손가락을 따라 움직인다.
 
    - 뒤로: 채팅·설정 등 메인 화면에서 오른쪽으로 민다(왼쪽 가장자리에서든, 화면 어디서든).
      메인 화면이 손가락을 따라 밀려 나가고 그 밑에서 목록이 드러난다. 충분히 밀거나 튕기면
      목록으로 돌아가고, 아니면 제자리로 돌아온다.
-   - 컴퓨터 화면은 채팅 위에 한 겹 더 올라온 화면이다 — 여기서 뒤로 밀면 컴퓨터 화면만 밀려 나가고
+   - 컴퓨터 화면은 채팅 위에 한 겹 더 올라온 화면이다. 여기서 뒤로 밀면 컴퓨터 화면만 밀려 나가고
      그 밑의 채팅이 드러난다.
    - 앞으로: 목록에서 오른쪽 가장자리를 잡고 왼쪽으로 밀면 방금 보던 화면이 따라 들어온다.
 
@@ -27,7 +27,7 @@
     const TAP_MAX_MS = 500;
     // 이 화면들이 떠 있는 동안에는 뒤 화면을 움직이지 않는다.
     const BLOCKERS = ".ctx-layer, .nt-modal, .fv-overlay, .onb-page:not([hidden]), .onb-modal";
-    // 가로 드래그를 스스로 쓰는 곳 — 여기서 시작한 드래그는 화면 전환으로 보지 않는다(가장자리 제스처는 예외).
+    // 가로 드래그를 스스로 쓰는 곳: 여기서 시작한 드래그는 화면 전환으로 보지 않는다(가장자리 제스처는 예외).
     const OWN_DRAG = "input, textarea, select, [contenteditable], .computer-page, .xterm";
 
     /* ── 공통 ───────────────────────────────────────────────── */
@@ -96,7 +96,7 @@
         document.body.classList.add("gest-drag");
         if (cur.mode === "inner") {
             // 밑에 깔린 채팅을 다시 보이게 한다(.gest-inner). 숨겨져 있던 스크롤러는 위치가 풀리므로
-            // 맨 아래(가장 흔한 위치)로 맞춰 둔다 — 화면이 바뀐 뒤에는 채팅이 제 위치를 복원한다.
+            // 맨 아래(가장 흔한 위치)로 맞춰 둔다. 화면이 바뀐 뒤에는 채팅이 제 위치를 복원한다.
             cur.page = innerPage();
             document.body.classList.add("gest-inner");
             const scroller = document.getElementById("scroller");
@@ -119,7 +119,7 @@
         if (cur.mode === "inner") {
             const x = Math.max(0, dx);
             cur.page.style.transform = `translateX(${x}px)`;
-            // 헤더는 채팅과 같이 쓴다 — 컴퓨터 화면이 얹어 둔 버튼들은 밀려 나가는 만큼 흐려진다.
+            // 헤더는 채팅과 같이 쓴다. 컴퓨터 화면이 얹어 둔 버튼들은 밀려 나가는 만큼 흐려진다.
             document.body.style.setProperty("--gest-p", String(Math.min(1, x / cur.w)));
         } else if (cur.mode === "back") {
             const x = Math.max(0, dx);
@@ -180,7 +180,7 @@
         }, SETTLE_MS);
     }
 
-    // 가장자리 터치는 시스템 제스처를 막느라 기본 동작(클릭 포함)까지 막혔다 — 탭이었으면 대신 눌러 준다.
+    // 가장자리 터치는 시스템 제스처를 막느라 기본 동작(클릭 포함)까지 막혔다. 탭이었으면 대신 눌러 준다.
     function tapThrough(cur) {
         const el = document.elementFromPoint(cur.x, cur.y);
         if (!el) return;
@@ -247,7 +247,7 @@
         };
         document.addEventListener("touchend", end, { passive: false, capture: true });
         document.addEventListener("touchcancel", end, { passive: true, capture: true });
-        // 대신 눌러 주기는 다른 처리기들이 다 지나간 뒤에 한다 — 이미 누가 이 터치를 처리했으면
+        // 대신 눌러 주기는 다른 처리기들이 다 지나간 뒤에 한다. 이미 누가 이 터치를 처리했으면
         // (컨텍스트 메뉴 항목, 경고창 버튼 등은 touchend에서 직접 실행하고 기본 동작을 막는다) 겹치지 않게.
         document.addEventListener("touchend", (e) => {
             const cur = pendingTap;

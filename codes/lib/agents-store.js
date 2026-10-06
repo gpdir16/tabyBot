@@ -388,7 +388,7 @@ export function removeAgent(id) {
 export function formatPeerAgentsForPrompt(currentId) {
     const lines = [];
     for (const a of listAgents().filter((agent) => agent.id !== currentId)) {
-        const role = a.persona ? ` — ${a.persona}` : "";
+        const role = a.persona ? `: ${a.persona}` : "";
         lines.push(`- **${a.name}** (\`${a.id}\`)${role}`);
     }
     return lines.join("\n");

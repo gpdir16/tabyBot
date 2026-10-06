@@ -78,12 +78,12 @@ export function formatSkillsListForPrompt() {
     const lines = [];
     if (builtIn.length) {
         lines.push("### Built-in");
-        for (const s of builtIn) lines.push(`- **${s.name}** — ${s.summary}`);
+        for (const s of builtIn) lines.push(`- **${s.name}**: ${s.summary}`);
     }
     if (user.length) {
         if (lines.length) lines.push("");
         lines.push("### User-installed");
-        for (const s of user) lines.push(`- **${s.name}** — ${s.summary}`);
+        for (const s of user) lines.push(`- **${s.name}**: ${s.summary}`);
     }
     return lines.join("\n");
 }

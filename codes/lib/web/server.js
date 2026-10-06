@@ -83,13 +83,13 @@ import { cancelQueuedAgentWork } from "../agent-queue.js";
 import { resolvePendingAskByAskId } from "../agent/user-ask.js";
 
 const PUBLIC_DIR = path.join(CODES_DIR, "public");
-// 계정이 만들어져 있으면 세션 인증이 켜진다 — 계정이 없으면 열려 있다(첫 방문에 생성 유도).
+// 계정이 만들어져 있으면 세션 인증이 켜진다. 계정이 없으면 열려 있다(첫 방문에 생성 유도).
 const AUTH = {
     enabled: () => accountAuth.hasAccount(),
     verify: (token) => Boolean(accountAuth.resolveSession(token)),
     publicPaths: ["/api/account/state", "/api/account/login", "/api/account/setup"],
 };
-// 도커 안에서는 항상 8999로 듣는다 — 호스트 포트는 compose 매핑이 담당한다
+// 도커 안에서는 항상 8999로 듣는다. 호스트 포트는 compose 매핑이 담당한다
 // (TABYBOT_PORT를 컨테이너에 주입하면 커스텀 포트에서 매핑이 깨진다).
 const PORT = isDockerRuntime() ? 8999 : Number(process.env.TABYBOT_PORT || 8999);
 // 기본은 모든 인터페이스에 연다. 이 머신만 쓰려면 TABYBOT_HOST=127.0.0.1로 명시한다.
@@ -199,7 +199,7 @@ async function startOauthLogin(kind) {
 }
 
 // 로그인 스로틀의 출발지 키. X-Forwarded-For는 loopback 프록시(터널/로컬 리버스
-// 프록시)에서 온 요청에만 신뢰한다 — LAN에서 직접 오는 요청이 헤더를 조작해
+// 프록시)에서 온 요청에만 신뢰한다. LAN에서 직접 오는 요청이 헤더를 조작해
 // 남의 IP인 척하며 스로틀을 회피/유도하는 걸 막는다.
 function clientKey(req) {
     const remote = String(req.socket?.remoteAddress || "");
@@ -235,7 +235,7 @@ function substituteEnvSafe(value) {
     return String(value ?? "").replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name] ?? "");
 }
 
-// 세션 압축 진행 상태 — 수동 버튼과 모델 변경 확인 알림이 같은 실행 경로를 쓴다.
+// 세션 압축 진행 상태: 수동 버튼과 모델 변경 확인 알림이 같은 실행 경로를 쓴다.
 // 동시에 하나만 돌리고, 시작/종료를 SSE로 알려 새로고침해도 진행 상태가 보이게 한다.
 let sessionCompressInFlight = false;
 async function runSessionCompression(chatIds = null) {
@@ -340,7 +340,7 @@ export function startWebServer() {
     });
 
     // ---- 계정(웹 UI 로그인/세션) ----
-    // state/login/setup은 publicPaths로 인증 없이 열린다 — 클라이언트가
+    // state/login/setup은 publicPaths로 인증 없이 열린다. 클라이언트가
     // 로그인/계정 생성/앱 진입 중 어떤 화면을 띄울지 이 응답으로 결정한다.
     router.add("GET", "/api/account/state", (ctx) => {
         const has = accountAuth.hasAccount();
@@ -473,7 +473,7 @@ export function startWebServer() {
         ctx.json200({ ok: true });
     });
 
-    // 읽음 처리 — 다른 기기의 배지도 지워지게 목록 변경을 알린다.
+    // 읽음 처리: 다른 기기의 배지도 지워지게 목록 변경을 알린다.
     router.add("POST", "/api/conversations/:id/read", (ctx) => {
         const changed = conversationsStore.markConversationRead(ctx.params.id);
         if (changed) emit({ type: "conversations_changed" });
@@ -586,7 +586,7 @@ export function startWebServer() {
     });
 
     // ---- 스킬(설치 목록 관리) ----
-    // 스킬 이름은 디렉터리 이름으로 쓰인다 — 경로 탈출 문자를 허용하지 않는다.
+    // 스킬 이름은 디렉터리 이름으로 쓰인다. 경로 탈출 문자를 허용하지 않는다.
     const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
     function skillsPayload() {
@@ -624,7 +624,7 @@ export function startWebServer() {
         const content = String(body?.content ?? "");
         if (!SKILL_NAME_RE.test(name)) return ctx.json400("invalid_skill_name");
         if (!content.trim()) return ctx.json400("empty_skill");
-        // 새 스킬은 항상 사용자 스킬 디렉터리에 만든다 — 같은 이름의 시스템/공유 스킬이 있으면 거절.
+        // 새 스킬은 항상 사용자 스킬 디렉터리에 만든다. 같은 이름의 시스템/공유 스킬이 있으면 거절.
         if (resolveSkillPath(name, null)) return ctx.json409("skill_exists");
         try {
             writeFileAtomic(path.join(USER_DIR, "skills", name, "SKILL.md"), content);
@@ -683,7 +683,7 @@ export function startWebServer() {
         };
     }
 
-    // body → 검증된 서버 항목. prev가 있으면 누락 필드는 기존 값을 이어 받는다.
+    // body를 검증된 서버 항목으로 바꾼다. prev가 있으면 누락 필드는 기존 값을 이어 받는다.
     function normalizeMcpEntry(body, prev) {
         const name = String(body?.name ?? prev?.name ?? "").trim();
         const command = String(body?.command ?? prev?.command ?? "").trim();
@@ -707,7 +707,7 @@ export function startWebServer() {
         return { entry };
     }
 
-    // 저장 뒤 연결 동기화는 백그라운드로 — stdio 접속 타임아웃(최대 20초) 동안
+    // 저장 뒤 연결 동기화는 백그라운드로 한다. stdio 접속 타임아웃(최대 20초) 동안
     // 응답을 붙잡아 두지 않는다. 상태는 다음 GET에서 반영된다.
     function saveMcpAndSync(conf) {
         saveMcpConfig(conf);
@@ -736,7 +736,7 @@ export function startWebServer() {
         const idx = list.findIndex((s) => s?.name === ctx.params.name);
         if (idx < 0) return ctx.json404();
         const body = await ctx.json();
-        // 이름 변경은 지원하지 않는다 — URL의 이름이 정본이다.
+        // 이름 변경은 지원하지 않는다. URL의 이름이 정본이다.
         const result = normalizeMcpEntry({ ...body, name: ctx.params.name }, list[idx]);
         if (result.error) return ctx.json400(result.error);
         list[idx] = result.entry;
@@ -771,7 +771,7 @@ export function startWebServer() {
         ctx.json200(buildSettingsPayload());
     });
 
-    // 모델 변경 시 압축은 묻기만 하고 실행하지 않는다 — 사용자가 알림을 눌러
+    // 모델 변경 시 압축은 묻기만 하고 실행하지 않는다. 사용자가 알림을 눌러
     // 확인해야 compressBotSessions가 돈다(압축 = 대화 기록 재작성 + LLM 호출).
     function askSessionCompression(lang, chatIds = null) {
         const action = { kind: "compress_sessions" };
@@ -874,11 +874,11 @@ export function startWebServer() {
         // proactive는 매 틱 설정을 다시 읽으므로 재시작 불필요. dreaming 크론은 재등록이 필요하다(시간대 포함).
         if (selfImprovementChanged || patch.timezone !== undefined) startDreamingScheduler();
         // 모델이 바뀌었고 압축 옵션이 켜져 있으면 모든 세션 압축 여부를 묻는다.
-        // 실행은 사용자가 알림을 눌러 확인할 때만 — 자동 실행은 하지 않는다.
+        // 실행은 사용자가 알림을 눌러 확인할 때만 한다. 자동 실행은 하지 않는다.
         // 모델이 비워진 상태(프로바이더 전환 중)에는 묻지 않는다.
         const modelChanged = String(config.provider?.model || "").trim() !== prevModel;
         if (modelChanged && config.provider?.model) {
-            // 새 모델의 컨텍스트 윈도우를 미리 받아 둔다 — 설정 화면의 채움 한도
+            // 새 모델의 컨텍스트 윈도우를 미리 받아 둔다. 설정 화면의 채움 한도
             // 토큰 표시가 이전 모델 값으로 남지 않도록.
             void ensureModelMeta(getMergedProvider(config)).catch(() => {});
             if (getCompressOnModelChange(config)) askSessionCompression(config.language || "en");
@@ -887,7 +887,7 @@ export function startWebServer() {
         ctx.json200(buildSettingsPayload());
     });
 
-    // 봇의 활성 세션을 즉시 압축한다(설정 → 모델 → 고급 / 모델 변경 확인 알림).
+    // 봇의 활성 세션을 즉시 압축한다(설정의 모델 탭 고급 항목, 또는 모델 변경 확인 알림에서 호출).
     // body.chatIds를 주면 그 봇들만, 없으면 모든 봇을 압축한다.
     router.add("POST", "/api/sessions/compress-all", async (ctx) => {
         const body = await ctx.json().catch(() => ({}));
@@ -1031,7 +1031,7 @@ export function startWebServer() {
         ctx.json200(agentsPayload());
     });
 
-    // 폴더 표시 순서를 통째로 바꾼다 — 사이드바 드래그/▲▼ 이동이 여기로 쓴다.
+    // 폴더 표시 순서를 통째로 바꾼다. 사이드바 드래그/▲▼ 이동이 여기로 쓴다.
     router.add("POST", "/api/folders/order", async (ctx) => {
         const body = await ctx.json();
         const result = setFoldersOrder(body.ids);

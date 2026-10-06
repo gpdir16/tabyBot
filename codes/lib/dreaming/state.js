@@ -16,7 +16,7 @@ function defaultState() {
         ingested: {},
         // "<sessionKey>" -> 마지막으로 리뷰한 턴의 at 타임스탬프.
         reviews: {},
-        // "<agentId>/<key>" -> {days:[], text, lastSeen}. 루틴 관찰 누적 — 3일 되면 승격.
+        // "<agentId>/<key>" -> {days:[], text, lastSeen}. 루틴 관찰 누적. 3일 되면 승격.
         routineWatch: {},
     };
 }
@@ -41,7 +41,7 @@ export function loadDreamingState() {
 const MAX_INGESTED_KEYS = 500;
 
 export function saveDreamingState(state) {
-    // ingested는 세션 파일마다 한 키 — 오래된 것부터 버려 무한 증가를 막는다.
+    // ingested는 세션 파일마다 한 키: 오래된 것부터 버려 무한 증가를 막는다.
     const keys = Object.keys(state.ingested || {});
     if (keys.length > MAX_INGESTED_KEYS) {
         const keep = new Set(keys.sort((a, b) => (state.ingested[b]?.mtime || 0) - (state.ingested[a]?.mtime || 0)).slice(0, MAX_INGESTED_KEYS));

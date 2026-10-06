@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 전역 툴팁.
+/* tabyBot 웹 클라이언트: 전역 툴팁.
    overflow 컨테이너 안에서 의사 요소 툴팁이 잘리지 않도록 fixed 레이어로 표시한다. */
 (function (T) {
     "use strict";

@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════════
-   tabyBot 웹 클라이언트 — 단일 스타일시트
-   섹션: 토큰 → 베이스 → 레이아웃 → 사이드바 → 헤더 → 스레드/메시지
-        → 마크다운/코드 → 도구·ask 카드 → 빈 상태 → 컴포저
-        → 설정 시트 → 온보딩 → 토스트/메뉴 → 라이트 테마 → 모션
+   tabyBot 웹 클라이언트. 단일 스타일시트
+   섹션 순서: 토큰, 베이스, 레이아웃, 사이드바, 헤더, 스레드/메시지,
+        마크다운/코드, 도구·ask 카드, 빈 상태, 컴포저,
+        설정 시트, 온보딩, 토스트/메뉴, 라이트 테마, 모션
    ═══════════════════════════════════════════════════════════ */
 
 /* ── 1. 디자인 토큰 ─────────────────────────────────────── */
@@ -29,7 +29,7 @@
     --scrollbar: rgba(255, 255, 255, 0.14);
     --scrollbar-hover: rgba(255, 255, 255, 0.32);
 
-    /* Liquid Glass (iOS 26) — 헤더/하단 바 재질 */
+    /* Liquid Glass (iOS 26): 헤더/하단 바 재질 */
     --glass: rgba(30, 30, 36, 0.5);
     --glass-border: rgba(255, 255, 255, 0.1);
     --bar-tint-a: rgba(0, 0, 0, 0.65);
@@ -47,7 +47,7 @@
     --shadow-sheet: 0 24px 60px rgba(0, 0, 0, 0.5);
     --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45);
 
-    /* 모션 — 모든 인터랙션 150~220ms */
+    /* 모션: 모든 인터랙션 150~220ms */
     --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
     --dur-1: 150ms;
     --dur-2: 220ms;
@@ -188,7 +188,7 @@ img {
     max-width: 100%;
 }
 
-/* 얇은 커스텀 스크롤바 — hover에서만 진하게 */
+/* 얇은 커스텀 스크롤바: hover에서만 진하게 */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -720,7 +720,7 @@ kbd {
     word-break: break-word;
     overflow-wrap: anywhere;
 }
-/* 메시지 발화 시각 — 버블 아래 한 줄, 시각만 */
+/* 메시지 발화 시각: 버블 아래 한 줄, 시각만 */
 .msg-time {
     font-size: 11px;
     line-height: 1.2;
@@ -728,7 +728,7 @@ kbd {
     padding: 0 6px;
     user-select: none;
 }
-/* 날짜가 바뀌는 지점의 구분선 — 메신저식 날짜 칩 */
+/* 날짜가 바뀌는 지점의 구분선: 메신저식 날짜 칩 */
 .date-sep {
     display: flex;
     justify-content: center;
@@ -1449,7 +1449,7 @@ kbd {
 .todos-page {
     outline: none;
 }
-/* 라우트 페이지는 tabindex=-1로 프로그래매틱 포커스를 받는다 — 여기에
+/* 라우트 페이지는 tabindex=-1로 프로그래매틱 포커스를 받는다. 여기에
    :focus-visible 링이 걸리면 창 전체를 감싸는 커다란 포커스 링이 생긴다. */
 #todosPage:focus-visible,
 #settingsPage:focus-visible,
@@ -2187,7 +2187,7 @@ select.td-input {
     transform: scale(0.97);
 }
 
-/* 설정 라우트에서는 채팅 뷰를 숨긴다 — 한 번에 한 페이지만 표시된다 */
+/* 설정 라우트에서는 채팅 뷰를 숨긴다. 한 번에 한 페이지만 표시된다 */
 body.settings-route #header,
 body.settings-route #scroller,
 body.settings-route #composerWrap,
@@ -2214,7 +2214,7 @@ body.todos-route #btnAttach {
     display: none;
 }
 /* 데스크톱: 사이드바가 접힌 채로 설정을 열면 채팅 헤더의 메뉴 버튼이 숨겨져
-   다시 펼칠 수 없다 — 설정 헤더에 펼치기 버튼을 대신 보인다(모바일은 sp-back 사용). */
+   다시 펼칠 수 없다. 설정 헤더에 펼치기 버튼을 대신 보인다(모바일은 sp-back 사용). */
 body.sb-collapsed .sp-expand {
     display: inline-flex;
 }
@@ -2788,7 +2788,7 @@ body.sb-collapsed .sp-expand {
     flex: 1;
 }
 
-/* 스킬/MCP 목록 행(설정 → 스킬 & MCP) */
+/* 스킬/MCP 목록 행(설정의 스킬·MCP 탭) */
 .ext-row {
     display: flex;
     align-items: center;
@@ -3021,7 +3021,7 @@ body.sb-collapsed .sp-expand {
 .onb-auth .btn.ghost.warn:hover:not(:disabled) {
     color: var(--warning);
 }
-/* "인증 없이 사용" 확인 모달 — 온보딩 페이지(90) 위, 토스트(300) 아래 */
+/* "인증 없이 사용" 확인 모달: 온보딩 페이지(90) 위, 토스트(300) 아래 */
 .onb-modal {
     position: fixed;
     inset: 0;
@@ -3118,7 +3118,7 @@ body.sb-collapsed .sp-expand {
     max-width: min(420px, 100%);
     padding: 9px 18px;
     border-radius: var(--radius-pill);
-    /* 화면과 반대 톤(어두운 화면엔 밝게) — 채팅의 말풍선과 헷갈리지 않는다 */
+    /* 화면과 반대 톤(어두운 화면엔 밝게): 채팅의 말풍선과 헷갈리지 않는다 */
     background: var(--text);
     color: var(--bg);
     font-size: 14px;
@@ -3215,7 +3215,7 @@ body.sb-collapsed .sp-expand {
 }
 
 /* 시스템 알림(ui/notices.js).
-   경고창: OS의 알림 창처럼 화면 가운데 뜨는 작은 창 — 가운데 정렬된 제목·내용, 아래에 실선으로
+   경고창: OS의 알림 창처럼 화면 가운데 뜨는 작은 창. 가운데 정렬된 제목·내용, 아래에 실선으로
    나뉜 글자 버튼. 한 번에 하나만 뜬다. 뒤는 흐리지 않고 어둡게만 한다. */
 .nt-modal {
     position: fixed;
@@ -3359,7 +3359,7 @@ body.sb-collapsed .sp-expand {
     box-shadow: none;
     background: var(--hover);
 }
-/* 설정 → 알림의 기록 목록 */
+/* 설정의 알림 탭에 나오는 기록 목록 */
 .nt-list {
     display: flex;
     flex-direction: column;
@@ -3426,13 +3426,13 @@ body.sb-collapsed .sp-expand {
 }
 
 /* 컨텍스트 메뉴(contextmenu.js).
-   팝오버: 데스크톱 우클릭/⋯ 버튼 — 포인터 옆의 작은 메뉴.
-   시트: 터치 길게 누르기 — 화면이 흐려지고 대상만 또렷이 남은 채 메뉴가 옆에서 튀어나온다. */
+   팝오버: 데스크톱 우클릭/⋯ 버튼. 포인터 옆의 작은 메뉴.
+   시트: 터치 길게 누르기. 화면이 흐려지고 대상만 또렷이 남은 채 메뉴가 옆에서 튀어나온다. */
 .ctx-layer {
     position: fixed;
     inset: 0;
     z-index: 200;
-    /* 자식은 모두 absolute라 배치에는 영향이 없다 — JS가 노치 높이를 읽는 용도 */
+    /* 자식은 모두 absolute라 배치에는 영향이 없다. JS가 노치 높이를 읽는 용도 */
     padding-top: env(safe-area-inset-top);
     pointer-events: none;
 }
@@ -3909,7 +3909,7 @@ body.resizing {
     color: var(--text-tertiary);
     text-align: center;
 }
-/* 에이전트 폴더 탭 바 — 메신저 폴더처럼 목록 위 가로 텍스트 탭으로 필터링한다.
+/* 에이전트 폴더 탭 바: 메신저 폴더처럼 목록 위 가로 텍스트 탭으로 필터링한다.
    활성 탭은 강조색 글자 + 아래 밑줄(윗모서리만 둥근 막대)이고, 밑줄은 탭 사이를 미끄러진다. */
 .sb-tabs {
     position: relative;
@@ -4025,7 +4025,7 @@ body.resizing {
 .sb-tab-ind.no-anim {
     transition: none;
 }
-/* 설정 → 폴더: 순서 이동 화살표와 소속 에이전트 선택 목록 */
+/* 설정의 폴더 탭: 순서 이동 화살표와 소속 에이전트 선택 목록 */
 .folder-move.up .icon {
     transform: rotate(180deg);
 }
@@ -5038,7 +5038,7 @@ body.sb-collapsed .btn-menu {
 
 /* ── 12. 봇 컴퓨터 뷰(/c/<uuid>): 화면 스트림 + PTY 터미널 ── */
 
-/* 컴퓨터 라우트에서는 채팅 뷰만 숨긴다 — 헤더는 채팅과 같은 #header를 그대로 쓴다 */
+/* 컴퓨터 라우트에서는 채팅 뷰만 숨긴다. 헤더는 채팅과 같은 #header를 그대로 쓴다 */
 body.computer-route #scroller,
 body.computer-route #composerWrap,
 body.computer-route #jumpLatest {
@@ -5165,7 +5165,7 @@ body.computer-route #jumpLatest {
     opacity: 0.5;
 }
 
-/* 터미널 탭의 상태 오버레이는 버튼이 없으므로 클릭을 뚫는다 —
+/* 터미널 탭의 상태 오버레이는 버튼이 없으므로 클릭을 뚫는다.
    덮인 채로 탭하면 터미널 포커스가 빠져 모바일 키보드가 닫힌다. */
 .cp-terminal .cp-msg {
     pointer-events: none;
@@ -5212,7 +5212,7 @@ body.computer-route #jumpLatest {
     border-color: var(--accent);
 }
 
-/* 트랙패드 모드의 가상 커서 — 원격 좌표를 스테이지 좌표로 매핑해 JS가 위치시킨다 */
+/* 트랙패드 모드의 가상 커서: 원격 좌표를 스테이지 좌표로 매핑해 JS가 위치시킨다 */
 .cp-cursor {
     position: absolute;
     left: 0;
