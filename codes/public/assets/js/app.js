@@ -485,6 +485,7 @@
 
     T.sidebar.init();
     T.ctxmenu?.init?.();
+    T.gestures?.init?.();
     T.tooltip.init();
     T.chat.init();
     T.composer.init();
