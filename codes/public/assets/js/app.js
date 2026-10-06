@@ -10,6 +10,8 @@
 
     const THEME_KEY = "tabybot.theme";
     let booted = false;
+    // 스냅샷(로컬 캐시)으로 화면을 이미 그렸는지 — 재시도 부트에서 다시 그리지 않는다.
+    let painted = false;
     let wasConnected = false;
     // 부트 재시도 중 이전 비동기 결과가 최신 화면을 덮지 않도록 한다.
     let bootToken = 0;
@@ -212,7 +214,8 @@
         // 오프라인은 온보딩과 무관: 마법사를 띄우지 않고 안내만 표시한다.
         state.state.offline = true;
         state.setConn("disconnected");
-        T.i18n.init(null);
+        // 스냅샷으로 이미 그렸다면 그 언어를 유지한다.
+        T.i18n.init(state.state.bootstrap?.language || null);
         T.toast.show("error", err ? T.api.errorText(err, t("offlineNote")) : t("offlineNote"));
         if (location.protocol !== "file:") scheduleOfflineRetry();
     }
@@ -277,95 +280,79 @@
         } catch (_) {}
 
         const token = ++bootToken;
+        // 경로가 가리키는 대화(없으면 가장 최근 대화)는 스냅샷 표시 전에 잡아 둔다 —
+        // chat.open이 주소를 /a/<uuid>로 바꾸므로 그 뒤에는 "경로 없이 열었다"를 알 수 없다.
+        const pathBot = botUuidFromPath();
+
+        // 1) 저장된 스냅샷으로 즉시 그린다(네트워크 대기 없음). 서버 응답이 오면 아래에서 덮는다.
+        if (!booted && !painted && state.restoreSnapshot()) {
+            painted = true;
+            T.i18n.init(state.state.bootstrap.language);
+            await showRoute(pathBot, token);
+            if (token !== bootToken) return;
+        }
+
         try {
+            // 2) 부트 데이터는 한 번에 병렬로 받는다 — 순차 왕복은 느린 회선에서 그대로 지연이 된다.
+            const [acctR, bsR, settingsR, agentsR, convsR, todosR] = await Promise.allSettled([
+                T.api.accountState(),
+                T.api.bootstrap(),
+                T.api.getSettings(),
+                T.api.agents(),
+                T.api.conversations(),
+                (() => {
+                    const ticket = state.todosTicket();
+                    return T.api.todos().then((r) => ({ ticket, r }));
+                })(),
+            ]);
+            if (token !== bootToken) return;
+
             // 계정 게이트: 계정이 없으면 생성 화면(건너뛰기 가능),
             // 있고 세션이 무효면 로그인 화면을 먼저 띄운다.
-            try {
-                const acct = await T.api.accountState();
-                if (token !== bootToken) return;
-                if (acct) {
-                    state.state.account = acct;
-                    if (!acct.hasAccount && !T.onboarding.setupSkipped()) {
-                        T.onboarding.showAuth("setup", () => boot());
-                        return;
-                    }
-                    if (acct.hasAccount && !acct.authed) {
-                        handleUnauthorized();
-                        return;
-                    }
+            // account/state 실패는 bootstrap이 같은 오류로 처리한다.
+            const acct = acctR.status === "fulfilled" ? acctR.value : null;
+            if (acct) {
+                state.state.account = acct;
+                if (!acct.hasAccount && !T.onboarding.setupSkipped()) {
+                    T.onboarding.showAuth("setup", () => boot());
+                    return;
                 }
-            } catch (_) {
-                /* account/state 실패는 bootstrap이 같은 오류로 처리한다 */
+                if (acct.hasAccount && !acct.authed) {
+                    handleUnauthorized();
+                    return;
+                }
             }
 
-            const bs = await T.api.bootstrap();
-            if (token !== bootToken) return;
+            if (bsR.status === "rejected") throw bsR.reason;
+            const bs = bsR.value;
             state.state.bootstrap = bs;
             state.emit("bootstrap");
+            state.state.offline = false;
 
             T.i18n.init(bs.language);
 
-            try {
-                const s = await T.api.getSettings();
-                if (s && typeof s === "object") state.setSettings(s);
-            } catch (err) {
-                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-            }
-            try {
-                const r = await T.api.agents();
-                state.applyAgents(r);
-            } catch (err) {
-                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-            }
-            try {
-                const r = await T.api.conversations();
-                if (token !== bootToken) return;
-                state.replaceConversations((r && r.conversations) || []);
-            } catch (err) {
-                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-            }
-            try {
-                const ticket = state.todosTicket();
-                const r = await T.api.todos();
-                if (token !== bootToken) return;
-                state.applyTodos(ticket, r);
-            } catch (err) {
+            const failed = (r) => T.toast.show("error", T.api.errorText(r.reason, t("errorPrefix")));
+            if (settingsR.status === "rejected") failed(settingsR);
+            else if (settingsR.value && typeof settingsR.value === "object") state.setSettings(settingsR.value);
+            if (agentsR.status === "rejected") failed(agentsR);
+            else state.applyAgents(agentsR.value);
+            if (convsR.status === "rejected") failed(convsR);
+            else state.replaceConversations((convsR.value && convsR.value.conversations) || []);
+            if (todosR.status === "rejected") {
                 state.state.todosFailed = true;
-                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
-            }
-            const bots = state.state.bots;
+                failed(todosR);
+            } else state.applyTodos(todosR.value.ticket, todosR.value.r);
 
-            state.state.offline = false;
             booted = true;
-            if (T.sidebar.hydrate) await T.sidebar.hydrate();
+            // 미리보기 채우기는 화면을 막지 않는다.
+            void T.sidebar.hydrate?.();
 
-            const fromPath = botUuidFromPath();
-            const sr = settingsRoute();
-            const tr = T.todosUI?.routeFromPath?.();
-            const cr = T.computerUI?.routeFromPath?.();
-            let bot =
-                (fromPath && bots.find((b) => b.uuid === fromPath)) ||
-                (cr && bots.find((b) => b.uuid === cr.uuid)) ||
-                (!tr && !cr && bots[0]) ||
-                null;
+            await showRoute(pathBot, token);
             if (token !== bootToken) return;
-            if (bot) {
-                await T.chat.open(bot.uuid, { params: urlParams() });
-                if (fromPath || sr || cr) T.sidebar.showChat?.();
-                else if (!tr) T.sidebar.showList?.();
-                consumeParams(urlParams());
-            } else if (!sr && !tr && !cr) {
-                history.replaceState(null, "", "/");
-            }
+            consumeParams(urlParams());
 
-            if (sr) T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
-            else if (tr) {
-                T.sidebar.showChat?.();
-                T.todosUI.open({ id: tr.id || null, fromUrl: true });
-            }
-            if (cr) T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
-
-            T.events.connect();
+            T.events.connect({ fresh: true });
+            prefetchThreads();
 
             // 설정이 불완전하면 온보딩을 연다. 사용자가 /s/*로 직접 들어온 경우에는
             // 위에서 복원한 설정 페이지를 유지한다.
@@ -378,6 +365,66 @@
             }
             enterOffline(e);
         }
+    }
+
+    // 현재 경로에 맞는 화면을 띄운다. 스냅샷 표시와 서버 응답 반영 양쪽에서 호출된다 —
+    // 이미 맞는 화면이 떠 있으면 다시 열지 않는다.
+    async function showRoute(pathBot, token) {
+        const bots = state.state.bots;
+        const sr = settingsRoute();
+        const tr = T.todosUI?.routeFromPath?.();
+        const cr = T.computerUI?.routeFromPath?.();
+        const bot =
+            (pathBot && bots.find((b) => b.uuid === pathBot)) ||
+            (cr && bots.find((b) => b.uuid === cr.uuid)) ||
+            (!tr && !cr && state.mostRecentBot()) ||
+            null;
+        if (bot) {
+            if (bot.uuid !== state.state.currentId) {
+                const opened = T.chat.open(bot.uuid, { params: urlParams() });
+                // 스냅샷으로 그릴 때는 서버 재검증을 기다리지 않는다.
+                if (booted) await opened;
+                else void opened;
+            } else if (booted) {
+                // 스냅샷으로 이미 열어 둔 대화 — 서버 정본으로 재검증만 한다.
+                void T.chat.refreshCurrent?.();
+            }
+            if (token !== bootToken) return;
+            if (pathBot || sr || cr) T.sidebar.showChat?.();
+            else if (!tr) T.sidebar.showList?.();
+        } else if (!sr && !tr && !cr) {
+            history.replaceState(null, "", "/");
+        }
+
+        if (sr) {
+            if (!T.settingsUI.isOpen()) T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
+        } else if (tr) {
+            T.sidebar.showChat?.();
+            if (!T.todosUI.isOpen?.()) T.todosUI.open({ id: tr.id || null, fromUrl: true });
+        }
+        if (cr && !T.computerUI.isOpen?.()) T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
+    }
+
+    // 한가할 때 나머지 대화 기록을 미리 받아 둔다 — 목록에서 누르면 바로 뜬다.
+    // 최근 대화부터, 한 번에 하나씩(부트 직후 회선을 독점하지 않게).
+    const PREFETCH_MAX = 8;
+    function prefetchThreads() {
+        // 데이터 절약 모드에서는 누를 때 받는다.
+        if (navigator.connection?.saveData) return;
+        const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 600));
+        const ids = state.state.conversations.map((c) => c.id).filter((id) => state.botByUuid(id));
+        let n = 0;
+        const next = () => {
+            const id = ids.shift();
+            if (!id || n >= PREFETCH_MAX || state.state.offline) return;
+            if (state.conv(id).loaded && state.conv(id).fetchedAt) return next();
+            n += 1;
+            state
+                .refreshTurns(id)
+                .catch(() => {})
+                .then(() => idle(next));
+        };
+        idle(next);
     }
 
     /* ── 공용 라우터: 현재 경로를 해석해 화면을 렌더링한다 ──

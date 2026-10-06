@@ -155,6 +155,11 @@
             if (enabled()) void ensurePush();
         });
         navigator.serviceWorker?.addEventListener?.("message", (ev) => {
+            // 캐시된 셸로 먼저 떴는데 서버에 새 버전이 있다 — 눌러서 바로 적용할 수 있게 알린다.
+            if (ev.data?.type === "shell-updated") {
+                T.toast.show("info", T.i18n.t("appUpdated"), () => location.reload());
+                return;
+            }
             const url = ev.data?.type === "sw-navigate" ? String(ev.data.url || "") : "";
             if (!url || !url.startsWith("/") || url.startsWith("//")) return;
             try {

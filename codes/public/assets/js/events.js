@@ -33,6 +33,8 @@
     }
 
     const FRESH_LOAD_GAP_MS = 15000;
+    const FRESH_BOOT_MS = 5000;
+    let freshUntil = 0;
 
     async function replayGap(since, retried, recentMs) {
         try {
@@ -72,6 +74,11 @@
             case "hello":
                 backoff = 1000;
                 state.setConn("connected");
+                // 부트가 방금 같은 데이터를 받았다 — 첫 hello에서 통째로 다시 받지 않는다.
+                if (Date.now() < freshUntil) {
+                    freshUntil = 0;
+                    break;
+                }
                 // 재접속 사이에 놓친 턴/목록을 되살린다.
                 // 진행 중 턴을 덮지 않게 현재 스레드 동기화는 refreshCurrent가 가드한다.
                 refreshConversations();
@@ -369,8 +376,10 @@
         }
     }
 
-    function connect() {
+    // opt.fresh: 호출 직전에 부트 데이터를 받았다 — 곧 올 첫 hello의 재동기화를 생략한다.
+    function connect(opt) {
         stopInternal();
+        freshUntil = opt?.fresh ? Date.now() + FRESH_BOOT_MS : 0;
         const gen = generation;
         stopped = false;
         backoff = 1000;

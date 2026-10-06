@@ -122,25 +122,24 @@
         return "";
     }
 
-    // 클릭하지 않아도 미리보기가 보이도록, 비어 있는 스레드만 상세를 받아 채운다.
-    const hydrating = new Set();
+    // 클릭하지 않아도 미리보기가 보이도록, 비어 있는 스레드만 기록을 받아 채운다.
+    // 받은 턴은 대화 캐시에 그대로 남아(previewOf가 읽는다) 열 때 다시 받지 않는다.
+    // 기록이 정말 비어 있는 봇을 이벤트마다 다시 조회하지 않게 한 번만 시도한다.
+    const hydrated = new Set();
     function hydratePreviews() {
         if (state.state.offline) return Promise.resolve();
         const jobs = [];
         for (const bot of state.state.bots) {
             const id = bot.uuid;
-            if (!id || hydrating.has(id) || previewOf(bot)) continue;
-            hydrating.add(id);
+            if (!id || hydrated.has(id) || previewOf(bot)) continue;
+            // 이미 받았거나 지금 열려 있는(chat.open이 받는 중인) 대화는 다시 받지 않는다.
+            if (id === state.state.currentId || state.conv(id).fetchedAt) continue;
+            hydrated.add(id);
             jobs.push(
-                T.api
-                    .conversation(id)
-                    .then((r) => {
-                        const text = snippet(r && r.preview) || previewFromTurns(r && r.turns);
-                        if (!text) return;
-                        state.upsertMeta({ id, preview: text });
-                    })
-                    .catch(() => {})
-                    .finally(() => hydrating.delete(id)),
+                state
+                    .refreshTurns(id)
+                    .then(() => render())
+                    .catch(() => hydrated.delete(id)),
             );
         }
         return Promise.all(jobs);
