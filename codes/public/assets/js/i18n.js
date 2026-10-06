@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — i18n 사전 + 공용 유틸리티.
+/* tabyBot 웹 클라이언트: i18n 사전 + 공용 유틸리티.
    명세의 파일 구조를 유지하기 위해 공용 DOM 헬퍼를 이 파일에 둔다.
    전역 네임스페이스 Taby 아래에 부착된다(Chrome file:// 모듈 CORS 회피). */
 (function (T) {
@@ -30,7 +30,7 @@
         return el;
     }
 
-    // 스프라이트 아이콘: icon('copy') → <svg class="icon"><use href="#i-copy"/></svg>
+    // 스프라이트 아이콘: icon('copy')는 <svg class="icon"><use href="#i-copy"/></svg>를 만든다.
     const SVG_NS = "http://www.w3.org/2000/svg";
     function icon(name, extraClass) {
         const svg = document.createElementNS(SVG_NS, "svg");
@@ -158,7 +158,7 @@
             addSkill: "Add skill",
             skillsEmpty: "No skills installed",
             skillName: "Name",
-            skillNameDesc: "Letters, numbers, dashes — used as the directory name.",
+            skillNameDesc: "Letters, numbers, and dashes. Used as the directory name.",
             skillContent: "Skill content",
             skillBuiltin: "Built-in",
             skillShared: "Shared",
@@ -174,7 +174,7 @@
             addMcpServer: "Add server",
             mcpEmpty: "No MCP servers configured",
             mcpName: "Name",
-            mcpNameDesc: "Letters, numbers, dashes — used inside tool names.",
+            mcpNameDesc: "Letters, numbers, and dashes. Used inside tool names.",
             mcpCommand: "Command",
             mcpCommandDesc: "Executable that launches the server (e.g. npx, uvx, node).",
             mcpArgs: "Arguments",
@@ -205,7 +205,7 @@
             noModels: "No models found",
             vision: "Vision",
             visionSupported: "Supports image input",
-            visionUnsupported: "Text only — no image input",
+            visionUnsupported: "Text only, no image input",
             manualModel: "Model ID",
             manualModelPlaceholder: "Enter a model ID",
             sendPlaceholder: "Ask anything…",
@@ -240,8 +240,8 @@
             appUpdated: "A new version is ready. Reload now?",
             appReload: "Reload",
             sendFailed: "Failed to send",
-            modelRequired: "Choose a model in Settings → Model.",
-            providerRequired: "Connect the selected provider in Settings → Provider.",
+            modelRequired: "Choose a model in the Model tab of Settings.",
+            providerRequired: "Connect the selected provider in the Provider tab of Settings.",
             autoModelUse: "Use Auto model",
             autoModelUseDesc: "Student Pack and free users must turn this on. Auto selects an available Copilot model for each request.",
             autoModelRouting: "Auto model routing",
@@ -312,7 +312,7 @@
             authAccountExists: "An account already exists. Sign in instead.",
             authCurrentRequired: "Enter your current password to save.",
             authRequired: "Fill in every field.",
-            authNoAccountDesc: "No account yet. Create one to require sign-in on this server — until then the UI stays open.",
+            authNoAccountDesc: "No account yet. Create one to require sign-in on this server. Until then the UI stays open.",
             authCreated: "Account created.",
             authSaved: "Account updated.",
             authEdit: "Change",
@@ -341,7 +341,7 @@
             selfImprovement: "Self-improvement",
             siProactive: "Proactive check-in",
             siProactiveDesc:
-                "While you're away, the agent wakes at this interval to check for things worth telling you first — overdue todos, missed routines, threads left hanging.",
+                "While you're away, the agent wakes at this interval to check for things worth telling you first, such as overdue todos, missed routines, and threads left hanging.",
             siDreaming: "Dream sweep",
             siDreamingDesc: "While you're away, the agent looks back at recent conversations and files lasting facts into memory.",
             siReview: "Session review",
@@ -370,7 +370,7 @@
             siRevMid: "Typical work (5+ tools)",
             siRevLarge: "Big tasks only (10+ tools)",
             siUsageWarn:
-                "These features consume a lot of AI usage in the background. If you need to save usage, disable Proactive check-in and Session review — the two heaviest.",
+                "These features consume a lot of AI usage in the background. If you need to save usage, disable Proactive check-in and Session review, the two heaviest.",
             oauthAccount: "Account",
             oauthChecking: "Checking…",
             oauthLogin: "Log in",
@@ -400,7 +400,7 @@
             todosEmptySuggest: "No suggestions from agents right now.",
             todosLoadFailed: "Couldn't load your todos.",
             todosStoreRecovered:
-                "The saved todos file was corrupted, so the list was reset to empty. The original is preserved in {file} — you can ask an agent to restore it.",
+                "The saved todos file was corrupted, so the list was reset to empty. The original is preserved in {file}. You can ask an agent to restore it.",
             todosDismiss: "Dismiss",
             todosToday: "Today",
             todosTomorrow: "Tomorrow",
@@ -476,11 +476,11 @@
             todosErrNotDone: "That item is already open",
             todosErrCron: "Couldn't read that schedule",
             todosErrAt: "Couldn't read that date/time",
-            todosErrPast: "That time is in the past — pick a future time",
+            todosErrPast: "That time is in the past. Pick a future time",
             todosErrTz: "Unknown timezone",
             todosErrSchedule: "Couldn't read that schedule",
             todosErrNoAssignee: "No agent is assigned to it",
-            todosErrNeedSchedule: "Automations need a schedule — add cron, every, or at",
+            todosErrNeedSchedule: "Automations need a schedule. Add cron, every, or at",
             todosErrTooManySug: "Too many suggestions are waiting",
             todosErrInternal: "Something went wrong on the server",
             todosErrBadReq: "The request was malformed",
@@ -502,7 +502,7 @@
             todosReopened: "Reopened",
             todosDoneState: "Done",
             todosPeriodDoneState: "Done for this period",
-            todosSugPastWarn: "This time has already passed — approving fires the notification right away",
+            todosSugPastWarn: "This time has already passed. Approving fires the notification right away",
             todosSugPastDone: "This time has already passed",
             todosExternChanged: "This item was also edited elsewhere. Saving will overwrite those changes",
             todosAutoSaved: "Changes saved",
@@ -514,7 +514,7 @@
             todosSugRejected: "Suggestion dismissed",
             todosJobs: "Automations",
             todosAgents: "Agents",
-            todosEmptyAgents: "Nothing handed to agents yet — no assigned tasks or automations.",
+            todosEmptyAgents: "Nothing handed to agents yet. No assigned tasks or automations.",
             todosPaused: "Paused",
             todosResumed: "Resumed",
             todosPause: "Pause",
@@ -661,7 +661,7 @@
             noModels: "모델이 없습니다",
             vision: "비전",
             visionSupported: "이미지 입력 지원",
-            visionUnsupported: "텍스트 전용 — 이미지 입력 미지원",
+            visionUnsupported: "텍스트 전용, 이미지 입력 미지원",
             manualModel: "모델 ID",
             manualModelPlaceholder: "모델 ID를 입력하세요",
             sendPlaceholder: "무엇이든 물어보세요…",
@@ -696,8 +696,8 @@
             appUpdated: "새 버전이 준비됐어요. 지금 새로고침할까요?",
             appReload: "새로고침",
             sendFailed: "전송에 실패했습니다",
-            modelRequired: "설정 → 모델에서 사용할 모델을 선택하세요.",
-            providerRequired: "설정 → 프로바이더에서 먼저 연결을 완료하세요.",
+            modelRequired: "설정의 모델 탭에서 사용할 모델을 선택하세요.",
+            providerRequired: "설정의 프로바이더 탭에서 먼저 연결하세요.",
             autoModelUse: "Auto 모델 사용",
             autoModelUseDesc: "스튜던트 팩 사용자 또는 무료 사용자는 이 옵션을 켜야 합니다. 요청마다 사용 가능한 코파일럿 모델을 Auto가 선택합니다.",
             autoModelRouting: "Auto 모델 유도",
@@ -752,7 +752,7 @@
             authLoginDesc: "tabyBot을 사용하려면 로그인하세요.",
             authSetupTitle: "계정 만들기",
             authSetupDesc:
-                "이 tabyBot에 접근할 때 사용할 계정을 생성하세요. 설정하지 않으면 인증 없이 모두가 접근할 수 있게 됩니다. 계정 정보는 외부로 전송되지 않습니다.",
+                "이 tabyBot에 접근할 때 쓸 계정을 만드세요. 만들지 않으면 누구나 인증 없이 접근할 수 있습니다. 계정 정보는 외부로 전송되지 않습니다.",
             authSignIn: "로그인",
             authCreate: "계정 만들기",
             authSkip: "인증 없이 사용 (심각한 보안 위험)",
@@ -827,7 +827,7 @@
             siRevMid: "보통 작업부터 (도구 5회+)",
             siRevLarge: "큰 작업만 (도구 10회+)",
             siUsageWarn:
-                "이 기능들은 백그라운드에서 AI 사용량을 크게 소비합니다. 사용량을 아껴야 하는 경우, 사용량을 가장 많이 소비하는 자동 체크인과 세션 리뷰를 비활성화하세요.",
+                "이 기능들은 백그라운드에서 AI 사용량을 크게 소비합니다. 사용량을 아껴야 하면 가장 많이 쓰는 자동 체크인과 세션 리뷰를 끄세요.",
             oauthAccount: "계정",
             oauthChecking: "확인 중…",
             oauthLogin: "로그인",
@@ -853,7 +853,7 @@
             todosUser: "직접 할 일",
             todosAgent: "에이전트가 할 일",
             todosSuggestions: "에이전트의 제안",
-            todosEmptyUser: "아직 추가된 할 일이 없습니다. 새로 추가하거나, 에이전트에게 이전 앱에서 tabyBot으로의 이전을 요청해보세요.",
+            todosEmptyUser: "아직 추가된 할 일이 없습니다. 새로 추가하거나, 이전 앱의 할 일을 tabyBot으로 옮겨 달라고 에이전트에게 요청해 보세요.",
             todosEmptySuggest: "지금은 에이전트의 제안이 없습니다.",
             todosLoadFailed: "목록을 불러오지 못했습니다.",
             todosStoreRecovered:
@@ -933,11 +933,11 @@
             todosErrNotDone: "이미 열려 있는 항목입니다",
             todosErrCron: "일정을 해석할 수 없습니다",
             todosErrAt: "날짜/시각을 해석할 수 없습니다",
-            todosErrPast: "이미 지난 시각입니다 — 이후 시각을 골라주세요",
+            todosErrPast: "이미 지난 시각입니다. 이후 시각을 골라주세요",
             todosErrTz: "알 수 없는 시간대입니다",
             todosErrSchedule: "일정을 해석할 수 없습니다",
             todosErrNoAssignee: "맡겨진 에이전트가 없습니다",
-            todosErrNeedSchedule: "자동화에는 일정이 필요합니다 — cron, every, at 중 하나를 추가하세요",
+            todosErrNeedSchedule: "자동화에는 일정이 필요합니다. cron, every, at 중 하나를 추가하세요",
             todosErrTooManySug: "대기 중인 제안이 너무 많습니다",
             todosErrInternal: "서버에 문제가 생겼습니다",
             todosErrBadReq: "요청 형식이 올바르지 않습니다",
@@ -1118,7 +1118,7 @@
             noModels: "モデルが見つかりません",
             vision: "ビジョン",
             visionSupported: "画像入力に対応",
-            visionUnsupported: "テキストのみ — 画像入力非対応",
+            visionUnsupported: "テキストのみ、画像入力非対応",
             manualModel: "モデル ID",
             manualModelPlaceholder: "モデル IDを入力してください",
             sendPlaceholder: "何でも聞いてください…",
@@ -1152,8 +1152,8 @@
             appUpdated: "新しいバージョンがあります。今すぐ再読み込みしますか？",
             appReload: "再読み込み",
             sendFailed: "送信に失敗しました",
-            modelRequired: "設定 → モデルで使用するモデルを選択してください。",
-            providerRequired: "設定 → プロバイダで先に接続してください。",
+            modelRequired: "設定のモデルタブで使用するモデルを選択してください。",
+            providerRequired: "設定のプロバイダタブで先に接続してください。",
             autoModelUse: "Autoモデルを使う",
             autoModelUseDesc:
                 "Student Packまたは無料ユーザーはこの設定をオンにしてください。リクエストごとに利用可能なCopilotモデルをAutoが選択します。",
@@ -1391,11 +1391,11 @@
             todosErrNotDone: "すでに開いています",
             todosErrCron: "スケジュールを解釈できません",
             todosErrAt: "日時を解釈できません",
-            todosErrPast: "過去の時刻です — 未来の時刻を選んでください",
+            todosErrPast: "過去の時刻です。未来の時刻を選んでください",
             todosErrTz: "不明なタイムゾーンです",
             todosErrSchedule: "スケジュールを解釈できません",
             todosErrNoAssignee: "担当エージェントがいません",
-            todosErrNeedSchedule: "自動化にはスケジュールが必要です — cron, every, at のいずれかを追加してください",
+            todosErrNeedSchedule: "自動化にはスケジュールが必要です。cron, every, at のいずれかを追加してください",
             todosErrTooManySug: "保留中の提案が多すぎます",
             todosErrInternal: "サーバーで問題が発生しました",
             todosErrBadReq: "リクエスト形式が正しくありません",
@@ -1460,7 +1460,7 @@
     let lang = "en";
     const listeners = [];
 
-    // t('key', {n:5}) → 치환된 문자열. 누락 키는 영어 → 키 이름 순으로 폴백.
+    // t('key', {n:5})는 치환된 문자열을 돌려준다. 키가 없으면 영어 사전, 그것도 없으면 키 이름을 쓴다.
     function t(key, vars) {
         let s = (DICT[lang] && DICT[lang][key]) || DICT.en[key] || key;
         if (vars) {

@@ -45,7 +45,7 @@ Rules:
 - Same language as the source (Korean stays Korean, etc.).
 - Dense markdown bullets or short paragraphs. No filler, no "summary:" prefix, no preamble.
 - Do NOT invent information that is not in the transcript. If you are unsure, omit it.
-- Earlier compressed summary (if provided above a --- separator) is already trusted context — preserve its facts and refine/extend, never drop them.`;
+- Earlier compressed summary (if provided above a --- separator) is already trusted context. Preserve its facts and refine/extend them, never drop them.`;
 
 const TOOL_OUTPUT_TRIM_THRESHOLD = 600;
 const TOOL_OUTPUT_KEEP_HEAD = 200;
@@ -222,7 +222,7 @@ function repairToolPairIntegrity(messages) {
                     patched.push({
                         role: "tool",
                         tool_call_id: tc.id,
-                        content: "[Result from earlier conversation — see context summary above]",
+                        content: "[Result from earlier conversation. See the context summary above]",
                     });
                     resultIds.add(tc.id);
                 }
@@ -338,11 +338,11 @@ export async function ensureWithinContextLimit(
     };
 }
 
-/* ── 수동 세션 압축(설정 → 모델 → 고급) ─────────────────────
+/* ── 수동 세션 압축(설정의 모델 탭 고급 항목) ─────────────────────
    자동 압축(applyIntelligentCompression)과 같은 함수를 그대로 호출하되
-   트리거만 수동이다 — 진행 중인 유저 메시지가 없으므로 null을 넘기고,
+   트리거만 수동이다. 진행 중인 유저 메시지가 없으므로 null을 넘기고,
    반환된 재구성 메시지는 진행 중 요청이 없어 버린다. */
-// 세션에 압축할 실제 대화가 있는지 — 실행 중/복구 대기/빈 세션은 false.
+// 세션에 압축할 실제 대화가 있는지. 실행 중/복구 대기/빈 세션은 false.
 function sessionNeedsCompression(chatId) {
     if (isAgentSessionRunning(chatId) || hasRecoverableChatTurn(chatId)) return false;
     const turns = loadChatHistory(chatId);
@@ -360,7 +360,7 @@ async function compressSessionHistory(llm, chatId) {
 }
 
 // chatIds를 생략하면 모든 봇의 활성 세션을 압축한다.
-// 반환: { compressed, skipped, failed } — 실행 중/빈 세션은 skipped로 센다.
+// 반환: { compressed, skipped, failed }. 실행 중/빈 세션은 skipped로 센다.
 export async function compressBotSessions(chatIds = null) {
     const ids =
         Array.isArray(chatIds) && chatIds.length
@@ -374,7 +374,7 @@ export async function compressBotSessions(chatIds = null) {
     result.skipped = ids.length - candidates.length;
     if (!candidates.length) return result;
     // 자동 압축처럼 각 봇의 모델/사고 수준 오버라이드를 반영한 클라이언트로
-    // 요약한다 — 같은 오버라이드 조합은 클라이언트를 재사용한다.
+    // 요약한다. 같은 오버라이드 조합은 클라이언트를 재사용한다.
     const clients = new Map();
     const clientFor = async (chatId) => {
         const agent = getAgentByUuid(chatId);

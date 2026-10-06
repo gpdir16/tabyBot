@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 커스텀 컨텍스트 메뉴.
+/* tabyBot 웹 클라이언트: 커스텀 컨텍스트 메뉴.
    브라우저 기본 우클릭 메뉴/iOS 콜아웃을 가로채고 앱 메뉴를 띄운다(네이티브 앱 동작).
 
    두 가지 모양이 있다.
@@ -12,7 +12,7 @@
           메뉴 높이가 따라 변한다.
        5) 바깥을 누르면 닫힌다.
 
-   쓰는 법 — 엘리먼트에 메뉴를 붙이면 우클릭·길게 누르기(눌림, 들어 올리기, 밀어서 선택)가
+   쓰는 법. 엘리먼트에 메뉴를 붙이면 우클릭·길게 누르기(눌림, 들어 올리기, 밀어서 선택)가
    전부 따라온다:
 
        T.ctxmenu.attach(rowEl, () => [
@@ -24,12 +24,12 @@
 
    항목 함수는 메뉴를 열 때마다 불린다(그때의 상태로 항목을 만든다). 빈 배열이면 열리지 않는다.
    엘리먼트가 DOM에서 사라지면 등록도 함께 사라지므로 해제할 필요가 없다.
-   엘리먼트 단위로 붙이기 어려운 영역은 T.ctxmenu.register(fn(target) → { source, items } | null)을 쓴다.
+   엘리먼트 단위로 붙이기 어려운 영역은 T.ctxmenu.register(fn)을 쓴다. fn(target)은 { source, items } 또는 null을 돌려준다.
    여기에는 공통 항목(입력 필드 편집 · 선택 복사 · 링크 · 이미지 · 메시지)이 들어 있다.
 
    항목 형식: { label, icon?, danger?, checked?, defer?, onSelect?, children? } | { sep: true }
    - children: 하위 메뉴. 배열 또는 배열을 돌려주는 함수(열 때 계산).
-   - defer: 화면을 바꾸는 동작이면 true — 메뉴가 다 닫힌 뒤 실행된다. */
+   - defer: 화면을 바꾸는 동작이면 true. 메뉴가 다 닫힌 뒤 실행된다. */
 (function (T) {
     "use strict";
 
@@ -38,7 +38,7 @@
     const LONG_PRESS_MS = 400;
     const PRESS_FEEDBACK_MS = 110; // 이 시간 뒤부터 대상이 눌려 보인다(스크롤 시작과 헷갈리지 않게)
     const LONG_PRESS_MOVE_PX = 10;
-    const CLOSE_MS = 280; // 닫힘 전환(최대 220ms)이 다 끝난 뒤에 걷어 낸다 — 중간에 끊기면 덜컥거린다
+    const CLOSE_MS = 280; // 닫힘 전환(최대 220ms)이 다 끝난 뒤에 걷어 낸다. 중간에 끊기면 덜컥거린다
     const PANE_MS = 280; // 하위 메뉴 전환(app.css의 .ctx-pane 전환 시간과 같게)
     const PANE_SHIFT_PCT = 100;
     const SHEET_MARGIN = 12;
@@ -111,7 +111,7 @@
         else {
             el.classList.remove("in");
             el.classList.add("closing");
-            // 들어 올린 대상은 원래 자리·크기·모서리로 내려앉는다 — 다 내려앉은 뒤 원본과 바꿔치기해야
+            // 들어 올린 대상은 원래 자리·크기·모서리로 내려앉는다. 다 내려앉은 뒤 원본과 바꿔치기해야
             // 이음매가 보이지 않는다.
             if (state.lift) {
                 const lift = state.lift;
@@ -222,7 +222,7 @@
             cur.stack.push((typeof it.children === "function" ? it.children() : it.children) || []);
             showPane(1);
         } else {
-            // 화면을 바꾸는 항목(defer)은 메뉴가 다 닫힌 뒤 실행한다 — 들어 올린 카드가 새 화면 위에
+            // 화면을 바꾸는 항목(defer)은 메뉴가 다 닫힌 뒤 실행한다. 들어 올린 카드가 새 화면 위에
             // 남거나 전환 애니메이션과 겹치지 않게. 그 밖(복사 등)은 사용자 제스처 안에서 바로 실행한다.
             const sheet = cur.sheet;
             const wait = close();
@@ -244,7 +244,7 @@
         const h = parseFloat(cs.height) || el.offsetHeight || r.height;
         const cx = r.left + r.width / 2;
         const cy = r.top + r.height / 2;
-        // 브라우저마다 소수점 처리(레이아웃 단위)가 달라 반 픽셀의 여유를 둔다 — 눈에는 보이지 않는다.
+        // 브라우저마다 소수점 처리(레이아웃 단위)가 달라 반 픽셀의 여유를 둔다. 눈에는 보이지 않는다.
         return { left: cx - w / 2, top: cy - h / 2, width: w + 0.5, height: h };
     }
 
@@ -548,7 +548,7 @@
     }
 
     // 터치 기기에서는 메시지 본문을 길게 눌러도 글자가 선택되지 않는다(메뉴가 뜬다).
-    // "텍스트 선택"을 고르면 그 메시지만 선택 가능해지고 전체가 선택된 채로 시작한다 —
+    // "텍스트 선택"을 고르면 그 메시지만 선택 가능해지고 전체가 선택된 채로 시작한다.
     // 선택이 풀리면 원래대로 돌아간다.
     let selectingRow = null;
     function startTextSelection(row, textEl) {
@@ -645,7 +645,7 @@
         document.addEventListener("contextmenu", (e) => {
             if (e.defaultPrevented) return;
             e.preventDefault();
-            // Android는 터치 길게 누르기에 실제 contextmenu를 쏜다 — 방금 같은 제스처로 열었으면 무시.
+            // Android는 터치 길게 누르기에 실제 contextmenu를 쏜다. 방금 같은 제스처로 열었으면 무시.
             if (layer && openedByPress && Date.now() - openedAt < ANDROID_DUP_MS) return;
             const spec = resolve(e.target, false);
             close(true);
@@ -694,7 +694,7 @@
         );
         const onPointerEnd = (e) => {
             // 입력 필드 위의 pointercancel은 브라우저가 제스처를 네이티브 글자 선택으로
-            // 가져간 신호다 — iOS는 콜아웃이 차단돼 네이티브 메뉴가 안 뜨므로
+            // 가져간 신호다. iOS는 콜아웃이 차단돼 네이티브 메뉴가 안 뜨므로
             // 타이머를 유지해 커스텀 메뉴(붙여넣기 등)가 대신 열리게 한다.
             if (e?.type === "pointercancel" && lp?.target?.closest?.(EDITABLE)) return;
             cancelPress();

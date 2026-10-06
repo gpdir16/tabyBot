@@ -1,11 +1,11 @@
-/* tabyBot 웹 클라이언트 — 시스템 알림.
+/* tabyBot 웹 클라이언트: 시스템 알림.
    서버가 보낸 알림(업데이트, 세션 압축 확인, 할 일 기한, 예약 작업 결과 등)은
    잠깐 떴다 사라지는 토스트가 아니라 OS의 경고창 같은 모달로 띄운다:
    화면 가운데 작은 창에 제목 · 내용 · 버튼이 있고, 버튼을 눌러야 닫힌다.
    한 번에 하나만 뜨고(오래된 것부터), 닫으면 다음 알림이 이어서 뜬다.
 
    기록은 서버(/api/notices)가 들고 있어서, 그 순간 앱을 열어 두지 않았거나 다른 기기에서
-   열어도 읽지 않은 알림이 뜨고, 지난 알림은 설정 → 알림에서 다시 볼 수 있다.
+   열어도 읽지 않은 알림이 뜨고, 지난 알림은 설정의 알림 탭에서 다시 볼 수 있다.
    정본은 항상 서버 목록이다: 알림 이벤트가 오면 목록을 다시 받아 "읽지 않은 것"을 순서대로 띄운다. */
 (function (T) {
     "use strict";
@@ -80,7 +80,7 @@
 
     /* ── 한 건의 내용/동작 ──────────────────────────────────── */
     function textOf(n) {
-        // 할 일 기한 알림은 서버가 원자료만 보낸다 — 문구는 화면 언어로 여기서 만든다.
+        // 할 일 기한 알림은 서버가 원자료만 보낸다. 문구는 화면 언어로 여기서 만든다.
         if (n.type === "todo_due") return T.todosUI?.describeDue?.({ ...n, at: n.dueAt }) || n.text || n.title || "";
         return String(n.text || "");
     }
@@ -130,13 +130,13 @@
         return out;
     }
 
-    // 동작을 실행한다 — 그 알림은 읽은 것으로 친다.
+    // 동작을 실행한다. 그 알림은 읽은 것으로 친다.
     function runAction(n, action) {
         markRead([n.id]);
         action.run();
     }
 
-    // 설정 → 알림의 기록 한 줄.
+    // 설정의 알림 탭에 나오는 기록 한 줄.
     function buildRow(n) {
         const level = LEVEL_ICON[n.level] ? n.level : "info";
         const actions = actionsFor(n).map((a) =>
@@ -154,7 +154,7 @@
     }
 
     /* ── 경고창 ─────────────────────────────────────────────── */
-    // 제목: 어디서 온 알림인지 — 에이전트 이름, "할 일", 그 밖은 앱 이름.
+    // 제목: 어디서 온 알림인지. 에이전트 이름, "할 일", 그 밖은 앱 이름.
     function titleOf(n) {
         if (n.type === "todo_due") return t("todos");
         return (n.conversationId && state.botByUuid(n.conversationId)?.name) || "tabyBot";
@@ -208,7 +208,7 @@
         syncModal();
     }
 
-    // alert()로 띄운 경고창을 key로 거둔다(원인이 사라졌을 때 — 서버 연결 복구 등).
+    // alert()로 띄운 경고창을 key로 거둔다(원인이 사라졌을 때: 서버 연결 복구 등).
     function dismiss(key) {
         const id = `local:${key}`;
         if (!locals.some((a) => a.id === id)) return;
@@ -267,7 +267,7 @@
         );
         root.append(el);
         modal = { el, id: d.id };
-        // 창 자체에 포커스를 둔다 — Esc가 먹고, 버튼에는 키보드로 옮겨 갈 때만 강조가 생긴다.
+        // 창 자체에 포커스를 둔다. Esc가 먹고, 버튼에는 키보드로 옮겨 갈 때만 강조가 생긴다.
         el.tabIndex = -1;
         el.focus({ preventScroll: true });
     }

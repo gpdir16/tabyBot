@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — SSE 구독(/api/events).
+/* tabyBot 웹 클라이언트: SSE 구독(/api/events).
    - 토큰 미설정: 네이티브 EventSource(브라우저 자동 재접속)
    - 토큰 설정: EventSource는 헤더를 보낼 수 없으므로 fetch 스트림으로
      Authorization 헤더를 실어 동일 계약을 구현하고 지수 백오프로 재접속.
@@ -79,7 +79,7 @@
             case "hello":
                 backoff = 1000;
                 state.setConn("connected");
-                // 부트가 방금 같은 데이터를 받았다 — 첫 hello에서 통째로 다시 받지 않는다.
+                // 부트가 방금 같은 데이터를 받았다. 첫 hello에서 통째로 다시 받지 않는다.
                 if (Date.now() < freshUntil) {
                     freshUntil = 0;
                     break;
@@ -124,7 +124,7 @@
                 );
                 if (msg.error && msg.error !== "stopped_by_user" && !msg.automated) {
                     const detail = typeof msg.error === "string" ? msg.error : (msg.error && (msg.error.detail || msg.error.code)) || "";
-                    // 에이전트가 답하지 못했다 — 지나가는 표시로는 놓치기 쉬워 경고창으로 알린다.
+                    // 에이전트가 답하지 못했다. 지나가는 표시로는 놓치기 쉬워 경고창으로 알린다.
                     T.notices.alert({
                         title: state.botByUuid(msg.conversationId)?.name,
                         text: T.i18n.t("errorPrefix") + (detail ? ": " + detail : ""),
@@ -161,7 +161,7 @@
                 T.notices?.refresh();
                 break;
             case "sessions_compress":
-                // 압축 진행 상태를 설정 스냅샷에 반영 — 설정 탭의 버튼이 다시 그려진다.
+                // 압축 진행 상태를 설정 스냅샷에 반영: 설정 탭의 버튼이 다시 그려진다.
                 state.mergeSettingsLocal({ sessionsCompressing: !!msg.running });
                 break;
             case "oauth_done":
@@ -234,7 +234,7 @@
 
     async function pollLoop(gen) {
         // 서버 다운 시 connection refused가 즉시 실패하므로 고정 500ms 폴링은
-        // 죽은 서버를 두드린다 — 실패하면 지수적으로 늘린다(최대 10초).
+        // 죽은 서버를 두드린다. 실패하면 지수적으로 늘린다(최대 10초).
         let delay = 500;
         while (polling && !stopped && gen === generation) {
             try {
@@ -352,7 +352,7 @@
                         }
                     }
                 }
-                // 서버가 스트림을 닫음 → 아래에서 백오프 후 재접속
+                // 서버가 스트림을 닫았다. 아래에서 백오프 후 재접속한다.
             } catch (_) {
                 if (stopped || gen !== generation) break;
             }
@@ -365,7 +365,7 @@
         }
     }
 
-    // opt.fresh: 호출 직전에 부트 데이터를 받았다 — 곧 올 첫 hello의 재동기화를 생략한다.
+    // opt.fresh: 호출 직전에 부트 데이터를 받았다. 곧 올 첫 hello의 재동기화를 생략한다.
     function connect(opt) {
         stopInternal();
         freshUntil = opt?.fresh ? Date.now() + FRESH_BOOT_MS : 0;

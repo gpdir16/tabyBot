@@ -76,7 +76,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # camoufox-js postinstall이 브라우저를 $HOME/.cache에 받는다. HOME=/app/user는
-# 런타임에 볼륨이 마운트되는 경로라 이미지에 넣으면 그대로 가려진다 —
+# 런타임에 볼륨이 마운트되는 경로라 이미지에 넣으면 그대로 가려진다.
 # 볼륨 밖 /opt에 두고 심볼릭 링크로 연결한다(엔트리포인트가 없으면 다시 만든다).
 RUN mkdir -p /app/user \
     && npm install --global "camofox-browser@${CAMOFOX_VERSION}" \
@@ -93,7 +93,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # DISPLAY/CAMOFOX_HEADLESS는 런타임 전용이라 하단에 두어 앞 레이어 캐시를 보존한다.
 ENV DISPLAY=:99
 ENV CAMOFOX_HEADLESS=false
-# camofox의 유휴 정리는 API 액세스 기준 — 화면 조작(xdotool)은 API를 타지 않아
+# camofox의 유휴 정리는 API 액세스 기준. 화면 조작(xdotool)은 API를 타지 않아
 # 쓰는 중에도 30분 만에 세션 만료/서버 종료가 일어난다. 봇 브라우저가 닫히지 않게 7일로.
 ENV CAMOFOX_IDLE_TIMEOUT_MS=3153600000000
 ENV CAMOFOX_IDLE_EXIT_TIMEOUT_MS=3153600000000

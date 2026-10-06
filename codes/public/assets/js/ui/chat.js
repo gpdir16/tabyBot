@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 채팅 영역.
+/* tabyBot 웹 클라이언트: 채팅 영역.
    메시지 리스트, 도구카드, ask카드, 첨부 미리보기,
    자동 스크롤 고정 + "새 메시지" 플로팅 버튼, hover 액션(복사/재생성).
    응답 토큰은 그리지 않고, 구간이 끝나면 말풍선으로 뜬다. */
@@ -18,28 +18,28 @@
     let pinnedBottom = true;
     let rafPending = false;
     let liveEls = null; // 현재 대화의 라이브 블록 참조
-    let renderedId = null; // 스레드에 그려진 대화 id — 스크롤 메모리 키
-    const scrollMem = new Map(); // convId → { top, midx, dy, pinned } — 대화별 스크롤 위치
+    let renderedId = null; // 스레드에 그려진 대화 id: 스크롤 메모리 키
+    const scrollMem = new Map(); // convId → { top, midx, dy, pinned }: 대화별 스크롤 위치
     let memRaf = 0;
 
     /* ── 스크롤 ─────────────────────────────────────────────── */
     // 채팅 스레드가 #scroller의 내용으로 보이는가.
     // 설정(/s)·컴퓨터(/c)는 스크롤러를 display:none으로 숨기고(위치가 리셋된다),
-    // 할일(/t)은 같은 스크롤러를 할일 페이지가 쓴다 — 그 사이 스크롤은 채팅 위치가 아니다.
+    // 할일(/t)은 같은 스크롤러를 할일 페이지가 쓴다. 그 사이 스크롤은 채팅 위치가 아니다.
     function chatVisible() {
         const b = document.body.classList;
         return !b.contains("settings-route") && !b.contains("todos-route") && !b.contains("computer-route");
     }
 
-    // display:none→block 재표시 직후 WebKit이 scrollTop을 0으로 리셋하며 쏘는
-    // 스크롤 이벤트는 사용자 스크롤이 아니다 — 복원이 끝날 때까지 플래그/메모리
+    // display가 none에서 block으로 바뀌어 다시 보인 직후 WebKit이 scrollTop을 0으로 리셋하며 쏘는
+    // 스크롤 이벤트는 사용자 스크롤이 아니다. 복원이 끝날 때까지 플래그/메모리
     // 갱신을 무시해 오염을 막는다.
     let restorePending = false;
     scroller.addEventListener("scroll", () => {
         if (!chatVisible() || restorePending) return; // 다른 페이지가 스크롤러를 쓰는 동안의 스크롤은 무시
         pinnedBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 64;
         updateJump();
-        // 위치 기록은 프레임당 한 번 — 스크롤 이벤트는 연속으로 쏟아진다.
+        // 위치 기록은 프레임당 한 번: 스크롤 이벤트는 연속으로 쏟아진다.
         if (memRaf || !renderedId) return;
         memRaf = requestAnimationFrame(() => {
             memRaf = 0;
@@ -63,7 +63,7 @@
         if (chatVisible()) {
             scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
         } else if (renderedId) {
-            // 숨겨진 동안의 하단 이동 의도 — 다시 보일 때 복원된다.
+            // 숨겨진 동안의 하단 이동 의도를 남겨 둔다. 다시 보일 때 복원된다.
             scrollMem.set(renderedId, { pinned: true });
         }
         updateJump();
@@ -157,7 +157,7 @@
             return "";
         }
     }
-    // 날짜 구분선용 로컬 날짜 키/라벨 — 시각만으로는 며칠 전 메시지와 오늘 메시지가
+    // 날짜 구분선용 로컬 날짜 키/라벨: 시각만으로는 며칠 전 메시지와 오늘 메시지가
     // 구분되지 않아 순서가 엉켜 보이는 문제를 막는다.
     function dayKeyOf(at) {
         const ms = Date.parse(at || "");
@@ -174,7 +174,7 @@
             return "";
         }
     }
-    // 메시지 발화 시각 — 시각만 보이고 전체 날짜시각은 툴팁으로.
+    // 메시지 발화 시각: 시각만 보이고 전체 날짜시각은 툴팁으로.
     function msgTimeEl(at) {
         const label = fmtMsgTime(at);
         if (!label) return null;
@@ -494,7 +494,7 @@
             [
                 T.h("span", { class: "tool-glyph", text: "\uD83D\uDD27" }),
                 T.h("span", { class: "tool-name", text: tool.name || "" }),
-                T.h("span", { class: "tool-sep", text: "—" }),
+                T.h("span", { class: "tool-sep", text: "·" }),
                 sum,
                 chevron,
             ],
@@ -645,7 +645,7 @@
         return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
     }
 
-    // mem === undefined: 같은 대화 재렌더 — 지금 위치 유지. null: 하단으로. 객체: 그 위치로 복원.
+    // mem === undefined: 같은 대화 재렌더. 지금 위치 유지. null: 하단으로. 객체: 그 위치로 복원.
     function renderConversation(mem) {
         const keep = mem === undefined ? captureScroll() : mem;
         liveEls = null;
@@ -655,7 +655,7 @@
         const c = state.currentConv();
 
         // 봇 스레드 상단 안내는 항상 표시(새로고침/전환과 무관하게 일관).
-        // 아직 기록을 받는 중이면 비워 둔다 — 안내가 떴다가 메시지에 밀려 사라지지 않게.
+        // 아직 기록을 받는 중이면 비워 둔다. 안내가 떴다가 메시지에 밀려 사라지지 않게.
         if (!c || c.loaded || state.state.offline) thread.append(buildEmptyState());
 
         if (!c) {
@@ -695,7 +695,7 @@
             return true;
         });
         let lastA = -1;
-        // 통계 푸터는 턴의 마지막 보이는 assistant 버블에만 단다 — 중간 발화마다 달리지 않게.
+        // 통계 푸터는 턴의 마지막 보이는 assistant 버블에만 단다. 중간 발화마다 달리지 않게.
         const lastOfTurn = new Map();
         visible.forEach((f, i) => {
             if (f.m.role === "assistant") {
@@ -724,7 +724,7 @@
                     at: msgAt,
                 });
             }
-            // 길게 누르기 메뉴의 "재생성" — hover 액션과 같은 조건(마지막 답변, 실행 중 아님).
+            // 길게 누르기 메뉴의 "재생성": hover 액션과 같은 조건(마지막 답변, 실행 중 아님).
             if (f.m.role === "assistant" && i === lastA && !c.live) el.dataset.regen = "1";
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
             el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
@@ -747,7 +747,7 @@
         requestAnimationFrame(() => {
             fitBubblesIn(thread);
             // 버블 재측정·이미지 로드 등으로 높이가 늘어나면 하단 고정 의도가
-            // 실제 위치보다 짧게 끝난다 — 레이아웃 확정 뒤 한 번 더 맞춘다.
+            // 실제 위치보다 짧게 끝난다. 레이아웃 확정 뒤 한 번 더 맞춘다.
             if (keep && keep.pinned && pinnedBottom) scrollToBottom(false);
         });
     }
@@ -798,7 +798,7 @@
             liveEls.statusEl.setAttribute("aria-label", t(key));
         }
 
-        // 중간 라운드 텍스트(툴 호출 전 코멘트) — 새로고침 시 히스토리에 남는 것과 동일하게 표시
+        // 중간 라운드 텍스트(툴 호출 전 코멘트): 새로고침 시 히스토리에 남는 것과 동일하게 표시
         if (live.intermediate.length !== liveEls.interN) {
             liveEls.interN = live.intermediate.length;
             liveEls.interEl.replaceChildren(...live.intermediate.map((t) => T.h("div", { class: "bubble inter" }, [T.md.render(t)])));
@@ -928,7 +928,7 @@
         open._token = token;
         state.setCurrent(id == null ? null : String(id));
 
-        // URL 동기화: /a/<uuid>?m=&q= — 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
+        // URL 동기화: /a/<uuid>?m=&q=. 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
         try {
             const bot = id ? state.botByUuid(String(id)) : null;
             if (!/^\/s\//.test(location.pathname) && !/^\/t(?:\/|$)/.test(location.pathname) && !/^\/c\//.test(location.pathname)) {
@@ -941,14 +941,14 @@
             }
         } catch (_) {}
 
-        // 먼저 그린다 — 캐시된 턴이 있으면 그대로, 없으면 빈 스레드. 로드를 기다렸다 그리면
+        // 먼저 그린다. 캐시된 턴이 있으면 그대로, 없으면 빈 스레드. 로드를 기다렸다 그리면
         // 그동안 이전 대화가 화면에 남아 "다른 대화가 떴다가 바뀌는" 것처럼 보인다.
         // 그 대화에서 마지막으로 보던 위치로 돌아간다. 기억이 없으면 하단.
         renderConversation(id != null ? scrollMem.get(String(id)) || null : null);
 
         if (id != null && !state.state.offline) {
             const c = state.conv(id);
-            // 캐시는 낡았을 수 있다 — 방금 받은 게 아니면 서버 정본으로 재검증한다.
+            // 캐시는 낡았을 수 있다. 방금 받은 게 아니면 서버 정본으로 재검증한다.
             // 내용이 같으면 refreshTurns가 재렌더를 건너뛴다.
             if (!c.loaded || Date.now() - (c.fetchedAt || 0) > REVALIDATE_AFTER_MS) {
                 try {
@@ -968,7 +968,7 @@
         }
     }
 
-    // 검색 결과 등에서 특정 메시지로 점프 — 찾으면 중앙으로 스크롤하고 하이라이트.
+    // 검색 결과 등에서 특정 메시지로 점프: 찾으면 중앙으로 스크롤하고 하이라이트.
     function scrollToMessage(selector) {
         const el = thread.querySelector(selector);
         if (!el) return false;
@@ -978,7 +978,7 @@
         return true;
     }
 
-    // 검색 결과 클릭 → 그 대화를 열고 서버 인덱스(턴/메시지)의 행으로 이동한다.
+    // 검색 결과를 클릭하면 그 대화를 열고 서버 인덱스(턴/메시지)의 행으로 이동한다.
     // 다른 페이지(설정/할일/컴퓨터)가 열려 있어도 닫고 라우트를 채팅으로 바꾼다.
     async function openMessageTarget(convId, t, m) {
         try {
@@ -990,7 +990,7 @@
         } catch (_) {}
         T.app?.renderRoute();
         const sel = `[data-t="${Number(t)}"][data-m="${Number(m)}"]`;
-        // 라우트→대화 로드가 비동기라 행이 생길 때까지 짧게 기다린다.
+        // 라우트 전환과 대화 로드가 비동기라 행이 생길 때까지 짧게 기다린다.
         for (let i = 0; i < 40; i++) {
             if (scrollToMessage(sel)) return true;
             await new Promise((r) => setTimeout(r, 100));
@@ -999,7 +999,7 @@
     }
 
     // SSE 재접속 직후 서버 스냅샷과 맞춘다.
-    // 정본은 서버 히스토리 — refreshTurns가 실행 중 live/중간 발화와 병합해 적용한다.
+    // 정본은 서버 히스토리: refreshTurns가 실행 중 live/중간 발화와 병합해 적용한다.
     async function refreshCurrent() {
         const id = state.state.currentId;
         if (!id) return;
@@ -1038,7 +1038,7 @@
         hdrAvatar.replaceChildren();
         if (T.todosUI?.isOpen?.()) {
             const name = t("todos");
-            document.title = name + " — tabyBot";
+            document.title = name + " · tabyBot";
             hdrAvatar.append(T.icon("list", "icon-sm"));
             hdrAvatar.style.background = "var(--text-tertiary)";
             hdrAvatar.style.color = "var(--text)";
@@ -1047,7 +1047,7 @@
         }
         const bot = T.state.currentBot();
         const name = bot ? bot.name : "";
-        document.title = name ? `${name} — tabyBot` : "tabyBot";
+        document.title = name ? `${name} · tabyBot` : "tabyBot";
         hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
         hdrAvatar.style.background = bot?.color || "var(--surface-2)";
         hdrAvatar.style.color = "#fff";
@@ -1071,7 +1071,7 @@
             if (T.todosUI?.isOpen?.()) refreshHeader();
         });
 
-        // 서버 정본 갱신 — 턴 순서/병합은 항상 서버 응답 기준으로 다시 그린다.
+        // 서버 정본 갱신: 턴 순서/병합은 항상 서버 응답 기준으로 다시 그린다.
         state.on("turns", (p) => {
             if (p.id !== state.state.currentId) return;
             liveEls = null;
@@ -1081,7 +1081,7 @@
 
         state.on("user_message", (p) => {
             if (p.id !== state.state.currentId) return;
-            // 낙관적 버블의 확인 표시만 — 턴 렌더는 "turns" 이벤트가 담당한다.
+            // 낙관적 버블의 확인 표시만 한다. 턴 렌더는 "turns" 이벤트가 담당한다.
             if (p.confirmed) thread.querySelectorAll(".msg-row.optimistic").forEach((el) => el.classList.remove("optimistic"));
         });
 
@@ -1111,8 +1111,8 @@
             const shown = chatVisible();
             if (shown === chatShown) return;
             chatShown = shown;
-            // WebKit은 display:none→block으로 다시 보이는 스크롤러의 scrollTop을
-            // 레이아웃 단계에서 0으로 리셋한다 — 마이크로태스크/첫 rAF에서 복원하면
+            // WebKit은 display가 none에서 block으로 바뀌어 다시 보이는 스크롤러의 scrollTop을
+            // 레이아웃 단계에서 0으로 리셋한다. 마이크로태스크/첫 rAF에서 복원하면
             // 리셋이 복원을 덮어 채팅이 맨 위로 튄다. 레이아웃이 확정된 뒤에 복원하며,
             // 그 사이 리셋이 쏘는 스크롤 이벤트는 restorePending으로 걸러낸다.
             if (shown) {

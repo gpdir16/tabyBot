@@ -214,7 +214,7 @@ export async function consumeResponsesStream(res, signal, onTextDelta) {
 
         for (const line of lines) {
             const trimmed = line.trim();
-            // SSE 스펙상 data: 뒤 공백은 선택 — 공백 없는 프레임도 받는다.
+            // SSE 스펙상 data: 뒤 공백은 선택. 공백 없는 프레임도 받는다.
             if (!trimmed || !trimmed.startsWith("data:")) continue;
             const data = trimmed.slice(5).replace(/^ /, "");
             if (data === "[DONE]") continue;

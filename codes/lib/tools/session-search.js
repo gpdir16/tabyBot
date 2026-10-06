@@ -15,7 +15,7 @@ export const sessionSearchToolDefinitions = [
         function: {
             name: "session_search",
             description:
-                "Search every archived session transcript (all bots) by keyword or regex. Returns matching user/assistant lines with session file paths — follow up with file_read on a hit for full context. Only conversation text is searched, not tool outputs.",
+                "Search every archived session transcript (all bots) by keyword or regex. Returns matching user/assistant lines with session file paths. Follow up with file_read on a hit for full context. Only conversation text is searched, not tool outputs.",
             parameters: {
                 type: "object",
                 properties: {

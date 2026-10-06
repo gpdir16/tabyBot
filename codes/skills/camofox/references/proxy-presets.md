@@ -107,8 +107,8 @@ When configured, these values:
 
 `POST /tabs` and CLI `camofox open` accept:
 
-- `proxyProfile` — select a named profile from `CAMOFOX_PROXY_PROFILES_FILE`
-- `proxy` — provide raw proxy fields (`host`, `port`, `username`, `password`)
+- `proxyProfile`: select a named profile from `CAMOFOX_PROXY_PROFILES_FILE`
+- `proxy`: provide raw proxy fields (`host`, `port`, `username`, `password`)
 
 Session-level proxy overrides the server baseline for that specific `userId + sessionKey`.
 
@@ -189,7 +189,7 @@ CamoFox offers two geo modes that control how explicit geo fields interact with 
 - Explicit geo fields (`locale`, `timezoneId`, `geolocation`) remain authoritative
 - Proxy-derived geo suggestions are ignored
 - Use when you want precise geo control regardless of proxy location
-- Example: proxy exits in London, but you specify `preset: "japan"` — Japan geo wins
+- Example: proxy exits in London, but you specify `preset: "japan"`. Japan geo wins
 
 ### `geoMode=proxy-locked`
 
@@ -197,7 +197,7 @@ CamoFox offers two geo modes that control how explicit geo fields interact with 
 - Rejects requests where explicit geo conflicts with proxy-derived geo
 - Proxy-derived geo is authoritative
 - Use when geo consistency with proxy exit location is critical
-- Example: proxy exits in London with `preset: "japan"` — request is rejected
+- Example: proxy exits in London with `preset: "japan"`. The request is rejected
 
 ### Implementation
 

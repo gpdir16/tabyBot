@@ -2,26 +2,26 @@
 
 # tabyBot
 
-Grok Bot의 오픈소스 대안입니다. 이전 제 프로젝트인 [tabyAgent](https://github.com/gpdir16/tabyAgent)를 기반으로 제작되었습니다.
+Grok Bot의 오픈소스 대안입니다. 제 이전 프로젝트 [tabyAgent](https://github.com/gpdir16/tabyAgent)를 기반으로 만들었습니다.
 
-작업을 시키면, 몇시간이 걸리던, 문제가 있던, 작업을 수행합니다.
+작업을 시키면 몇 시간이 걸리든 문제가 생기든 수행합니다.
 
-메모리, 스킬, 자기개선, 예약 작업, 할 일 목록, 웹 브라우징, GUI 앱 사용 등의 기능이 기본적으로 작동하며 추가 설정이 필요하지 않습니다.
+메모리, 스킬, 자기개선, 예약 작업, 할 일 목록, 웹 브라우징, GUI 앱 사용 등의 기능이 추가 설정 없이 작동합니다.
 
 ## 할 수 있는 것
 
-- **일상적인 채팅**: 브라우저에서 바로 답변을 받습니다. 텍스트와 이미지, 파일 등 거의 모든 형식을 지원합니다.
-- **추론 제공자 연결**: OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama(로컬 & Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth 또는 직접 구축한 API 엔드포인트와 연동합니다.
-- **Skills, MCP**: 에이전트에게 원하는 다양한 기능과 도구를 추가할 수 있습니다. 직접 설치시키지 않더라도 에이전트가 필요한것을 알아서 찾아 설치합니다.
-- **예약 작업**: 정기적으로 실행이 필요한 작업이 있다면 반복해서 실행되며 완료 후에는 보고하거나, 필요하지 않다면 건너뜁니다.
-- **할 일 목록**: 사용자와 에이전트 모두의 할 일 목록을 관리합니다. 사용자는 일반 Todo 앱처럼 사용하고, 에이전트는 자동으로 목록을 감시하며, 예약하고, 사용자의 할 일을 대신 처리하여 사용자의 일을 돕습니다.
-- **여러 에이전트**: 전문 역할별 에이전트를 만들고 협업시킬 수 있습니다.
-- **어디서든 실행**: Docker 컨테이너 또는 로컬 Node.js로 실행할 수 있습니다. 네이티브 지원은 macOS와 Linux이며, Windows는 Docker를 통해 작동 가능하지만 보장되지는 않습니다.
-- **자기 개선**: tabyBot는 스스로를 개선할 수 있습니다. 문제를 해결한 방법, 사용자의 지적 등을 학습하며 사용할수록 더 똑똑해집니다. 또한 원래 평소에 사용자가 항상 하던것이지만 까먹고 안한 경우 해당 사항을 학습해 알려주기도 합니다.
+- **일상적인 채팅.** 브라우저에서 바로 답변을 받습니다. 텍스트와 이미지, 파일 등 거의 모든 형식을 지원합니다.
+- **추론 제공자 연결.** OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama(로컬 & Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth 또는 직접 구축한 API 엔드포인트와 연동합니다.
+- **Skills, MCP.** 에이전트에게 원하는 기능과 도구를 추가할 수 있습니다. 직접 설치시키지 않아도 에이전트가 필요한 것을 찾아 설치합니다.
+- **예약 작업.** 정기적으로 실행해야 하는 작업을 반복해서 실행하고, 끝나면 보고하거나 필요하지 않으면 건너뜁니다.
+- **할 일 목록.** 사용자와 에이전트 모두의 할 일 목록을 관리합니다. 사용자는 일반 Todo 앱처럼 사용하고, 에이전트는 자동으로 목록을 감시하고 예약하며 사용자의 할 일을 대신 처리합니다.
+- **여러 에이전트.** 역할별 전문 에이전트를 만들어 협업시킬 수 있습니다.
+- **어디서든 실행.** Docker 컨테이너 또는 로컬 Node.js로 실행할 수 있습니다. 네이티브 지원은 macOS와 Linux이며, Windows는 Docker를 통해 작동 가능하지만 보장되지는 않습니다.
+- **자기 개선.** tabyBot는 문제를 해결한 방법과 사용자의 지적을 학습합니다. 사용자가 평소에 늘 하던 일을 잊고 하지 않으면, 그 습관을 학습해 두었다가 알려주기도 합니다.
 
 ## 차이점
 
-- tabyBot과 tabyAgent의 차이점: (1) tabyBot은 자체 웹 UI에서 작동하며 tabyAgent는 텔레그램에서 작동합니다. (2) 향상된 자기 개선, 드리밍 등 많은 기능들이 아직 tabyBot에만 있으며 추후 tabyAgent에도 적용될 예정입니다. (3) tabyBot은 특정 플랫폼에서 벗어났기 때문에 더 많은 기능을 빠르게 추가할수 있다는 장점도 있습니다.
+- tabyBot과 tabyAgent의 차이점: (1) tabyBot은 자체 웹 UI에서 작동하며 tabyAgent는 텔레그램에서 작동합니다. (2) 향상된 자기 개선, 드리밍 등 많은 기능이 아직 tabyBot에만 있으며 추후 tabyAgent에도 적용할 예정입니다. (3) tabyBot은 특정 플랫폼에 묶여 있지 않아 기능을 더 빠르게 추가할 수 있습니다.
 
 | 기능              | tabyBot             | Grok Bot            | OpenClaw     | Hermes       | ChatGPT (Chat) |
 | ----------------- | ------------------- | ------------------- | ------------ | ------------ | -------------- |
@@ -77,25 +77,25 @@ Grok Bot의 오픈소스 대안입니다. 이전 제 프로젝트인 [tabyAgent]
 
 #### 1. 설치 (Linux / macOS)
 
-터미널에 아래 한 줄을 붙여넣고 엔터를 누르세요. 설치에는 시간이 오래 소요될수 있으니 잠시 기다리세요.
+터미널에 아래 한 줄을 붙여넣고 엔터를 누르세요. 설치에 시간이 오래 걸릴 수 있으니 기다려 주세요.
 
 Docker 또는 로컬 실행 방식을 선택할 수 있으며, 보안 및 격리를 위해 Docker를 권장합니다.
 
-**요구사항:** Docker 실행을 선택한 경우 필요한 모든것을 자동으로 설치하며 신경쓸것이 없습니다. 로컬 실행을 선택한 경우 Node.js 22 이상이 설치되어있어야 합니다.
+**요구사항.** Docker 실행을 선택하면 필요한 것을 모두 자동으로 설치합니다. 로컬 실행을 선택하면 Node.js 22 이상이 설치되어 있어야 합니다.
 
-자동 스크립트는 Windows를 지원하지 않습니다. 또한 Windows를 사용중이라면 메인 OS를 Linux 기반 배포판으로 전환하는것을 고려해보세요 - 대부분의 경우, 더 빠르고 프라이버시 친화적이며 자유가 보장됩니다.
+자동 스크립트는 Windows를 지원하지 않습니다. Windows를 사용 중이라면 메인 OS를 Linux 기반 배포판으로 전환하는 것을 고려해 보세요. 대부분의 경우 더 빠르고 프라이버시 친화적이며 자유가 보장됩니다.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gpdir16/tabyBot/main/scripts/install.sh | bash
 ```
 
-나중에 tabyBot를 업데이트하려면 위 명령을 다시 실행하세요. 설정과 메모리는 유지된 상태로 업데이트됩니다.
+나중에 tabyBot를 업데이트하려면 위 명령을 다시 실행하세요. 설정과 메모리는 그대로 유지됩니다.
 
-기본적으로 웹 UI는 모든 네트워크 인터페이스에서 수신하므로 같은 네트워크의 다른 기기에서도 `http://<LAN-IP>:8999`로 접속할 수 있습니다. 이 기기에서만 쓰려면 `TABYBOT_BIND=127.0.0.1`로 다시 설치하세요. 네트워크에 열어둘 때는 첫 접속 화면에서 계정을 만들어 로그인을 요구하는 것을 권장합니다 — 계정을 만들기 전까지는 UI/API가 열려 있습니다.
+기본적으로 웹 UI는 모든 네트워크 인터페이스에서 수신하므로 같은 네트워크의 다른 기기에서도 `http://<LAN-IP>:8999`로 접속할 수 있습니다. 이 기기에서만 쓰려면 `TABYBOT_BIND=127.0.0.1`로 다시 설치하세요. 네트워크에 열어둘 때는 첫 접속 화면에서 계정을 만들어 로그인을 요구하는 것을 권장합니다. 계정을 만들기 전까지는 UI와 API가 열려 있습니다.
 
 #### 2. 웹 UI에서 설정
 
-1. 브라우저에서 `http://localhost:8999`를 여세요 — 첫 접속에 계정(사용자 이름 + 비밀번호) 생성을 안내합니다(건너뛰기 가능).
+1. 브라우저에서 `http://localhost:8999`를 여세요. 첫 접속에 사용자 이름과 비밀번호로 계정을 만들라고 안내하며, 건너뛸 수 있습니다.
 2. 설정 마법사가 언어, LLM 제공자, API 키, 모델을 안내합니다.
 3. 설정이 끝나면 바로 대화를 시작할 수 있습니다.
 
@@ -114,11 +114,11 @@ docker compose up -d
 
 | 프로젝트                  | 버전    | 라이선스             | 출처                                                             |
 | ------------------------- | ------- | -------------------- | ---------------------------------------------------------------- |
-| tabyAgent                 | —       | AGPL-3.0             | [저장소](https://github.com/gpdir16/tabyAgent)                   |
+| tabyAgent                 | 없음    | AGPL-3.0             | [저장소](https://github.com/gpdir16/tabyAgent)                   |
 | marked                    | 12.0.2  | MIT                  | [저장소](https://github.com/markedjs/marked)                     |
 | DOMPurify                 | 3.1.6   | Apache-2.0 / MPL-2.0 | [저장소](https://github.com/cure53/DOMPurify)                    |
 | Highlight.js              | 11.9.0  | BSD-3-Clause         | [저장소](https://github.com/highlightjs/highlight.js)            |
-| xterm.js                  | —       | MIT                  | [저장소](https://github.com/xtermjs/xterm.js)                    |
+| xterm.js                  | 없음    | MIT                  | [저장소](https://github.com/xtermjs/xterm.js)                    |
 | @modelcontextprotocol/sdk | 1.30.0  | MIT                  | [저장소](https://github.com/modelcontextprotocol/typescript-sdk) |
 | js-tiktoken               | 1.0.21  | MIT                  | [저장소](https://github.com/dqbd/tiktoken)                       |
 | node-cron                 | 3.0.3   | ISC                  | [저장소](https://github.com/node-cron/node-cron)                 |
@@ -126,8 +126,8 @@ docker compose up -d
 | web-push                  | 3.6.7   | MPL-2.0              | [저장소](https://github.com/web-push-libs/web-push)              |
 | prettier                  | 3.8.3   | MIT                  | [저장소](https://github.com/prettier/prettier)                   |
 | camofox-browser           | 2.4.7   | MIT                  | [저장소](https://github.com/redf0x1/camofox-browser)             |
-| Camoufox                  | —       | MPL-2.0              | [저장소](https://github.com/daijro/camoufox)                     |
-| Playwright                | —       | Apache-2.0           | [저장소](https://github.com/microsoft/playwright)                |
+| Camoufox                  | 없음    | MPL-2.0              | [저장소](https://github.com/daijro/camoufox)                     |
+| Playwright                | 없음    | Apache-2.0           | [저장소](https://github.com/microsoft/playwright)                |
 
 <details>
 <summary>전이 의존성</summary>

@@ -6,7 +6,7 @@ import { askUser, cancelPendingAsk } from "../agent/user-ask.js";
 const USER_ASK_DESCRIPTION = [
     "Ask the user a question and wait for their answer (inline buttons + free text).",
     "Use when you need a decision or input only the user can give: which option to pick, a preference, missing materials, or anything ambiguous that blocks progress.",
-    "Also works during scheduled todo runs — while you wait, the todo shows a 'needs answer' badge so the user can see you are blocked.",
+    "Also works during scheduled todo runs. While you wait, the todo shows a 'needs answer' badge so the user can see you are blocked.",
     "Pass a clear question and short options (e.g. ['승인', '취소']). The user can also type a custom answer. The wait times out (max 600s), so ask only what truly blocks you.",
 ].join(" ");
 
@@ -35,7 +35,7 @@ export const userAskToolDefinitions = [
 
 export async function executeUserAskTool(_name, args, ctx) {
     if (!ctx?.sessionKey) {
-        return { error: "No active session — user_ask only works during a user message turn" };
+        return { error: "No active session. user_ask only works during a user message turn" };
     }
 
     const question = String(args?.question ?? "").trim();

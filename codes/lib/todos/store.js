@@ -504,7 +504,7 @@ export function updateTodo(id, patch = {}, opts = {}) {
             editedFields.push("schedule");
         }
     }
-    // 봇 소유 항목은 반드시 트리거(스케줄)가 있어야 한다 — 해제 불가.
+    // 봇 소유 항목은 반드시 트리거(스케줄)가 있어야 한다. 해제 불가.
     if ((item.list || "user") !== "user" && (!item.kind || item.kind === "none")) return { error: "schedule_required" };
     if (item.status === "done" && item.nextRunAt != null) {
         item.nextRunAt = null;
@@ -1038,7 +1038,7 @@ export function formatTodosForPrompt(agentId) {
     });
     const pending = suggestions.map((row) => {
         const who = row.agentName || row.agentId || "agent";
-        return `- [${row.kind}] ${row.title || row.targetId} — ${who}${row.reason ? `: ${row.reason}` : ""}`;
+        return `- [${row.kind}] ${row.title || row.targetId}, ${who}${row.reason ? `: ${row.reason}` : ""}`;
     });
     const jobLines = jobs.map((row) => {
         const when = row.when ? ` · ${row.when}` : "";

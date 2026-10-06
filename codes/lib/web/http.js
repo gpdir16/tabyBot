@@ -23,7 +23,7 @@ const MIME = {
     ".md": "text/markdown; charset=utf-8",
 };
 
-// 텍스트 계열만 압축한다 — 이미지/폰트는 이미 압축돼 있어 CPU만 쓴다.
+// 텍스트 계열만 압축한다. 이미지/폰트는 이미 압축돼 있어 CPU만 쓴다.
 const COMPRESSIBLE = /^(text\/|application\/(json|javascript|manifest\+json)|image\/svg\+xml)/;
 const MIN_COMPRESS_BYTES = 1024;
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
@@ -76,7 +76,7 @@ export function createRouter({ publicDir, auth = {} }) {
         routes.push({ method, regex, keys, handler });
     }
 
-    // 세션 토큰 추출: Authorization Bearer → x-tabybot-token 헤더 → ?token= 쿼리.
+    // 세션 토큰은 Authorization Bearer, x-tabybot-token 헤더, ?token= 쿼리 순으로 찾는다.
     function presentedToken(url, req) {
         const header = req.headers.authorization || "";
         if (header.startsWith("Bearer ")) return header.slice(7).trim();
@@ -91,7 +91,7 @@ export function createRouter({ publicDir, auth = {} }) {
             return true;
         }
         if (!authEnabled()) return true;
-        // 인증 모드에서도 정적 셸(HTML/JS/CSS)은 공개한다 — 로그인 화면 자체가
+        // 인증 모드에서도 정적 셸(HTML/JS/CSS)은 공개한다. 로그인 화면 자체가
         // 이 파일들로 로드된다. 데이터와 액션은 전부 /api/ 아래라 계속 보호된다.
         if ((req.method === "GET" || req.method === "HEAD") && !url.pathname.startsWith("/api/")) {
             return true;
@@ -101,7 +101,7 @@ export function createRouter({ publicDir, auth = {} }) {
         return presented ? verifyToken(presented) : false;
     }
 
-    // req를 주면 큰 응답(대화 기록 등)을 압축해 보낸다 — 느린 회선에서 체감이 크다.
+    // req를 주면 큰 응답(대화 기록 등)을 압축해 보낸다. 느린 회선에서 체감이 크다.
     function sendJson(res, status, body, req = null) {
         let payload = Buffer.from(JSON.stringify(body), "utf8");
         const headers = {
@@ -157,7 +157,7 @@ export function createRouter({ publicDir, auth = {} }) {
         const entry = {
             mtimeMs: stat.mtimeMs,
             size: stat.size,
-            // 내용 해시 — 같은 내용이면 재배포(이미지 재빌드로 mtime만 바뀜) 후에도 캐시가 유지된다.
+            // 내용 해시: 같은 내용이면 재배포(이미지 재빌드로 mtime만 바뀜) 후에도 캐시가 유지된다.
             version: crypto.createHash("sha1").update(body).digest("hex").slice(0, 12),
             body,
             encoded: new Map(),
@@ -269,7 +269,7 @@ export function createRouter({ publicDir, auth = {} }) {
         }
         const ext = path.extname(filePath).toLowerCase();
         const entry = loadStatic(filePath, stat);
-        // 요청한 버전이 지금 파일과 같을 때만 영구 캐시를 허용한다 — 배포 도중의
+        // 요청한 버전이 지금 파일과 같을 때만 영구 캐시를 허용한다. 배포 도중의
         // 옛 버전 URL이 새 내용을 영구 캐시에 박아 넣는 일을 막는다.
         const versioned = url.searchParams.get("v") === entry.version;
         sendBuffer(req, res, {

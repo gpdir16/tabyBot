@@ -330,7 +330,7 @@
   스크립트 로딩: 전역 네임스페이스(Taby)를 공유하는 클래식 스크립트 체인.
   Chrome은 file://에서 ES module 로드를 CORS로 차단하므로, file:// 직접 실행을
   보장하기 위해 IIFE + 네임스페이스 패턴을 사용한다(빌드 도구 없음 유지).
-  의존성 순서: 유틸/i18n → 상태 → API → 마크다운 → SSE → UI → 부트.
+  의존성 순서는 유틸/i18n, 상태, API, 마크다운, SSE, UI, 부트다.
 -->
         <script src="assets/js/i18n.js"></script>
         <script src="assets/js/state.js"></script>

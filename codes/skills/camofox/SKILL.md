@@ -16,7 +16,7 @@ camofox open https://example.com --format json
 camofox snapshot --format json
 ```
 
-**Do not pass `--user`.** `terminal_run` already exports `CAMOFOX_CLI_USER` pointing at this bot's own profile, so plain `camofox` commands share the exact browser profile and logins that the user sees in the web computer view. Passing a different `--user` creates a separate profile with separate cookies — only do it when you deliberately need an isolated identity.
+**Do not pass `--user`.** `terminal_run` already exports `CAMOFOX_CLI_USER` pointing at this bot's own profile, so plain `camofox` commands share the exact browser profile and logins that the user sees in the web computer view. Passing a different `--user` creates a separate profile with separate cookies. Only do it when you deliberately need an isolated identity.
 
 CamoFox starts its local server automatically when a command needs it. Use `xvfb_gui` only for non-browser Linux GUI programs; it is not the web browsing path.
 
@@ -331,7 +331,7 @@ Isolation reminder:
 - `tabId` lookup is user-scoped.
 - Using wrong `userId` with valid `tabId` returns not found behavior.
 
-## 8) Search Macros (CLI vs API — distinct systems)
+## 8) Search Macros (CLI vs API: distinct systems)
 
 Important distinction:
 
@@ -451,26 +451,26 @@ screenshot --output login-result.png
 
 ## 12) Deep-Dive Documentation
 
-- `references/cli-commands.md` — Full CLI command catalog and usage patterns.
-- `references/api-endpoints.md` — Complete REST API route map and request/response notes.
-- `references/anti-detection.md` — Camoufox anti-detection model, fingerprint continuity, and stealth guidance.
-- `references/authentication.md` — Auth Vault encryption model and credential workflows.
-- `references/session-management.md` — `userId` isolation, context lifecycle, and session continuity.
-- `references/search-macros.md` — CLI search engines vs API macro navigation behavior.
-- `references/proxy-presets.md` — Geo presets, proxy settings, and region-alignment practices.
-- `references/scripting.md` — `camofox run` script format, constraints, and execution behavior.
-- `references/snapshot-refs.md` — Snapshot reference handling (`eN`), refresh rules, and element targeting reliability.
-- `references/media-extraction.md` — Screenshot/download/resource extraction and media workflows.
-- `references/display-vnc.md` — Headed/virtual display modes and VNC operation guidance.
+- `references/cli-commands.md`: Full CLI command catalog and usage patterns.
+- `references/api-endpoints.md`: Complete REST API route map and request/response notes.
+- `references/anti-detection.md`: Camoufox anti-detection model, fingerprint continuity, and stealth guidance.
+- `references/authentication.md`: Auth Vault encryption model and credential workflows.
+- `references/session-management.md`: `userId` isolation, context lifecycle, and session continuity.
+- `references/search-macros.md`: CLI search engines vs API macro navigation behavior.
+- `references/proxy-presets.md`: Geo presets, proxy settings, and region-alignment practices.
+- `references/scripting.md`: `camofox run` script format, constraints, and execution behavior.
+- `references/snapshot-refs.md`: Snapshot reference handling (`eN`), refresh rules, and element targeting reliability.
+- `references/media-extraction.md`: Screenshot/download/resource extraction and media workflows.
+- `references/display-vnc.md`: Headed/virtual display modes and VNC operation guidance.
 
 ## 13) Ready-to-Use Templates
 
-- `templates/stealth-scraping.sh` — Stealth scraping workflow with anti-detection defaults.
-- `templates/search-and-extract.sh` — Search across engines and extract structured results.
-- `templates/authenticated-session.sh` — Auth Vault login and authenticated session flow.
-- `templates/form-automation.sh` — Form automation using snapshot-interact-verify loops.
-- `templates/multi-session-pipeline.sh` — Parallel multi-session collection pipeline.
-- `templates/screenshot-capture.sh` — Screenshot capture workflow for audits and evidence.
+- `templates/stealth-scraping.sh`: Stealth scraping workflow with anti-detection defaults.
+- `templates/search-and-extract.sh`: Search across engines and extract structured results.
+- `templates/authenticated-session.sh`: Auth Vault login and authenticated session flow.
+- `templates/form-automation.sh`: Form automation using snapshot-interact-verify loops.
+- `templates/multi-session-pipeline.sh`: Parallel multi-session collection pipeline.
+- `templates/screenshot-capture.sh`: Screenshot capture workflow for audits and evidence.
 
 ## 14) Important Notes
 
@@ -485,7 +485,7 @@ High-confidence troubleshooting checklist:
 4. Re-run failing action with same `--user`
 5. If display mode changed, create new tab (old tab ids invalid)
 
-### Appendix A — 50-command quick index
+### Appendix A: 50-command quick index
 
 Core (5):
 
@@ -573,7 +573,7 @@ Pipeline (1):
 
 - `run`
 
-### Appendix B — API endpoint families
+### Appendix B: API endpoint families
 
 Core REST routes (`core.ts`):
 
@@ -586,7 +586,7 @@ Core REST routes (`core.ts`):
 - Download tracking: list/get/content/delete
 - Display mode: toggle-display
 
-### Appendix C — response handling recommendations
+### Appendix C: response handling recommendations
 
 CLI output handling:
 
@@ -600,13 +600,13 @@ API response handling:
 - Retry only idempotent reads (`GET`) by default.
 - For `evaluate-extended`, handle `429` and `408` explicitly.
 
-### Appendix D — mismatch and compatibility guardrails
+### Appendix D: mismatch and compatibility guardrails
 
 Documented guardrails for this repository revision:
 
 - CLI `download` remains placeholder/stub and should be treated as non-functional direct download command.
 
-### Appendix E — minimum safe automation contract
+### Appendix E: minimum safe automation contract
 
 If you need robust automations, enforce this contract in your agent logic:
 

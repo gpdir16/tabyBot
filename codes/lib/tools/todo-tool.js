@@ -33,7 +33,7 @@ export const todoToolDefinitions = [
         function: {
             name: "todo_add",
             description:
-                "Add an automation to YOUR list — a scheduled job you run yourself, no user approval needed. Requires exactly one trigger: cron / every / at. Results post to conversationId (default: this thread). The user sees it under Agents → Automations and can pause/edit/delete it. For the user's own task list, use todo_suggest instead.",
+                "Add an automation to YOUR list. It is a scheduled job you run yourself, and it needs no user approval. Requires exactly one trigger: cron / every / at. Results post to conversationId (default: this thread). The user sees it in the Automations section of the Agents list and can pause/edit/delete it. For the user's own task list, use todo_suggest instead.",
             parameters: {
                 type: "object",
                 properties: {
@@ -60,7 +60,7 @@ export const todoToolDefinitions = [
         function: {
             name: "todo_update",
             description:
-                "Update one of YOUR automations in place (title, prompt, schedule, timezone, enabled to pause/resume, conversationId, fireImmediately). Only your own list — user todos need todo_suggest.",
+                "Update one of YOUR automations in place (title, prompt, schedule, timezone, enabled to pause/resume, conversationId, fireImmediately). This works only on your own list. User todos need todo_suggest.",
             parameters: {
                 type: "object",
                 properties: {
@@ -142,7 +142,8 @@ export const todoToolDefinitions = [
         type: "function",
         function: {
             name: "todo_withdraw",
-            description: "Withdraw your handoff offer on a todo. Only removes your offer — it does not unassign a task the user already gave you.",
+            description:
+                "Withdraw your handoff offer on a todo. This only removes your offer. It does not unassign a task the user already gave you.",
             parameters: {
                 type: "object",
                 properties: { id: { type: "string" } },

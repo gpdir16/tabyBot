@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트 — 토스트.
+/* tabyBot 웹 클라이언트: 토스트.
    방금 한 동작의 결과를 잠깐 알려 주는 작은 알약 모양 표시("복사됨", "저장 실패" 등).
    화면 아래 가운데에 글자만 한 줄로 떴다가 스스로 사라지고, 한 번에 하나만 보인다
    (새 것이 오면 이전 것은 바로 물러난다). 눌러서 바로 닫을 수도 있다.
@@ -24,7 +24,7 @@
         setTimeout(() => el.remove(), OUT_MS);
     }
 
-    // level: "info" | "warn" | "error" — warn/error는 실패 색으로 보인다.
+    // level: "info" | "warn" | "error". warn/error는 실패 색으로 보인다.
     function show(level, text) {
         const message = String(text == null ? "" : text).trim();
         if (!root || !message) return;

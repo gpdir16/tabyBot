@@ -78,7 +78,7 @@ self.addEventListener("fetch", (event) => {
     if (url.origin !== self.location.origin) return;
     if (url.pathname.startsWith("/api/")) return;
 
-    // 앱 라우트로의 이동만 셸로 답한다 — 파일을 직접 연 경우(확장자 있음)는 아래 일반 경로로 간다.
+    // 앱 라우트로의 이동만 셸로 답한다. 파일을 직접 연 경우(확장자 있음)는 아래 일반 경로로 간다.
     if (req.mode === "navigate" && !/\.[a-z0-9]+$/i.test(url.pathname)) {
         event.respondWith(serveShell(event));
         return;

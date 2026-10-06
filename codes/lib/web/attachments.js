@@ -42,7 +42,7 @@ export function resolveAttachedFile(file) {
     return null;
 }
 
-// ATTACHED_FILES 목록은 매 프롬프트마다 들어간다 — 히스토리가 길어져도
+// ATTACHED_FILES 목록은 매 프롬프트마다 들어간다. 히스토리가 길어져도
 // 무한정 커지지 않게 최신 첨부 위주로 상한을 둔다.
 const MAX_HISTORY_FILES = 16;
 

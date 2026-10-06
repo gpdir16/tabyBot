@@ -171,7 +171,7 @@ async function getAuth() {
 }
 
 /**
- * Codex Responses API client — same interface as chatCompletions().
+ * Codex Responses API client. Same interface as chatCompletions().
  */
 export async function codexComplete({
     model,

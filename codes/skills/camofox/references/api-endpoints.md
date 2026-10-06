@@ -15,8 +15,8 @@ Source of truth for the route catalog below: the live handlers in `src/routes/co
 
 The API is documented using OpenAPI 3.1.0 with interactive documentation:
 
-- **Interactive API Docs**: `GET /api/docs` — Swagger UI for exploring and testing API endpoints
-- **OpenAPI Spec**: `GET /openapi.json` — Machine-readable OpenAPI 3.1.0 specification
+- **Interactive API Docs**: `GET /api/docs`. Swagger UI for exploring and testing API endpoints
+- **OpenAPI Spec**: `GET /openapi.json`. Machine-readable OpenAPI 3.1.0 specification
 
 The OpenAPI spec provides:
 
@@ -37,7 +37,7 @@ The docs routes live in `src/routes/docs.ts` and sit outside the core route cata
 
 ---
 
-## 1) Core Routes (`core.ts`) — 47
+## 1) Core Routes (`core.ts`): 47
 
 Base URL: `http://localhost:9377`
 
@@ -466,7 +466,7 @@ Important mismatch note:
 
 ## 5) End-to-End API Flows
 
-### Flow A: Open → Snapshot → Click
+### Flow A: open, snapshot, click
 
 ```bash
 # create tab

@@ -87,7 +87,7 @@ export function loadSession() {
             return null;
         }
         const alive = (sess.apps || []).filter((app) => isPidAlive(app.pid));
-        // 앱이 죽어 목록이 바뀐 경우에만 다시 쓴다 — 입력/캡처 경로에서 매번 쓰면 낭비.
+        // 앱이 죽어 목록이 바뀐 경우에만 다시 쓴다. 입력/캡처 경로에서 매번 쓰면 낭비.
         if (alive.length !== (sess.apps || []).length) {
             sess.apps = alive;
             saveSession(sess);
@@ -137,7 +137,7 @@ export function geometryDims(geometry) {
     return m ? { w: parseInt(m[1], 10), h: parseInt(m[2], 10) } : { w: 1280, h: 800 };
 }
 
-// Xvfb는 셸+nohup 대신 직접 spawn한다 — 직계 자식이면 죽을 때 libuv가 회수해
+// Xvfb는 셸+nohup 대신 직접 spawn한다. 직계 자식이면 죽을 때 libuv가 회수해
 // 좀비가 남지 않고, pid 추적도 정확하다. 로그는 /tmp/tabybot-xvfb/xvfb.log로.
 async function startXvfb(display, geometry) {
     cleanupStaleDisplay(display);
@@ -271,7 +271,7 @@ export async function screenshotJpegBuf(sess, quality = 75) {
     return { ok: true, jpeg: r.buf };
 }
 
-// 셸을 거치지 않고 직접 실행 — 입력 이벤트는 초당 수십 건이라 spawn 비용을 줄인다.
+// 셸을 거치지 않고 직접 실행: 입력 이벤트는 초당 수십 건이라 spawn 비용을 줄인다.
 export function xdotoolArgs(display, args) {
     return new Promise((resolve) => {
         execFile("xdotool", args, { env: { ...process.env, DISPLAY: `:${display}` }, timeout: 15_000 }, (err, _stdout, stderr) => {
@@ -379,7 +379,7 @@ export async function doAction(sess, args) {
         case "kill_app": {
             const pid = boundedInt(args.pid, null, { min: 1, max: 9999999 });
             if (!pid) return { error: "numeric pid required for kill_app" };
-            // 이 세션에서 launch로 띄운 앱만 죽일 수 있다 — 임의 PID(예: 1)는 거부.
+            // 이 세션에서 launch로 띄운 앱만 죽일 수 있다. 임의 PID(예: 1)는 거부.
             if (!(sess.apps || []).some((a) => a.pid === pid)) {
                 return { error: `pid ${pid} is not an app launched in this session. Use a pid from a launch result.` };
             }
@@ -393,7 +393,7 @@ export async function doAction(sess, args) {
     }
 }
 
-// 웹 포인터/키보드 입력 → xdotool. doAction과 달리 자동 스크린샷은 하지 않는다.
+// 웹 포인터/키보드 입력을 xdotool로 보낸다. doAction과 달리 자동 스크린샷은 하지 않는다.
 // 셸을 거치지 않는 execFile 경로라 따옴표 이스케이프 걱정 없이 인자를 넘긴다.
 export async function sendInput(sess, input) {
     const { display } = sess;

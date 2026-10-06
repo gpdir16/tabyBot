@@ -118,7 +118,7 @@ function startBackgroundJob(command, cwd, env) {
         job.stderr = appendTruncated(job.stderr, d.toString());
     });
 
-    // close가 아니라 exit으로 상태를 본다 — 손자 프로세스가 파이프를 잡고 있어도
+    // close가 아니라 exit으로 상태를 본다. 손자 프로세스가 파이프를 잡고 있어도
     // 셸이 죽으면 잡 상태가 완료로 바뀐다(출력 수집은 파이프가 열린 동안 계속).
     child.on("exit", (code) => {
         if (job.status === "killed") return; // bg_kill이 이미 상태를 확정함

@@ -1,5 +1,5 @@
-/* tabyBot 웹 클라이언트 — 마크다운 파이프라인.
-   marked(파싱) → DOMPurify(살균) → hljs(코드 하이라이트).
+/* tabyBot 웹 클라이언트: 마크다운 파이프라인.
+   marked로 파싱하고, DOMPurify로 살균한 뒤, hljs로 코드를 하이라이트한다.
    코드블록은 DOM 후처리로 언어 라벨 + 복사 버튼 헤더 바를 감싼다.
    턴이 끝나면 전체 렌더에서 하이라이트를 적용한다. */
 (function (T) {
@@ -25,7 +25,7 @@
         ready = true;
     }
 
-    // 마크다운 문자열 → 살균된 DOM 컨테이너(div.md)
+    // 마크다운 문자열을 살균된 DOM 컨테이너(div.md)로 바꾼다.
     function render(text, opt) {
         const o = opt || {};
         const box = T.h("div", { class: "md" + (o.extraClass ? " " + o.extraClass : "") });

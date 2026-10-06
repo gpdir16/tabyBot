@@ -200,5 +200,5 @@ export async function checkForUpdate() {
     if (!ready) return null;
     const current = running || lastNotified;
     if (current && compareSemver(ready.tag_name, current) <= 0) return null;
-    return buildUpdatePayload(ready, installScriptUrl, running || lastNotified || "—");
+    return buildUpdatePayload(ready, installScriptUrl, running || lastNotified || "unknown");
 }

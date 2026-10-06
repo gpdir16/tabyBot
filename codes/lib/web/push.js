@@ -106,7 +106,7 @@ function payloadFor(event) {
         };
     }
     if (event.type === "say") {
-        // 작업 중 명시 발화(user_say) — 최종 답변과 같은 태그로 묶어 알림을 합친다.
+        // 작업 중 명시 발화(user_say): 최종 답변과 같은 태그로 묶어 알림을 합친다.
         const body = String(event.text || "").trim();
         if (!body || !event.conversationId) return null;
         return { title: eventTitle(event), body: body.slice(0, 180), tag: `turn-${event.conversationId}`, url: convUrl(event.conversationId) };
@@ -126,7 +126,7 @@ function payloadFor(event) {
         const body = [event.title || event.text || ""]
             .map((s) => String(s).trim())
             .filter(Boolean)
-            .join(" — ")
+            .join(", ")
             .slice(0, 180);
         return {
             title: eventTitle(event) || "tabyBot",

@@ -26,7 +26,7 @@ export function getDreamingConfig() {
         cron: strOr(user.cron, strOr(agent.cron, "0 4 * * *")),
         idleMin: numOr(user.idleMin, numOr(agent.idleMin, 30)),
         maxOpsPerRun: numOr(user.maxOpsPerRun, numOr(agent.maxOpsPerRun, 5)),
-        // 섹션별 오버라이드 → 사용자 전역 timezone(브라우저가 보고) → 시스템 기본값
+        // 우선순위: 섹션별 오버라이드, 사용자 전역 timezone(브라우저가 보고), 시스템 기본값
         timezone: strOr(user.timezone, strOr(agent.timezone, strOr(userCfg.timezone, ""))),
     };
 }

@@ -94,7 +94,7 @@ function agentIdentityText(agentId) {
 
 function agentMemoryText(agentId, opts) {
     const id = agentId || firstAgent()?.id;
-    if (!id) return "- (none — use shared memory.md)";
+    if (!id) return "- (none. Use shared memory.md)";
     return loadScopedMemory(readAgentMemoryFile(id), opts).trim() || "(empty)";
 }
 
@@ -149,7 +149,7 @@ function toLlmMessage(message) {
     delete cloned.imageUrl;
     if (cloned.role === "user") {
         const text = typeof cloned.content === "string" ? cloned.content : "";
-        // 히스토리 메시지의 첨부 이미지를 매 턴 base64로 다시 싣지 않는다 —
+        // 히스토리 메시지의 첨부 이미지를 매 턴 base64로 다시 싣지 않는다.
         // 경로는 ATTACHED_FILES 목록에 남는다. 인라인 이미지는 현재 사용자
         // 메시지에서만 붙인다.
         cloned.content = hydrateUserContent(text, cloned.attachments, { visionEnabled: false });
@@ -193,7 +193,7 @@ export function getContextWindow(modelMeta) {
 
 export function getCompressTriggerTokens(modelMeta) {
     const agent = loadAgentConfig();
-    // 사용자 설정(설정 → 모델 → 고급)이 우선, 없으면 agent.json 기본값을 쓴다.
+    // 사용자 설정(설정의 모델 탭 고급 항목)이 우선, 없으면 agent.json 기본값을 쓴다.
     const pct = normalizeContextTriggerPercent(loadUserConfig().contextTriggerPercent, agent.contextCompressTriggerPercent ?? 75);
     return Math.floor((getContextWindow(modelMeta) * pct) / 100);
 }
