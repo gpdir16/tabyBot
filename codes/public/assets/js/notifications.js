@@ -155,9 +155,13 @@
             if (enabled()) void ensurePush();
         });
         navigator.serviceWorker?.addEventListener?.("message", (ev) => {
-            // 캐시된 셸로 먼저 떴는데 서버에 새 버전이 있다 — 눌러서 바로 적용할 수 있게 알린다.
+            // 캐시된 셸로 먼저 떴는데 서버에 새 버전이 있다 — 바로 적용할지 경고창으로 묻는다.
             if (ev.data?.type === "shell-updated") {
-                T.toast.show("info", T.i18n.t("appUpdated"), () => location.reload());
+                T.notices.alert({
+                    key: "app-updated",
+                    text: T.i18n.t("appUpdated"),
+                    actions: [{ label: T.i18n.t("appReload"), run: () => location.reload() }],
+                });
                 return;
             }
             const url = ev.data?.type === "sw-navigate" ? String(ev.data.url || "") : "";

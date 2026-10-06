@@ -71,6 +71,7 @@ import { queueTodoNow } from "../todos/scheduler.js";
 import * as conversationsStore from "./conversations.js";
 import { getFile, saveUploadStream, publicAttachment, storedAttachment, MAX_UPLOAD_BYTES, UploadTooLargeError, EmptyUploadError } from "./files.js";
 import { subscribe, emit, eventsSince, currentSeq } from "./bus.js";
+import { listNotices, markNoticesRead, clearNotices } from "./notices.js";
 import { getVapidPublicKey, saveSubscription, removeSubscription } from "./push.js";
 import * as accountAuth from "./auth.js";
 import { createRouter } from "./http.js";
@@ -401,6 +402,23 @@ export function startWebServer() {
     });
     router.add("GET", "/api/events/poll", (ctx) => {
         ctx.json200(eventsSince(ctx.query.since, ctx.query.recentMs));
+    });
+
+    // ---- 시스템 알림 기록 ----
+    router.add("GET", "/api/notices", (ctx) => {
+        ctx.json200(listNotices());
+    });
+
+    // body.ids가 없으면 전부 읽음 처리. 다른 기기에 떠 있는 알림 모달도 닫히게 변경을 알린다.
+    router.add("POST", "/api/notices/read", async (ctx) => {
+        const body = await ctx.json().catch(() => ({}));
+        if (markNoticesRead(Array.isArray(body?.ids) ? body.ids : null)) emit({ type: "notices_changed" });
+        ctx.json200(listNotices());
+    });
+
+    router.add("DELETE", "/api/notices", (ctx) => {
+        if (clearNotices()) emit({ type: "notices_changed" });
+        ctx.json200(listNotices());
     });
 
     // ---- 대화 ----

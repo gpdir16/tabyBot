@@ -43,11 +43,13 @@
     let armFolderDelete = null; // 폴더 id — 삭제 확인 2단계
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "folders", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
+    const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
     function routeFromPath() {
-        const m = /^\/s\/(general|folders|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(location.pathname || "");
+        const m = /^\/s\/(general|folders|notices|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(
+            location.pathname || "",
+        );
         if (!m) return null;
         const tab = m[1];
         let agentId = null;
@@ -98,6 +100,7 @@
         mcpEditing = null;
         // open({tab:"folders", folderId}) — 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
         // open({tab:"folders", folderNew, folderAgent}) — "폴더에 추가… → 새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
+        armNoticesClear = false;
         folderEditing = null;
         if (tab === "folders" && o.folderNew) folderEditing = { mode: "new", agentId: o.folderAgent || null };
         else if (tab === "folders" && o.folderId) folderEditing = { mode: "edit", id: o.folderId };
@@ -255,6 +258,7 @@
         const nav = T.h("nav", { class: "sp-nav", role: "tablist", "aria-label": t("settings") }, [
             tabBtn("general", t("general")),
             tabBtn("folders", t("folders")),
+            tabBtn("notices", t("notices")),
             tabBtn("provider", t("provider")),
             tabBtn("model", t("model")),
             tabBtn("account", t("account")),
@@ -278,6 +282,7 @@
         const body = T.h("div", { class: "sp-body" });
         if (openTab === "general") buildGeneral(body);
         else if (openTab === "folders") buildFolders(body);
+        else if (openTab === "notices") buildNotices(body);
         else if (openTab === "provider") buildProvider(body);
         else if (openTab === "model") buildModel(body);
         else if (openTab === "account") buildAccount(body);
@@ -2275,6 +2280,43 @@
         body.append(sec);
     }
 
+    /* ── 알림 탭 ────────────────────────────────────────────
+       서버가 보낸 시스템 알림의 기록. 새 알림은 모달로 뜨고(ui/notices.js), 여기서 지난 것을 다시 본다. */
+    let armNoticesClear = false;
+    function buildNotices(body) {
+        const sec = T.h("div", { class: "set-section" });
+        sec.append(T.h("div", { class: "set-desc", text: t("noticesDesc") }));
+        const list = T.notices.items();
+        if (!T.notices.loaded()) {
+            T.notices.refresh();
+            sec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+        } else if (!list.length) {
+            sec.append(T.h("div", { class: "set-desc", text: t("noticesEmpty") }));
+        } else {
+            sec.append(T.h("div", { class: "nt-list nt-history" }, list.map(T.notices.buildRow)));
+            const clearBtn = T.h("button", {
+                class: "btn ghost" + (armNoticesClear ? " danger" : ""),
+                text: armNoticesClear ? t("deleteConfirm") : t("noticesClear"),
+                onclick() {
+                    if (!armNoticesClear) {
+                        armNoticesClear = true;
+                        clearBtn.classList.add("danger");
+                        clearBtn.textContent = t("deleteConfirm");
+                        return;
+                    }
+                    armNoticesClear = false;
+                    clearBtn.disabled = true;
+                    T.notices.clearAll().catch((err) => {
+                        clearBtn.disabled = false;
+                        T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+                    });
+                },
+            });
+            sec.append(T.h("div", { class: "ext-add" }, [clearBtn]));
+        }
+        body.append(sec);
+    }
+
     function buildAgents(body) {
         if (editingAgent === "__new__") {
             body.append(agentEditor(null));
@@ -2556,6 +2598,9 @@
         state.on("settings", rebuildIfIdle);
         state.on("bots", rebuildIfIdle);
         state.on("folders", rebuildIfIdle);
+        state.on("notices", () => {
+            if (openTab === "notices") rebuildIfIdle();
+        });
         state.on("pwa", rebuildIfIdle);
         // OAuth 결과는 시트가 닫혀 있어도 반영한다(설정 갱신 + 토스트).
         state.on("oauth_done", (p) => {
@@ -2567,7 +2612,8 @@
                     if (s) state.setSettings(s);
                 })
                 .catch(() => {});
-            T.toast.show(p.ok ? "info" : "error", p.ok ? t("oauthSuccess") : t("errorPrefix") + ": " + (p.detail || t("oauthFailed")));
+            // 다른 창에서 로그인을 마치고 돌아온 결과 — 그사이 화면을 보고 있지 않았을 수 있어 경고창으로 알린다.
+            T.notices.alert({ text: p.ok ? t("oauthSuccess") : t("errorPrefix") + ": " + (p.detail || t("oauthFailed")) });
             modelsReq++;
             modelsLoading = false;
             modelsCache = null;

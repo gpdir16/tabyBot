@@ -60,7 +60,12 @@
         } else if (seq) {
             if (seq <= pollCursor && !replay) return;
         }
-        const gapSafe = msg.type === "todo_due" || msg.type === "todos_changed" || msg.type === "conversations_changed" || msg.type === "hello";
+        const gapSafe =
+            msg.type === "todo_due" ||
+            msg.type === "todos_changed" ||
+            msg.type === "conversations_changed" ||
+            msg.type === "notices_changed" ||
+            msg.type === "hello";
         if (replay && !gapSafe) return;
         if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt && !gapSafe) return;
         if (seq && msg.type !== "hello") {
@@ -88,6 +93,8 @@
                     .catch(() => {});
                 state.fetchTodos().catch(() => {});
                 T.chat.refreshCurrent?.();
+                // 끊긴 사이에 온 시스템 알림(재생되지 않는 이벤트)을 기록에서 되살린다.
+                T.notices?.refresh();
                 break;
             case "status":
                 state.applyStatus(msg.conversationId, msg.phase, msg.detail || "", msg.elapsedMs != null ? msg.elapsedMs : null);
@@ -117,7 +124,11 @@
                 );
                 if (msg.error && msg.error !== "stopped_by_user" && !msg.automated) {
                     const detail = typeof msg.error === "string" ? msg.error : (msg.error && (msg.error.detail || msg.error.code)) || "";
-                    T.toast.show("error", T.i18n.t("errorPrefix") + (detail ? ": " + detail : ""));
+                    // 에이전트가 답하지 못했다 — 지나가는 표시로는 놓치기 쉬워 경고창으로 알린다.
+                    T.notices.alert({
+                        title: state.botByUuid(msg.conversationId)?.name,
+                        text: T.i18n.t("errorPrefix") + (detail ? ": " + detail : ""),
+                    });
                 }
                 if (!msg.stopped && !msg.silent) {
                     const body = (msg.text || "").trim() || (msg.error && (msg.error.detail || msg.error.code)) || "";
@@ -140,28 +151,15 @@
             case "ask_resolved":
                 state.applyAskResolved(msg.conversationId, msg.askId, msg.answer);
                 break;
-            case "notice": {
-                // action이 실린 알림은 눌렀을 때 해당 동작을 실행한다(확인 용도).
-                const onTap =
-                    msg.action?.kind === "compress_sessions"
-                        ? () => {
-                              void T.api
-                                  .compressAllSessions(msg.action.chatIds)
-                                  .then((r) => {
-                                      const n = Number(r?.compressed) || 0;
-                                      const f = Number(r?.failed) || 0;
-                                      if (f) T.toast.show("warn", T.i18n.t("compressAllPartial", { n, f }));
-                                      else if (!n) T.toast.show("info", T.i18n.t("compressAllNone"));
-                                      else T.toast.show("info", T.i18n.t("compressAllDone", { n }));
-                                  })
-                                  .catch((err) => T.toast.show("error", T.api.errorText(err, T.i18n.t("compressAllFailed"))));
-                          }
-                        : undefined;
-                T.toast.show(msg.level === "warn" || msg.level === "error" ? msg.level : "info", msg.text || "", onTap);
-                // 대화 턴이 있는 알림(스케줄 등)은 turn_done이 담당한다.
+            case "notice":
+                // 화면 표시는 알림 모달이 맡는다(서버 기록을 다시 받아 읽지 않은 것을 띄운다).
+                T.notices?.refresh();
+                // 대화 턴이 있는 알림(스케줄 등)의 OS 알림은 turn_done이 담당한다.
                 if (!msg.conversationId) notifyIncoming(null, msg.text || "", "notice");
                 break;
-            }
+            case "notices_changed":
+                T.notices?.refresh();
+                break;
             case "sessions_compress":
                 // 압축 진행 상태를 설정 스냅샷에 반영 — 설정 탭의 버튼이 다시 그려진다.
                 state.mergeSettingsLocal({ sessionsCompressing: !!msg.running });
@@ -181,16 +179,7 @@
                 break;
             case "todo_due": {
                 const due = T.todosUI?.describeDue?.(msg) || msg.text || msg.title || "";
-                T.toast.show("info", due, () => {
-                    if (msg.url) {
-                        if (location.pathname !== msg.url) {
-                            try {
-                                history.pushState(null, "", msg.url);
-                            } catch (_) {}
-                        }
-                        T.app?.renderRoute?.();
-                    }
-                });
+                T.notices?.refresh();
                 notifyIncoming(msg.conversationId, due, "todo-" + (msg.url || ""), msg.url);
                 refreshTodos();
                 break;

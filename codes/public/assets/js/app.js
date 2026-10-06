@@ -12,7 +12,6 @@
     let booted = false;
     // 스냅샷(로컬 캐시)으로 화면을 이미 그렸는지 — 재시도 부트에서 다시 그리지 않는다.
     let painted = false;
-    let wasConnected = false;
     // 부트 재시도 중 이전 비동기 결과가 최신 화면을 덮지 않도록 한다.
     let bootToken = 0;
     // 오프라인 복구 폴링과 401 프롬프트의 중복 방지 플래그.
@@ -158,22 +157,6 @@
         );
     }
 
-    /* ── 연결 상태 토스트 ───────────────────────────────────── */
-    let connToast = null;
-    state.on("conn", (s) => {
-        if (s === "connected") {
-            wasConnected = true;
-            // 재연결되면 끊김 알림은 남겨두지 않고 바로 지운다.
-            if (connToast) {
-                T.toast.dismiss(connToast);
-                connToast = null;
-            }
-        } else if (s === "disconnected" && wasConnected && !state.state.offline) {
-            wasConnected = false;
-            connToast = T.toast.show("error", t("connectionLost"));
-        }
-    });
-
     // 세션 중 401: 세션이 만료됐거나 다른 기기에서 비밀번호가 바뀌었다. 로그인 화면을
     // 띄우고 성공하면 부트를 다시 시도한다. 연속 401이 프롬프트를 중복으로 띄우지 않게 가드.
     function handleUnauthorized() {
@@ -216,7 +199,8 @@
         state.setConn("disconnected");
         // 스냅샷으로 이미 그렸다면 그 언어를 유지한다.
         T.i18n.init(state.state.bootstrap?.language || null);
-        T.toast.show("error", err ? T.api.errorText(err, t("offlineNote")) : t("offlineNote"));
+        // 서버에 닿지 않는다 — 확인이 필요한 일이라 경고창으로 알린다(복구되면 boot가 거둔다).
+        T.notices.alert({ key: "offline", text: err ? T.api.errorText(err, t("offlineNote")) : t("offlineNote") });
         if (location.protocol !== "file:") scheduleOfflineRetry();
     }
 
@@ -328,10 +312,11 @@
             state.state.bootstrap = bs;
             state.emit("bootstrap");
             state.state.offline = false;
+            T.notices.dismiss("offline");
 
             T.i18n.init(bs.language);
 
-            const failed = (r) => T.toast.show("error", T.api.errorText(r.reason, t("errorPrefix")));
+            const failed = (r) => T.notices.alert({ text: T.api.errorText(r.reason, t("errorPrefix")) });
             if (settingsR.status === "rejected") failed(settingsR);
             else if (settingsR.value && typeof settingsR.value === "object") state.setSettings(settingsR.value);
             if (agentsR.status === "rejected") failed(agentsR);
@@ -353,6 +338,8 @@
 
             T.events.connect({ fresh: true });
             prefetchThreads();
+            // 앱을 닫아 둔 사이에 쌓인 시스템 알림을 모달로 띄운다.
+            T.notices?.refresh();
 
             // 설정이 불완전하면 온보딩을 연다. 사용자가 /s/*로 직접 들어온 경우에는
             // 위에서 복원한 설정 페이지를 유지한다.
@@ -503,6 +490,7 @@
     T.composer.init();
     T.settingsUI.init();
     T.todosUI?.init?.();
+    T.notices?.init?.();
     T.computerUI?.init?.();
     if (T.notifications) T.notifications.init();
 

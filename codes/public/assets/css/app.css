@@ -2170,13 +2170,6 @@ select.td-input {
     vertical-align: middle;
 }
 
-.toast.tap {
-    cursor: pointer;
-}
-.toast.tap:active {
-    transform: translateY(1px);
-}
-
 .td-chip {
     min-height: 32px;
     touch-action: manipulation;
@@ -3106,35 +3099,40 @@ body.sb-collapsed .sp-expand {
 }
 
 /* ── 13. 토스트 / 컨텍스트 메뉴 ────────────────────────── */
+/* 토스트(ui/toast.js): 화면 아래 가운데에 잠깐 뜨는 작은 알약. 글자만 있고 한 번에 하나만 보인다.
+   채팅 화면에서는 입력창 바로 위에 뜬다. */
 #toasts {
     position: fixed;
-    top: var(--sp-4);
-    left: 50%;
-    transform: translateX(-50%);
+    right: 0;
+    bottom: calc(var(--composer-h, 64px) + 14px);
+    left: 0;
     z-index: 300;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--sp-2);
+    display: grid;
+    justify-items: center;
+    padding: 0 var(--sp-4);
     pointer-events: none;
 }
 .toast {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    max-width: 520px;
-    padding: 9px var(--sp-4);
-    background: var(--surface);
-    border: 1px solid var(--border);
+    /* 물러나는 것과 새로 뜨는 것이 같은 자리에 겹쳐서 바뀐다 */
+    grid-area: 1 / 1;
+    max-width: min(420px, 100%);
+    padding: 9px 18px;
     border-radius: var(--radius-pill);
-    box-shadow: var(--shadow-pop);
-    font-size: var(--fs-m);
+    /* 화면과 반대 톤(어두운 화면엔 밝게) — 채팅의 말풍선과 헷갈리지 않는다 */
+    background: var(--text);
+    color: var(--bg);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(10px) scale(0.96);
     transition:
-        opacity var(--dur-2) var(--ease),
-        transform var(--dur-2) var(--ease);
+        opacity 180ms var(--ease),
+        transform 240ms cubic-bezier(0.2, 1.1, 0.4, 1);
     pointer-events: auto;
+    cursor: default;
 }
 .toast.in {
     opacity: 1;
@@ -3142,24 +3140,26 @@ body.sb-collapsed .sp-expand {
 }
 .toast.out {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(6px) scale(0.98);
+    pointer-events: none;
 }
-.toast .icon {
-    flex: none;
-}
-.toast.info .icon {
-    color: var(--accent);
-}
-.toast.warn .icon {
-    color: var(--warning);
-}
-.toast.error .icon {
-    color: var(--danger);
+/* 실패는 색을 뒤집지 않고 글자 앞의 작은 빨간 점으로만 구분한다 */
+.toast.error span::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    vertical-align: 1px;
 }
 .toast span {
-    white-space: nowrap;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 .menu {
@@ -3212,6 +3212,217 @@ body.sb-collapsed .sp-expand {
 }
 .menu button.danger .icon {
     color: inherit;
+}
+
+/* 시스템 알림(ui/notices.js).
+   경고창: OS의 알림 창처럼 화면 가운데 뜨는 작은 창 — 가운데 정렬된 제목·내용, 아래에 실선으로
+   나뉜 글자 버튼. 한 번에 하나만 뜬다. 뒤는 흐리지 않고 어둡게만 한다. */
+.nt-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 190;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-5);
+    background: rgba(0, 0, 0, 0.45);
+    animation: ntScrimIn 200ms var(--ease);
+}
+[data-theme="light"] .nt-modal {
+    background: rgba(0, 0, 0, 0.25);
+}
+.nt-modal:focus {
+    outline: none;
+}
+.nt-modal.out {
+    opacity: 0;
+    transition: opacity 180ms var(--ease);
+    pointer-events: none;
+}
+.nt-alert {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 280px;
+    max-height: min(480px, calc(var(--app-height) - 48px));
+    overflow: hidden;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface-2) 86%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(1.8);
+    backdrop-filter: blur(30px) saturate(1.8);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    /* 살짝 큰 상태에서 제자리로 내려앉으며 나타난다 */
+    animation: ntAlertIn 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.nt-modal.out .nt-alert {
+    transform: scale(0.95);
+    transition: transform 180ms var(--ease);
+}
+@keyframes ntScrimIn {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes ntAlertIn {
+    from {
+        opacity: 0;
+        transform: scale(1.14);
+    }
+}
+.nt-alert-body {
+    min-height: 0;
+    padding: 20px 16px 18px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    text-align: center;
+}
+.nt-alert-title {
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+}
+.nt-alert-text {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    /* 한글이 낱말 중간에서 끊겨 마지막 줄에 한두 글자만 남지 않게 */
+    word-break: keep-all;
+    text-wrap: balance;
+}
+.nt-alert-text > :first-child {
+    margin-top: 0;
+}
+.nt-alert-text > :last-child {
+    margin-bottom: 0;
+}
+.nt-alert-text ul,
+.nt-alert-text ol {
+    text-align: left;
+}
+.nt-alert-btns {
+    display: flex;
+    flex: none;
+    border-top: 0.5px solid var(--border-strong);
+}
+.nt-alert-btns.stack {
+    flex-direction: column;
+}
+.nt-btn {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 12px;
+    color: var(--accent);
+    font-size: 17px;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background-color var(--dur-1) var(--ease);
+}
+.nt-btn.strong {
+    font-weight: 600;
+}
+.nt-btn + .nt-btn {
+    border-left: 0.5px solid var(--border-strong);
+}
+.nt-alert-btns.stack .nt-btn + .nt-btn {
+    border-top: 0.5px solid var(--border-strong);
+    border-left: 0;
+}
+.nt-btn:hover,
+.nt-btn:active {
+    background: var(--hover);
+}
+/* 터치에서는 손가락 위치를 따라가는 .hl만 쓴다(:hover/:active는 처음 누른 버튼에 붙어 남는다) */
+.nt-btn.hl {
+    background: var(--border-strong);
+}
+@media (hover: none) and (pointer: coarse) {
+    /* 네이티브처럼 강조는 전환 없이 즉시 켜지고 꺼진다 */
+    .nt-btn {
+        transition: none;
+    }
+    .nt-btn:hover,
+    .nt-btn:active {
+        background: transparent;
+    }
+    .nt-btn.hl {
+        background: var(--border-strong);
+    }
+}
+.nt-btn:focus-visible {
+    outline: none;
+    box-shadow: none;
+    background: var(--hover);
+}
+/* 설정 → 알림의 기록 목록 */
+.nt-list {
+    display: flex;
+    flex-direction: column;
+}
+.nt-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-3) 0;
+}
+.nt-row + .nt-row {
+    border-top: 1px solid var(--border);
+}
+.nt-icon {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    color: var(--accent);
+}
+.nt-row.warn .nt-icon {
+    color: var(--warning);
+}
+.nt-row.error .nt-icon {
+    color: var(--danger);
+}
+.nt-history .nt-row.read .nt-icon {
+    color: var(--text-tertiary);
+}
+.nt-body {
+    flex: 1;
+    min-width: 0;
+}
+.nt-text {
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.nt-text > :first-child {
+    margin-top: 0;
+}
+.nt-text > :last-child {
+    margin-bottom: 0;
+}
+.nt-time {
+    margin-top: 3px;
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+}
+.nt-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-top: var(--sp-2);
+}
+.nt-actions .btn {
+    height: 30px;
+    padding: 0 var(--sp-3);
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: var(--fs-s);
+    font-weight: 500;
 }
 
 /* 컨텍스트 메뉴(contextmenu.js).
@@ -4132,6 +4343,7 @@ body.sb-collapsed .btn-menu {
 
     .onb-page,
     .onb-modal,
+    .nt-modal,
     .fv-overlay {
         bottom: auto;
         height: var(--app-height);
@@ -4661,16 +4873,9 @@ body.sb-collapsed .btn-menu {
         right: -14px;
     }
 
-    /* 토스트/메뉴도 손가락과 키보드에 맞춘다 */
+    /* 토스트는 키보드가 올라와도 입력창 바로 위에 머문다(화면 높이가 아니라 보이는 높이 기준) */
     #toasts {
-        top: auto;
-        right: 12px;
-        bottom: calc(100% - var(--app-height) + 76px + env(safe-area-inset-bottom));
-        left: 12px;
-        transform: none;
-    }
-    body.kb-open #toasts {
-        bottom: calc(100% - var(--app-height) + 76px);
+        bottom: calc(100% - var(--app-height) + var(--composer-h, 64px) + 12px);
     }
 
     /* 모바일에서는 hover 상태를 만들지 않고 탭/활성 상태만 사용한다. */
@@ -4725,13 +4930,6 @@ body.sb-collapsed .btn-menu {
     .btn-xs.danger:hover {
         background: transparent;
         color: var(--danger);
-    }
-    .toast {
-        width: 100%;
-        max-width: none;
-        min-height: 44px;
-        border-radius: 14px;
-        padding: 10px 14px;
     }
     .menu {
         min-width: 200px;

@@ -170,6 +170,10 @@
         unassignTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/unassign", { method: "POST", json: {} }),
         runTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/run", { method: "POST", json: {} }),
 
+        notices: () => request("/api/notices"),
+        readNotices: (ids) => request("/api/notices/read", { method: "POST", json: Array.isArray(ids) ? { ids } : {} }),
+        clearNotices: () => request("/api/notices", { method: "DELETE" }),
+
         answerAsk: (askId, body) => request("/api/asks/" + enc(askId) + "/answer", { method: "POST", json: body }),
 
         computerStatus: () => request("/api/computer/status"),
