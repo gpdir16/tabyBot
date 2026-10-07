@@ -89,13 +89,33 @@
         });
     }
 
-    // 사이드바 한 줄 미리보기: 마크다운 기호만 걷어 낸 평문.
+    // 미리보기 자리 표시 문자(사설 영역): 표·코드 블록·이미지. 서버(chat-history.js)와 같은 값을 쓴다.
+    const PREVIEW_TABLE = "\uE000";
+    const PREVIEW_CODE = "\uE001";
+    const PREVIEW_IMAGE = "\uE002";
+    const PREVIEW_ICONS = { [PREVIEW_TABLE]: "table", [PREVIEW_CODE]: "code", [PREVIEW_IMAGE]: "image" };
+    // 표의 구분 행 한 칸(":---:" 등)과 구분 행 전체.
+    const TABLE_CELL = "[ \\t]*:?-+:?[ \\t]*";
+    const TABLE_DELIM = `(?:\\|${TABLE_CELL}(?:\\|${TABLE_CELL})*\\|?|${TABLE_CELL}(?:\\|${TABLE_CELL})+\\|?)`;
+    const PREVIEW_TABLE_RE = new RegExp(
+        `(^|\\n)[ \\t]*[^\\n]*\\|[^\\n]*\\n[ \\t]*${TABLE_DELIM}[ \\t]*(?=\\n|$)(?:\\n[ \\t]*[^\\n]*\\|[^\\n]*)*`,
+        "g",
+    );
+
+    // 사이드바 한 줄 미리보기: 마크다운 기호만 걷어 낸 평문. 표·코드·이미지는 자리 표시 문자로 남는다.
     function stripPreview(text) {
         let s = String(text || "");
         if (!s) return "";
-        s = s.replace(/```[\s\S]*?```/g, " ");
+        // 한 줄에 옮기기 어려운 블록은 자리 표시 문자로 남긴다(목록에서 아이콘으로 그린다).
+        // 코드 블록: 줄 머리에서 시작하는 펜스만 잡는다(글 속에서 백틱 세 개를 언급한 것은 건드리지 않는다).
+        s = s.replace(/(^|\n)[ \t]*```[\s\S]*?(\n[ \t]*```|$)/g, `$1 ${PREVIEW_CODE} `);
+        // 표: 머리 행 + 구분 행 + 본문 행들. 구분 행은 파이프가 하나는 있어야 하고 줄 끝까지 구분 행이어야 한다
+        // (파이프가 든 문장 다음 줄의 "---"나 "--help"를 표로 잡지 않게).
+        s = s.replace(PREVIEW_TABLE_RE, `$1 ${PREVIEW_TABLE} `);
+        // 이미 한 줄로 펴져 저장된 표(예전 미리보기)
+        s = s.replace(/\|[^\n]*\|[ \t]*:?-{2,}:?[ \t]*\|[^\n]*/g, ` ${PREVIEW_TABLE} `);
         s = s.replace(/`([^`]+)`/g, "$1");
-        s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
+        s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ` ${PREVIEW_IMAGE} `);
         s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
         s = s.replace(/(\*\*|__)([^*_\n]+)\1/g, "$2");
         s = s.replace(/([*_])([^*_\n]+)\1/g, "$2");
@@ -107,5 +127,20 @@
         return s.replace(/\s+/g, " ").trim();
     }
 
-    T.md = { render, stripPreview };
+    // 미리보기 문자열을 노드로 바꾼다: 자리 표시 문자는 아이콘, 나머지는 글자.
+    function previewNodes(text) {
+        return String(text || "")
+            .split(/([\uE000-\uE002])/)
+            .filter(Boolean)
+            .map((part) => (PREVIEW_ICONS[part] ? T.icon(PREVIEW_ICONS[part], "pv-icon") : document.createTextNode(part)));
+    }
+    // 읽어 주는 이름 등 글자만 필요한 곳: 자리 표시 문자를 뺀다.
+    function previewPlain(text) {
+        return String(text || "")
+            .replace(/[\uE000-\uE002]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    T.md = { render, stripPreview, previewNodes, previewPlain };
 })((window.Taby = window.Taby || {}));

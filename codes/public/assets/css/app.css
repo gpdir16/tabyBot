@@ -14,6 +14,15 @@
     --surface-3: #2e2e34;
     --border: rgba(255, 255, 255, 0.08);
     --border-strong: rgba(255, 255, 255, 0.16);
+    /* 목록 셀 구분선: 시스템 separator 색. 굵기는 고밀도 화면에서 반 픽셀(--hairline) */
+    --separator: rgba(84, 84, 88, 0.65);
+    --hairline: 1px;
+    /* 묶음 목록(설정): 바탕과 그 위에 놓이는 둥근 묶음의 색 */
+    --grouped-bg: #000000;
+    --group-bg: #1c1c1e;
+    --switch-on: #30d158;
+    /* 검색 필드처럼 배경 위에 얹는 옅은 채움(시스템 tertiary fill) */
+    --fill: rgba(118, 118, 128, 0.24);
     --text: #ececf1;
     --text-secondary: #9b9ba3;
     --text-tertiary: #6b6b74;
@@ -32,6 +41,8 @@
     /* Liquid Glass (iOS 26): 헤더/하단 바 재질 */
     --glass: rgba(30, 30, 36, 0.5);
     --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shine: rgba(255, 255, 255, 0.14);
+    --glass-press: rgba(70, 70, 78, 0.6);
     --bar-tint-a: rgba(0, 0, 0, 0.65);
     --glass-blur: 18px;
 
@@ -49,6 +60,10 @@
 
     /* 모션: 모든 인터랙션 150~220ms */
     --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    /* 화면 전환(밀려 들어오기·나가기): 앱의 모든 화면이 같은 곡선과 시간을 쓴다.
+       gestures.js의 SETTLE_MS/SETTLE_EASE, settings.js의 VIEW_MS와 같은 값이어야 한다. */
+    --nav-ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --nav-dur: 420ms;
     --dur-1: 150ms;
     --dur-2: 220ms;
 
@@ -86,6 +101,13 @@
     --surface-3: #dedee4;
     --border: rgba(0, 0, 0, 0.1);
     --border-strong: rgba(0, 0, 0, 0.18);
+    --separator: rgba(60, 60, 67, 0.29);
+    --fill: rgba(118, 118, 128, 0.12);
+    --grouped-bg: #f2f2f7;
+    --group-bg: #ffffff;
+    --switch-on: #34c759;
+    --accent: #007aff;
+    --accent-hover: #0a84ff;
     --text: #1d1d1f;
     --text-secondary: #6e6e73;
     --text-tertiary: #98989d;
@@ -99,9 +121,22 @@
     /* Liquid Glass 라이트 보정 */
     --glass: rgba(255, 255, 255, 0.52);
     --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-shine: rgba(255, 255, 255, 0.9);
+    --glass-press: rgba(255, 255, 255, 0.85);
     --bar-tint-a: rgba(255, 255, 255, 0.72);
     --warning: #b25000;
     color-scheme: light;
+}
+@media (min-resolution: 2dppx) {
+    :root {
+        --hairline: 0.5px;
+    }
+}
+[data-theme="light"] .bubble .msg-time {
+    opacity: 1;
+}
+[data-theme="light"] .msg-row.user .bubble .msg-time {
+    opacity: 0.82;
 }
 [data-theme="light"] .bubble {
     background: #f0f0f2;
@@ -414,6 +449,11 @@ kbd {
 .sb-search input::placeholder {
     color: var(--text-tertiary);
 }
+/* 떠 있는 검색 버튼과 검색 닫기 버튼은 모바일 목록 화면에서만 쓴다 */
+.sb-search-fab,
+.sb-search-close {
+    display: none;
+}
 
 .sb-scroll {
     flex: 1;
@@ -556,7 +596,7 @@ kbd {
 .jump-latest {
     /* 스크롤 콘텐츠의 마지막 요소가 아니라 뷰포트 기준으로 고정한다. */
     position: absolute;
-    left: 50%;
+    right: var(--sp-4);
     bottom: calc(var(--composer-h) + var(--sp-3));
     z-index: 5;
     display: flex;
@@ -575,7 +615,7 @@ kbd {
     font-size: var(--fs-s);
     color: var(--text);
     opacity: 0;
-    transform: translate(-50%, 6px);
+    transform: translateY(6px);
     pointer-events: none;
     transition:
         opacity var(--dur-2) var(--ease),
@@ -583,7 +623,7 @@ kbd {
 }
 .jump-latest.show {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: none;
     pointer-events: auto;
 }
 
@@ -633,8 +673,7 @@ kbd {
     max-width: 78%;
     background: var(--surface-2);
     border-radius: var(--radius-l);
-    padding: 8px 16px;
-    font-size: 15px;
+    padding: 6px 14px;
     line-height: 1.5;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
     overflow: visible;
@@ -647,7 +686,13 @@ kbd {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--sp-2);
+    /* 기록에서 이어진 말풍선이 붙는 간격과 같게 */
+    gap: 3px;
+}
+.live-inter:empty,
+.tool-stack:empty,
+.asks:empty {
+    display: none;
 }
 .live-inter .bubble {
     background: var(--surface-2);
@@ -720,13 +765,84 @@ kbd {
     word-break: break-word;
     overflow-wrap: anywhere;
 }
-/* 메시지 발화 시각: 버블 아래 한 줄, 시각만 */
+/* 메시지 발화 시각: 글의 흐름 안에 놓인다(chat.js의 placeTime).
+   글 끝에 붙을 때는 오른쪽으로 띄워(float) 마지막 줄 끝에 흘러 붙게 한다. 그 줄에 자리가 모자라면
+   저절로 한 줄 아래 오른쪽으로 내려간다. 좌표로 얹지 않으므로 글자와 겹칠 일이 없다. */
 .msg-time {
     font-size: 11px;
     line-height: 1.2;
-    color: var(--text-tertiary);
-    padding: 0 6px;
+    color: var(--text-secondary);
+    opacity: 0.85;
     user-select: none;
+    -webkit-user-select: none;
+    white-space: nowrap;
+}
+.bubble-text > .msg-time,
+.md > p > .msg-time {
+    float: right;
+    /* 시각은 글자 줄보다 조금 아래에 앉는다(메신저의 시각처럼 글 밑으로 살짝 처진다) */
+    position: relative;
+    top: 0.75em;
+    margin-left: 10px;
+    line-height: inherit;
+}
+/* 시각이 다음 줄로 내려갔을 때도 말풍선이 그 줄까지 감싼다 */
+.bubble-text:has(> .msg-time),
+.md > p:has(> .msg-time) {
+    display: flow-root;
+}
+/* 받은 글(.md)은 넓은 표·코드를 위해 가로 스크롤이 되는 상자다. 줄 아래쪽으로 내려 앉힌 시각이
+   상자 밖으로 몇 픽셀 나가면 세로 스크롤바가 생기므로, 그만큼을 상자 안쪽 여백으로 품는다. */
+.bubble > .md:has(> p > .msg-time) {
+    padding-bottom: 10px;
+    margin-bottom: -10px;
+}
+/* 목록·코드·표로 끝나는 글: 그 아래 오른쪽에 한 줄 */
+.bubble > .msg-time {
+    display: block;
+    margin-top: 2px;
+    text-align: right;
+}
+/* 통계 푸터가 있으면 같은 줄의 오른쪽 끝에 둔다 */
+.stats-footer:has(> .msg-time) {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+}
+.stats-footer > .msg-time {
+    margin-left: auto;
+    opacity: 1;
+    color: inherit;
+}
+/* 말풍선 없이 첨부만 있는 메시지: 첨부 아래 한 줄 */
+.msg-stack > .msg-time,
+.msg-user-stack > .msg-time {
+    padding: 0 6px;
+    color: var(--text-tertiary);
+    opacity: 1;
+}
+/* 내가 보낸 말풍선은 강조색, 시각은 반투명 흰색 */
+.msg-row.user .bubble {
+    background: var(--accent);
+    color: #fff;
+}
+.msg-row.user .bubble .msg-time {
+    color: #fff;
+    opacity: 0.72;
+}
+/* 같은 사람이 이어서 보낸 말풍선은 바짝 붙이고, 묶음의 마지막 말풍선만 보낸 쪽 아래 모서리를 좁혀 꼬리처럼 보이게 한다 */
+.msg-row.user + .msg-row.user,
+.msg-row.assistant + .msg-row.assistant {
+    margin-top: -9px;
+}
+.msg-row:not(:has(.bubble)) + .msg-row {
+    margin-top: 0;
+}
+.msg-row.user:not(:has(+ .msg-row.user)) .bubble {
+    border-bottom-right-radius: 6px;
+}
+.msg-row.assistant:not(:has(+ .msg-row.assistant)) .msg-stack > .bubble:not(.inter) {
+    border-bottom-left-radius: 6px;
 }
 /* 날짜가 바뀌는 지점의 구분선: 메신저식 날짜 칩 */
 .date-sep {
@@ -736,13 +852,12 @@ kbd {
     user-select: none;
 }
 .date-sep span {
-    padding: 3px 12px;
+    padding: 3px 10px;
     border-radius: var(--radius-pill);
-    background: var(--hover);
-    color: var(--text-tertiary);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
 }
 /* 검색/딥링크로 점프한 메시지 강조 */
 .msg-highlight .bubble {
@@ -768,42 +883,6 @@ kbd {
     display: none;
 }
 
-/* 복사/재생성: 모서리에 살짝 겹침. 코너 이동은 고스트와 동시에 페이드. */
-.msg-actions {
-    --ax: 0px;
-    --ay: -14px;
-    position: absolute;
-    z-index: 4;
-    top: 0;
-    left: 0;
-    display: flex;
-    gap: 2px;
-    padding: 2px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-s);
-    box-shadow: var(--shadow-pop);
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(var(--ax), var(--ay));
-    transition: opacity 200ms ease !important;
-}
-.msg-actions.show {
-    opacity: 1 !important;
-    pointer-events: auto;
-}
-.msg-actions.ghost {
-    pointer-events: none !important;
-    z-index: 3;
-}
-.msg-actions .btn-icon {
-    width: 26px;
-    height: 26px;
-}
-.msg-actions .btn-icon.copied {
-    color: var(--success);
-}
-
 /* ── 상태 라벨 (shimmer) ───────────────────────────────── */
 .gen-label {
     display: flex;
@@ -815,7 +894,6 @@ kbd {
 }
 .shimmer {
     letter-spacing: 2px;
-    font-weight: 500;
     background-image: linear-gradient(
         90deg,
         var(--text-tertiary) 0%,
@@ -1014,7 +1092,9 @@ kbd {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-bottom: var(--sp-2);
+    /* 긴 인자 요약이 말줄임되게 줄어들 수 있어야 한다(없으면 화면 밖으로 넘친다) */
+    align-self: stretch;
+    min-width: 0;
 }
 .tool-card {
     border: 1px solid var(--border);
@@ -1101,7 +1181,8 @@ kbd {
     display: flex;
     flex-direction: column;
     gap: var(--sp-2);
-    margin-bottom: var(--sp-2);
+    align-self: stretch;
+    min-width: 0;
 }
 .ask-card {
     max-width: 560px;
@@ -1109,8 +1190,7 @@ kbd {
     flex-direction: column;
     gap: var(--sp-3);
     padding: var(--sp-4);
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: var(--surface-2);
     border-radius: var(--radius-l);
     animation: riseIn 180ms var(--ease);
 }
@@ -1129,25 +1209,20 @@ kbd {
     align-items: center;
     justify-content: flex-start;
     text-align: left;
-    min-height: 36px;
-    padding: 7px var(--sp-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-s);
-    background: var(--surface-2);
+    padding: 6px var(--sp-3);
+    border-radius: var(--radius-m);
+    background: var(--surface);
     font-size: var(--fs-m);
     color: var(--text-secondary);
     transition:
-        border-color var(--dur-1) var(--ease),
         color var(--dur-1) var(--ease),
         background var(--dur-1) var(--ease),
         opacity var(--dur-1) var(--ease);
 }
 .ask-opt:hover:not(:disabled) {
-    border-color: var(--accent);
     color: var(--text);
 }
 .ask-opt.selected {
-    border-color: var(--accent);
     background: rgba(10, 132, 255, 0.12);
     color: var(--text);
 }
@@ -1159,9 +1234,9 @@ kbd {
     flex: 1;
     min-width: 0;
     height: 32px;
-    background: var(--surface-2);
+    background: var(--surface);
     border: 1px solid transparent;
-    border-radius: var(--radius-s);
+    border-radius: var(--radius-m);
     padding: 0 var(--sp-3);
     font-size: var(--fs-m);
     transition:
@@ -1179,7 +1254,7 @@ kbd {
     width: 32px;
     height: 32px;
     flex: none;
-    border-radius: var(--radius-s);
+    border-radius: var(--radius-l);
     background: var(--accent);
     color: #fff;
     transition:
@@ -1460,13 +1535,14 @@ kbd {
 .todos-page[hidden] {
     display: none;
 }
+/* 할 일 행: 메신저의 "저장한 메시지"처럼 강조색 원에 흰 아이콘 */
 .todo-avatar {
-    background: var(--text-tertiary);
-    color: var(--text);
+    background-color: var(--accent);
+    color: #fff;
 }
 .todo-avatar .icon {
-    width: 16px;
-    height: 16px;
+    width: 46%;
+    height: 46%;
 }
 
 .td-wrap {
@@ -1946,6 +2022,10 @@ select.td-input {
 .td-spacer {
     flex: 1;
 }
+/* 모바일의 상세 화면 층. 데스크톱에서는 행이 그 자리에서 편집기로 펼쳐진다 */
+.td-detail-host {
+    display: none;
+}
 
 .td-sug {
     padding: 12px 14px;
@@ -2200,14 +2280,36 @@ body.todos-route #btnAttach {
     display: none;
 }
 
+/* 설정 화면: 묶음 목록. 화면 하나(.sp-view)가 페이지를 가득 채우고, 모바일에서 목록과 상세를 오갈 때는
+   두 화면이 잠깐 겹쳐 놓인 채 밀려 들어오고 나간다. */
+.settings-page {
+    position: relative;
+    background: var(--grouped-bg);
+}
+.sp-view {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--grouped-bg);
+}
+/* 헤더는 채팅 헤더와 같은 재질이다: 내용 위에 떠 있고, 내용은 그 밑으로 점점 흐려지며 지나간다(.pblur). */
 .sp-head {
-    flex: none;
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 6;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 1px var(--sp-4) 0 var(--sp-2);
     height: var(--hdr-h);
-    border-bottom: 1px solid var(--border);
+    background: linear-gradient(to bottom, var(--bar-tint-a), transparent);
+}
+.sp-head > .btn-icon {
+    position: relative;
+    z-index: 1;
 }
 .sp-back,
 .sp-expand {
@@ -2219,9 +2321,15 @@ body.sb-collapsed .sp-expand {
     display: inline-flex;
 }
 .sp-title {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    overflow: hidden;
     font-size: var(--fs-t);
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 /* 데스크톱: 사이드바가 열려 있으면 제목이 경계선에 붙지 않게 띄운다.
    접힌 상태는 펼치기 버튼 위치를 채팅 헤더의 메뉴 버튼과 같게 유지한다. */
@@ -2235,29 +2343,85 @@ body.sb-collapsed .sp-expand {
     flex: 1;
     min-height: 0;
 }
+/* 목록: 색 타일이 붙은 항목들. 데스크톱은 왼쪽 열(선택된 항목은 강조색), 모바일은 화면 전체를 쓰는 묶음 목록 */
 .sp-nav {
     flex: none;
-    width: 148px;
-    padding: var(--sp-2);
-    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 208px;
+    padding: calc(var(--hdr-h) + 4px) 10px 10px;
+    border-right: var(--hairline) solid var(--separator);
     overflow-x: hidden;
     overflow-y: auto;
-    scrollbar-gutter: stable;
 }
-.sp-nav .sb-row {
+.sp-nav-group {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 1px;
+}
+.sp-nav-head {
+    flex: none;
+    margin-bottom: -8px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+}
+.sp-item {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--text);
+    text-align: left;
+}
+.sp-item.active {
+    background: var(--accent);
+    color: #fff;
+}
+.sp-item-label {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
-    white-space: nowrap;
     text-overflow: ellipsis;
-    display: flex;
-    line-height: normal;
+    white-space: nowrap;
 }
-.sp-nav .sb-row.active {
-    background: var(--surface-3);
-    color: var(--text);
+.sp-item-chev {
+    display: none;
 }
-.sp-nav .divider {
-    margin: var(--sp-2) 0;
+.sp-tile {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    background-color: var(--text-tertiary);
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), rgba(0, 0, 0, 0.08));
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+}
+.sp-tile .icon {
+    width: 14px;
+    height: 14px;
+}
+.sp-tile.round {
+    border-radius: 50%;
+}
+.sp-tile.plain {
+    background: none;
+    color: var(--accent);
+}
+.sp-item.active .sp-tile.plain {
+    color: #fff;
 }
 
 .sp-body {
@@ -2265,12 +2429,23 @@ body.sb-collapsed .sp-expand {
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    padding: 16px 24px 32px;
+    padding: calc(var(--hdr-h) + 12px) 24px 32px;
+}
+.sp-body > * {
+    max-width: 620px;
+    margin-inline: auto;
 }
 .set-section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
+}
+/* 묶음: 이어진 설정 행을 둥근 판 하나에 담는다(settings.js의 groupRows가 감싼다).
+   행 사이 구분선은 글자가 시작하는 자리부터 긋는다. */
+.set-group {
+    border-radius: 10px;
+    background: var(--group-bg);
+    overflow: hidden;
 }
 .set-row {
     display: flex;
@@ -2279,35 +2454,61 @@ body.sb-collapsed .sp-expand {
     gap: var(--sp-4);
     min-height: 38px;
 }
+.set-group > .set-row,
+.set-group > .ext-row {
+    position: relative;
+    min-height: 40px;
+    padding: 4px 12px;
+}
+.set-group > * + *::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 12px;
+    border-top: var(--hairline) solid var(--separator);
+}
 /* API 키처럼 컨트롤이 여러 줄일 때 고정 높이가 겹침을 만든다 */
 .set-row:has(.key-wrap) {
     align-items: flex-start;
-    padding: 4px 0;
+    padding-block: 6px;
 }
 .set-row:has(.key-wrap) .set-label {
     line-height: 30px;
 }
 .set-label {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13.5px;
     letter-spacing: -0.004em;
 }
 .set-desc {
     font-size: var(--fs-xs);
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     margin-top: 2px;
     line-height: 1.4;
+}
+/* 묶음 밖에 놓인 설명과 소제목은 묶음의 머리말·꼬리말이다. 묶음 안쪽 여백에 맞춰 들여 쓴다 */
+.set-section > .set-desc,
+.set-section > .field-label,
+.agent-editor > .set-desc {
+    margin-top: 0;
+    padding: 0 12px;
 }
 .set-warn {
     font-size: var(--fs-xs);
     color: var(--warning);
     margin: var(--sp-1) 0 var(--sp-2);
+    padding: 0 12px;
     line-height: 1.4;
 }
 .divider {
     border: 0;
     border-top: 1px solid var(--border);
     margin: var(--sp-2) 0;
+}
+/* 묶음 목록에서는 묶음 사이의 간격이 구분선 노릇을 한다 */
+.sp-body .divider {
+    border-top: 0;
+    margin: 6px 0;
 }
 .field {
     display: flex;
@@ -2319,6 +2520,85 @@ body.sb-collapsed .sp-expand {
     font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-secondary);
+}
+.sp-body .field > .field-label {
+    padding-inline: 12px;
+}
+/* 묶음 안의 선택 상자와 입력란: 상자 없이 값만 오른쪽에 보인다 */
+.set-group .select-wrap {
+    max-width: 62%;
+}
+.set-group .select-wrap select {
+    padding: var(--sp-1) 20px var(--sp-1) 0;
+    background: none;
+    color: var(--text-secondary);
+    text-align: right;
+    text-align-last: right;
+    text-overflow: ellipsis;
+}
+.set-group .select-wrap .icon {
+    right: 0;
+    width: 14px;
+    height: 14px;
+}
+.set-group .set-row > .input,
+.set-group .set-control > .input,
+.set-group .key-row > .input {
+    padding-inline: 0;
+    background: none;
+    border-radius: 0;
+    text-align: right;
+}
+.set-group .select-wrap select:focus,
+.set-group .input:focus {
+    box-shadow: none;
+}
+.set-group .select-wrap select:focus-visible,
+.set-group .input:focus-visible {
+    outline: none;
+}
+/* 묶음 밖의 입력란(이름표가 위에 붙는 폼)은 그 자체가 묶음 한 칸처럼 보인다 */
+.sp-body .field > .input,
+.sp-body .field > .textarea,
+.sp-body .field > .key-row > .input,
+.sp-body .field > .select-wrap select,
+.sp-body .models-panel > .input,
+.sp-body .adv-panel > .textarea,
+.sp-body .env-row > .input {
+    padding: 9px 12px;
+    border-radius: 10px;
+    background: var(--group-bg);
+}
+/* 묶음 밖에 놓인 글자(설명, 소제목, 오류 문구, 폼 제목)는 묶음 안쪽 여백에 맞춰 들여 쓴다 */
+.sp-body .field > .set-desc,
+.sp-body .adv-panel > .set-desc,
+.sp-body .adv-panel > .field-label,
+.sp-body .env-head > .field-label,
+.sp-body .onb-error,
+.sp-body .form-head,
+.sp-body .empty-note {
+    padding-inline: 12px;
+}
+/* 고급 설정에서 설명은 바로 위 묶음에 딸린 글이다. 다음 묶음과는 조금 더 띄운다 */
+.sp-body .adv-panel > .set-desc + .set-group {
+    margin-top: 6px;
+}
+.sp-body .input:disabled,
+.sp-body .input[readonly] {
+    text-overflow: ellipsis;
+}
+/* 묶음 사이에 홀로 놓인 버튼("다시 시도" 등)은 글자 폭만 차지한다 */
+.set-section > .btn {
+    align-self: flex-start;
+}
+/* 알림 기록도 다른 탭처럼 둥근 판에 담는다 */
+.sp-body .nt-history {
+    padding-inline: 12px;
+    border-radius: 10px;
+    background: var(--group-bg);
+}
+.sp-body .field > .select-wrap {
+    width: 100%;
 }
 
 /* 입력 */
@@ -2379,8 +2659,8 @@ body.sb-collapsed .sp-expand {
 .switch {
     position: relative;
     cursor: pointer;
-    width: 38px;
-    height: 23px;
+    width: 40px;
+    height: 24px;
     flex: none;
 }
 .switch input {
@@ -2393,30 +2673,30 @@ body.sb-collapsed .sp-expand {
 .switch .tr {
     position: absolute;
     inset: 0;
-    background: var(--surface-2);
-    border: 1px solid var(--border-strong);
+    background: var(--fill);
     border-radius: var(--radius-pill);
-    transition:
-        background var(--dur-2) var(--ease),
-        border-color var(--dur-2) var(--ease);
+    transition: background var(--dur-2) var(--ease);
 }
 .switch .kn {
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 19px;
-    height: 19px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-    transition: transform var(--dur-2) var(--ease);
+    box-shadow:
+        0 2px 5px rgba(0, 0, 0, 0.2),
+        0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    transition:
+        transform 240ms cubic-bezier(0.3, 1.2, 0.4, 1),
+        width 160ms var(--ease);
 }
 .switch input:checked ~ .tr {
-    background: var(--accent);
-    border-color: transparent;
+    background: var(--switch-on);
 }
 .switch input:checked ~ .kn {
-    transform: translateX(15px);
+    transform: translateX(16px);
 }
 .switch input:focus-visible ~ .tr {
     box-shadow: var(--focus-ring);
@@ -2462,32 +2742,29 @@ body.sb-collapsed .sp-expand {
     transform: scale(1);
 }
 
-/* 프로바이더 카드 */
+/* 프로바이더 목록: 묶음 하나에 담긴 선택 행. 고른 항목 오른쪽에 체크가 붙는다 */
 .provider-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--sp-3);
     width: 100%;
-    padding: var(--sp-2) var(--sp-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-s);
+    min-height: 40px;
+    padding: 4px 12px;
     text-align: left;
-    transition:
-        border-color var(--dur-1) var(--ease),
-        background var(--dur-1) var(--ease);
 }
-.provider-card:hover {
-    border-color: var(--border-strong);
-}
-.provider-card.selected {
-    border-color: var(--accent);
-    background: rgba(10, 132, 255, 0.07);
+.provider-card + .provider-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 12px;
+    border-top: var(--hairline) solid var(--separator);
 }
 .provider-name {
     min-width: 0;
     overflow: hidden;
-    font-size: var(--fs-m);
-    font-weight: 600;
+    font-size: 13.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -2499,20 +2776,28 @@ body.sb-collapsed .sp-expand {
 .provider-list {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-2);
+    border-radius: 10px;
+    background: var(--group-bg);
+    overflow: hidden;
 }
 
 /* 모델 선택 패널 */
 .models-panel {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-2);
+    gap: var(--sp-3);
     overflow: hidden;
 }
 .models-list {
     max-height: 240px;
+    border-radius: 10px;
+    background: var(--group-bg);
     overflow-y: auto;
     scrollbar-gutter: stable;
+}
+.models-list .radio-row {
+    padding-inline: 12px;
+    border-radius: 0;
 }
 .model-id {
     font-family: var(--font-mono);
@@ -2581,6 +2866,8 @@ body.sb-collapsed .sp-expand {
 .set-control {
     display: flex;
     flex: 1;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
     justify-content: flex-end;
 }
@@ -2853,6 +3140,9 @@ body.sb-collapsed .sp-expand {
     padding: 0 var(--sp-3);
     font-size: var(--fs-s);
 }
+.ext-actions .btn:last-child {
+    min-width: 56px;
+}
 .env-list {
     display: flex;
     flex-direction: column;
@@ -2991,6 +3281,9 @@ body.sb-collapsed .sp-expand {
 }
 .onb-actions .spacer {
     flex: 1;
+}
+.onb-prev .icon {
+    display: none;
 }
 .onb-actions .btn {
     min-height: 46px;
@@ -3719,9 +4012,9 @@ body.sb-collapsed .sp-expand {
 
 /* ── 15. 모션 저감 ─────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-    *:not(.msg-actions),
-    *:not(.msg-actions)::before,
-    *:not(.msg-actions)::after {
+    *,
+    *::before,
+    *::after {
         transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
@@ -3805,62 +4098,124 @@ body.resizing {
     color: var(--text);
 }
 
-/* 봇 행 */
+/* 봇 행: 메신저 대화 목록의 셀. 윗줄은 이름과 시각, 아랫줄은 미리보기와 안읽음 배지다.
+   데스크톱(macOS)은 선택된 행을 강조색으로 채우고, 호버로는 칠하지 않는다. */
 .bot-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius-m);
-    cursor: pointer;
-    /* 빠른 스윕에서 호버 애니메이션 강제 재생 방지: 진입만 살짝 지연 */
-    transition: background-color var(--dur-1) var(--ease) 45ms;
+    height: 62px;
+    padding: 0 10px;
+    border-radius: 10px;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
 }
-.bot-row:hover,
 .bot-row:focus-visible {
-    background: var(--hover);
+    outline: none;
+    box-shadow: inset var(--focus-ring);
 }
 .bot-row.active {
-    background: var(--surface-3);
+    background: var(--accent);
 }
 .bot-avatar {
     flex: none;
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     display: grid;
     place-items: center;
     color: #fff;
-    font-size: 14px;
+    font-size: 17px;
     font-weight: 600;
+    /* 메신저 아바타처럼 위가 밝고 아래가 짙은 그라데이션을 색 위에 얹는다 */
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1));
 }
 .bot-meta {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    justify-content: center;
+    gap: 2px;
+}
+.bot-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
 }
 .bot-name {
-    display: inline-flex;
+    flex: 1;
+    min-width: 0;
+    display: flex;
     align-items: center;
     gap: 6px;
-    font-size: var(--fs-m);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
     color: var(--text);
+}
+.bot-name-text {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.bot-time {
+    flex: none;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
 }
 .bot-persona {
-    font-size: var(--fs-s);
-    color: var(--text-tertiary);
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-height: 1.2em;
 }
-.bot-persona.is-empty {
-    font-style: italic;
+.bot-persona.is-live {
+    color: var(--accent);
+}
+/* 미리보기 속 표·코드·이미지 자리 아이콘: 글자 줄에 맞춰 앉힌다 */
+.pv-icon {
+    width: 1.15em;
+    height: 1.15em;
+    vertical-align: -0.2em;
+}
+/* 폴더를 미는 동안 옆 폴더의 목록을 담아 같이 움직이는 임시 층 */
+.sb-ghost {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    flex: none;
+    overflow: hidden;
+    pointer-events: none;
+}
+.bot-row.active .bot-name,
+.bot-row.active .bot-time,
+.bot-row.active .bot-persona {
+    color: #fff;
+}
+.bot-row.active .bot-time,
+.bot-row.active .bot-persona {
+    opacity: 0.82;
+}
+.bot-row.active .bot-unread {
+    background: #fff;
+    color: var(--accent);
+}
+.bot-row.active .live-dot,
+.bot-row.active .attn-dot {
+    background: #fff;
+}
+.bot-row.active .sb-hit-snippet mark {
+    background: rgba(255, 255, 255, 0.28);
 }
 .live-dot {
     width: 7px;
@@ -3968,10 +4323,10 @@ body.resizing {
     flex: none;
     display: inline-grid;
     place-items: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
     background: var(--accent);
     color: #fff;
     font-size: 11.5px;
@@ -4015,7 +4370,7 @@ body.resizing {
     left: 0;
     bottom: 0;
     height: 3px;
-    border-radius: 3px 3px 0 0;
+    border-radius: 3px;
     background: var(--accent);
     pointer-events: none;
     transition:
@@ -4036,8 +4391,8 @@ body.resizing {
 .folder-agents {
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-m);
+    border-radius: 10px;
+    background: var(--group-bg);
     overflow: hidden;
 }
 .folder-agent {
@@ -4048,8 +4403,16 @@ body.resizing {
     cursor: pointer;
     transition: background-color var(--dur-1) var(--ease);
 }
-.folder-agent + .folder-agent {
-    border-top: 1px solid var(--border);
+.folder-agent {
+    position: relative;
+}
+.folder-agent + .folder-agent::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: calc(var(--sp-3) + 30px + var(--sp-3));
+    border-top: var(--hairline) solid var(--separator);
 }
 .folder-agent:hover {
     background: var(--hover);
@@ -4112,13 +4475,6 @@ body.resizing {
     text-transform: uppercase;
     color: var(--text-tertiary);
 }
-.sb-hit .sb-hit-time {
-    margin-left: auto;
-    flex: none;
-    font-size: 10px;
-    font-weight: 400;
-    color: var(--text-tertiary);
-}
 .sb-hit-snippet mark {
     background: color-mix(in srgb, var(--accent) 30%, transparent);
     color: inherit;
@@ -4147,7 +4503,8 @@ body.resizing {
    사다리꼴 마스크로 층 사이를 부드럽게 섞는다. .flip은 하단 바용 상하 반전. */
 .pblur {
     position: absolute;
-    inset: 0 0 -26px 0; /* 바 안쪽 경계 너머 콘텐츠 26px까지 블러가 이어진다 */
+    /* 바 높이 안에서 끝난다. 바 밖으로 번지면 스크롤 맨 위에서 바 바로 밑에 놓인 첫 줄이 흐려진다 */
+    inset: 0;
     z-index: 0;
     pointer-events: none;
 }
@@ -4214,6 +4571,7 @@ body.resizing {
     font-size: 13px;
     font-weight: 600;
     margin-left: var(--sp-1);
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1));
 }
 .hd-name-wrap {
     flex: 1;
@@ -4334,7 +4692,7 @@ body.sb-collapsed .btn-menu {
         height: var(--app-height);
         min-height: 0;
         /* 모바일 헤더는 safe-area 포함 높이 */
-        --hdr-h: calc(58px + env(safe-area-inset-top));
+        --hdr-h: calc(52px + env(safe-area-inset-top));
         overflow: hidden;
         overscroll-behavior: none;
         touch-action: pan-x pan-y;
@@ -4358,9 +4716,7 @@ body.sb-collapsed .btn-menu {
         flex: none;
         overflow: hidden;
         overscroll-behavior: none;
-        transition:
-            transform 260ms var(--ease),
-            opacity 180ms var(--ease);
+        transition: transform var(--nav-dur) var(--nav-ease);
         will-change: transform;
     }
     body.mobile-route-sync #sidebar,
@@ -4375,12 +4731,7 @@ body.sb-collapsed .btn-menu {
     }
     body.gest-settle #sidebar,
     body.gest-settle #main {
-        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-    }
-    body.gest-drag:not(.gest-inner) #main,
-    body.gest-settle:not(.gest-inner) #main {
-        z-index: 30;
-        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+        transition: transform var(--nav-dur) var(--nav-ease) !important;
     }
     /* 컴퓨터 화면에서 뒤로: 밑에 깔린 채팅을 다시 보이게 하고, 컴퓨터 화면만 그 위에서 밀려 나간다.
        헤더는 채팅과 같이 쓰므로 컴퓨터 화면이 얹어 둔 버튼들은 밀리는 만큼(--gest-p) 흐려진다. */
@@ -4398,7 +4749,7 @@ body.sb-collapsed .btn-menu {
         box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
     }
     body.gest-settle.gest-inner .computer-page {
-        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        transition: transform var(--nav-dur) var(--nav-ease);
     }
     body.gest-inner .cp-tabs,
     body.gest-inner .cp-status {
@@ -4406,7 +4757,7 @@ body.sb-collapsed .btn-menu {
     }
     body.gest-settle.gest-inner .cp-tabs,
     body.gest-settle.gest-inner .cp-status {
-        transition: opacity 260ms var(--ease);
+        transition: opacity var(--nav-dur) var(--nav-ease);
     }
     #sidebar {
         --sb-w: 100%;
@@ -4427,18 +4778,20 @@ body.sb-collapsed .btn-menu {
         visibility: visible;
         pointer-events: auto;
     }
+    /* 메인 패널은 언제나 목록 위에 놓인다. 버튼으로 오가든 손가락으로 밀든 같은 모양이다:
+       메인이 오른쪽에서 덮으며 들어오고, 밑의 목록은 30%만 따라 움직인다. */
     #main {
-        z-index: 10;
+        z-index: 30;
         background: var(--bg);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.35);
         transform: translateX(100%);
         pointer-events: none;
     }
     body.mobile-chat #sidebar {
-        transform: translateX(-100%);
+        transform: translateX(-30%);
         pointer-events: none;
     }
     body.mobile-chat #main {
-        z-index: 30;
         transform: translateX(0);
         pointer-events: auto;
     }
@@ -4450,28 +4803,63 @@ body.sb-collapsed .btn-menu {
         display: inline-flex;
     }
 
-    /* 목록 상단: Telegram식 탐색 바 */
+    /* 목록 상단: 탐색 바. 버튼만 둥근 유리 재질이고 바 자체는 배경색 그대로다 */
     .sb-top {
-        height: calc(58px + env(safe-area-inset-top));
+        height: calc(52px + env(safe-area-inset-top));
         flex: none;
         gap: 4px;
-        padding: env(safe-area-inset-top) 8px 0;
-        border-bottom: 1px solid var(--border);
+        padding: env(safe-area-inset-top) 12px 0;
         background: var(--bg);
-        background: color-mix(in srgb, var(--bg) 92%, transparent);
-        backdrop-filter: blur(18px) saturate(1.25);
-        -webkit-backdrop-filter: blur(18px) saturate(1.25);
     }
-    .sb-top .btn-icon {
-        width: 44px;
-        height: 44px;
+    .sb-top .btn-icon,
+    .sb-top .btn-icon:hover,
+    .sp-head .sp-back,
+    .sp-head .sp-back:hover,
+    #header > .btn-icon,
+    #header > .btn-icon:hover,
+    .sb-search-fab {
+        display: grid;
+        place-items: center;
         flex: none;
+        border-radius: 50%;
+        color: var(--text);
+        background: var(--glass);
+        box-shadow:
+            inset 0 0 0 var(--hairline) var(--glass-border),
+            inset 0 1px 0 var(--glass-shine),
+            0 4px 14px rgba(0, 0, 0, 0.12);
+        backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+        transition:
+            transform 220ms cubic-bezier(0.3, 1.4, 0.5, 1),
+            background-color 160ms var(--ease),
+            opacity 200ms var(--ease);
+    }
+    .sb-top .btn-icon,
+    .sb-top .btn-icon:hover,
+    .sp-head .sp-back,
+    .sp-head .sp-back:hover,
+    #header > .btn-icon,
+    #header > .btn-icon:hover {
+        width: 40px;
+        height: 40px;
+    }
+    .sb-top .btn-icon:active,
+    .sp-head .sp-back:active,
+    #header > .btn-icon:active,
+    .sb-search-fab:active {
+        transform: scale(1.1);
+        background: var(--glass-press);
+    }
+    .sb-top .btn-icon .icon {
+        width: 20px;
+        height: 20px;
     }
     .sb-top .conn-dot:not([hidden]) {
         display: block;
         position: absolute;
-        top: 4px;
-        right: 4px;
+        top: 2px;
+        right: 2px;
     }
     .sb-top .logo-word {
         position: absolute;
@@ -4479,28 +4867,94 @@ body.sb-collapsed .btn-menu {
         transform: translateX(-50%);
         width: max-content;
         font-size: 17px;
-        letter-spacing: -0.3px;
+        font-weight: 600;
+        letter-spacing: -0.4px;
     }
     #btnAddBot {
         margin-left: auto;
     }
+    /* 아래에 뜨는 둥근 검색 버튼: 누르면 위의 검색 바가 열리고 입력이 시작된다 */
+    .sb-search-fab {
+        position: absolute;
+        right: 20px;
+        bottom: calc(env(safe-area-inset-bottom) + 16px);
+        z-index: 4;
+        width: 52px;
+        height: 52px;
+        box-shadow:
+            inset 0 0 0 var(--hairline) var(--glass-border),
+            inset 0 1px 0 var(--glass-shine),
+            0 8px 24px rgba(0, 0, 0, 0.22);
+    }
+    .sb-search-fab .icon {
+        width: 22px;
+        height: 22px;
+    }
+    #sidebar.searching .sb-search-fab {
+        opacity: 0;
+        transform: scale(0.8);
+        pointer-events: none;
+    }
+    /* 검색 바: 평소에는 접혀 있다가 목록을 아래로 당기면 탐색 바 밑에 나타난다(예전 iOS 목록의 동작) */
     .sb-search {
         flex: none;
-        height: 44px;
-        margin: 10px 12px 8px;
-        padding: 0 12px;
-        gap: 8px;
-        border-radius: 11px;
-        background: var(--surface-2);
+        height: 0;
+        margin: 0 12px;
+        padding: 0 4px 0 8px;
+        gap: 6px;
+        border-radius: 10px;
+        background: var(--fill);
+        color: var(--text-secondary);
+        opacity: 0;
+        overflow: hidden;
+        transition:
+            height 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            margin 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 180ms var(--ease);
+    }
+    #sidebar.searching .sb-search {
+        height: 36px;
+        margin: 2px 12px 8px;
+        opacity: 1;
+    }
+    .sb-search:focus-within {
+        box-shadow: none;
     }
     .sb-search .icon {
-        width: 17px;
-        height: 17px;
+        width: 16px;
+        height: 16px;
     }
     .sb-search input {
         min-width: 0;
-        height: 44px;
-        font-size: 16px;
+        height: 36px;
+        font-size: 17px;
+    }
+    .sb-search input::placeholder {
+        color: var(--text-secondary);
+    }
+    .sb-search-close {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        color: var(--text-secondary);
+    }
+    .sb-search-close {
+        position: relative;
+    }
+    .sb-search-close::before {
+        content: "";
+        position: absolute;
+        inset: -7px;
+    }
+    .sb-search-close[hidden] {
+        display: none;
+    }
+    .sb-search-close .icon {
+        width: 15px;
+        height: 15px;
     }
     input,
     textarea,
@@ -4513,7 +4967,7 @@ body.sb-collapsed .btn-menu {
     .sb-scroll {
         flex: 1;
         min-height: 0;
-        padding: 0 0 env(safe-area-inset-bottom);
+        padding: 0 0 calc(env(safe-area-inset-bottom) + 76px);
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
@@ -4523,7 +4977,7 @@ body.sb-collapsed .btn-menu {
         margin-bottom: 0;
     }
     .sb-tab {
-        height: 42px;
+        height: 40px;
         padding: 0 12px;
         font-size: 15px;
     }
@@ -4534,55 +4988,92 @@ body.sb-collapsed .btn-menu {
         color: var(--accent);
     }
     .folder-agent {
-        min-height: 52px;
+        min-height: 44px;
     }
     .folder-agent:hover {
         background: transparent;
     }
+    /* 대화 목록 셀: 64 높이, 48 아바타, 미리보기 한 줄.
+       구분선은 글자가 시작하는 자리부터 화면 끝까지만 긋는다(아바타 밑은 비운다). */
     .bot-row {
-        min-height: 72px;
-        padding: 10px 12px;
+        align-items: stretch;
+        height: 64px;
+        padding: 0 0 0 12px;
         gap: 12px;
         border-radius: 0;
-        transition:
-            background-color 120ms var(--ease),
-            transform 120ms var(--ease);
+        /* 누르면 바로 칠해지고, 떼면 천천히 빠진다 */
+        transition: background-color 320ms var(--ease);
         touch-action: manipulation;
     }
-    .bot-row + .bot-row {
-        border-top: 1px solid var(--border);
-    }
-    .bot-row:hover,
     .bot-row:focus-visible {
-        background: transparent;
+        box-shadow: none;
     }
     .bot-row:active {
         background: var(--surface-2);
-        transform: scale(0.995);
+        transition: none;
     }
+    /* 선택 표시는 화면이 둘로 나뉜 데스크톱에서만 쓴다 */
     .bot-row.active {
+        background: transparent;
+    }
+    .bot-row.active:active {
         background: var(--surface-2);
     }
-    /* 목록 화면(채팅 닫힘)에서는 마지막으로 연 봇을 하이라이트하지 않는다 */
-    body:not(.mobile-chat) .bot-row.active {
-        background: transparent;
+    .bot-row.active .bot-name {
+        color: var(--text);
+    }
+    .bot-row.active .bot-time,
+    .bot-row.active .bot-persona {
+        color: var(--text-secondary);
+        opacity: 1;
+    }
+    .bot-row.active .bot-persona.is-live {
+        color: var(--accent);
+    }
+    .bot-row.active .bot-unread {
+        background: var(--accent);
+        color: #fff;
+    }
+    .bot-row.active .live-dot {
+        background: var(--accent);
+    }
+    .bot-row.active .attn-dot {
+        background: var(--warning);
     }
     .sb-bottom .sb-row.active {
         background: var(--surface-2);
     }
     .bot-avatar {
-        width: 50px;
-        height: 50px;
-        font-size: 18px;
+        align-self: center;
+        width: 48px;
+        height: 48px;
+        font-size: 19px;
+    }
+    .bot-meta {
+        gap: 1px;
+        padding: 0 14px 0 0;
+        border-bottom: var(--hairline) solid var(--separator);
     }
     .bot-name {
         font-size: 16px;
-        line-height: 1.3;
+        line-height: 21px;
+        letter-spacing: -0.2px;
+    }
+    .bot-time {
+        font-size: 13px;
+        line-height: 21px;
     }
     .bot-persona {
-        margin-top: 2px;
         font-size: 14px;
-        line-height: 1.3;
+        line-height: 19px;
+    }
+    .bot-unread {
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 500;
     }
     .sb-empty {
         margin: 24px 16px;
@@ -4609,29 +5100,43 @@ body.sb-collapsed .btn-menu {
         height: 44px;
     }
 
-    /* 채팅 상단: 유리 오버레이 (블러/배경은 데스크톱 규칙 상속) */
+    /* 채팅 상단(메신저 배치): 왼쪽에 뒤로, 가운데에 이름, 오른쪽에 컴퓨터 버튼과 아바타.
+       블러/배경은 데스크톱 규칙을 그대로 쓴다. */
     #header {
         height: var(--hdr-h);
         flex: none;
         gap: 8px;
-        padding: env(safe-area-inset-top) 8px 0;
+        padding: env(safe-area-inset-top) 12px 0;
     }
     #header .btn-menu {
-        width: 44px;
-        height: 44px;
         margin: 0;
     }
+    #btnHdrComputer {
+        margin-left: auto;
+    }
     .hdr-avatar {
-        width: 40px;
-        height: 40px;
+        order: 5;
+        width: 36px;
+        height: 36px;
         margin-left: 0;
-        font-size: 16px;
+        font-size: 15px;
     }
     .hd-name-wrap {
         gap: 6px;
     }
     #hdrName {
-        font-size: 16px;
+        font-size: 17px;
+        letter-spacing: -0.4px;
+    }
+    /* 이름은 양옆 버튼 폭과 상관없이 화면 한가운데에 둔다 */
+    #header .hd-name-wrap {
+        position: absolute;
+        right: 108px;
+        bottom: 0;
+        left: 108px;
+        justify-content: center;
+        height: 52px;
+        align-items: center;
     }
     #scroller {
         overscroll-behavior: contain;
@@ -4642,8 +5147,12 @@ body.sb-collapsed .btn-menu {
     .thread {
         width: 100%;
         max-width: none;
-        padding: 12px;
+        padding: 12px 10px;
         gap: 8px;
+    }
+    .msg-row.user + .msg-row.user,
+    .msg-row.assistant + .msg-row.assistant {
+        margin-top: -5px;
     }
     .thread-intro {
         margin: 8px auto 12px;
@@ -4659,20 +5168,17 @@ body.sb-collapsed .btn-menu {
     }
     .bubble {
         max-width: 100%;
-        padding: 8px 14px;
-        border-radius: 20px;
+        padding: 7px 12px;
+        border-radius: 18px;
         font-size: 16px;
-        line-height: 1.45;
+        line-height: 1.35;
     }
     .bubble.tall {
         border-radius: 18px;
     }
-    .msg-row.user .bubble {
-        background: var(--accent);
-        color: #fff;
-    }
-    .msg-row.user .bubble .bubble-text {
-        color: #fff;
+    .msg-row.assistant .bubble .md {
+        font-size: 16px;
+        line-height: 1.45;
     }
     .msg-atts {
         gap: 8px;
@@ -4684,9 +5190,6 @@ body.sb-collapsed .btn-menu {
     .msg-atts .file-attachment {
         width: 104px;
         height: 104px;
-    }
-    .msg-actions {
-        display: none;
     }
     .code-copy {
         width: 44px;
@@ -4723,7 +5226,7 @@ body.sb-collapsed .btn-menu {
 
     /* 키보드와 safe-area를 고려한 하단 입력 바: 유리 바 그대로 사용 */
     #composerWrap {
-        padding: 4px 24px 24px;
+        padding: 4px 10px 24px;
     }
     #composer {
         width: 100%;
@@ -4774,73 +5277,207 @@ body.sb-collapsed .btn-menu {
         box-shadow: none;
     }
 
-    /* 설정 페이지: 베이스 규칙 + 모바일 헤더/탭 조정 */
+    /* 설정(iOS): 목록 화면과 상세 화면 중 하나만 보인다. 상세는 목록 위로 오른쪽에서 밀려 들어온다 */
+    .sp-view[data-view="root"] .sp-body,
+    .sp-view[data-view="detail"] .sp-nav {
+        display: none;
+    }
+    .sp-view.sp-in-right,
+    .sp-view.sp-out-right,
+    .sp-view.sp-lifted {
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.35);
+    }
+    .sp-view.sp-in-right {
+        animation: spInRight var(--nav-dur) var(--nav-ease) both;
+    }
+    .sp-view.sp-out-left {
+        animation: spOutLeft var(--nav-dur) var(--nav-ease) both;
+    }
+    .sp-view.sp-in-left {
+        animation: spInLeft var(--nav-dur) var(--nav-ease) both;
+    }
+    .sp-view.sp-out-right {
+        animation: spOutRight var(--nav-dur) var(--nav-ease) both;
+    }
+    .sp-view.sp-leaving {
+        pointer-events: none;
+    }
+    @keyframes spInRight {
+        from {
+            transform: translateX(100%);
+        }
+    }
+    @keyframes spOutLeft {
+        to {
+            transform: translateX(-30%);
+        }
+    }
+    @keyframes spInLeft {
+        from {
+            transform: translateX(-30%);
+        }
+    }
+    @keyframes spOutRight {
+        to {
+            transform: translateX(100%);
+        }
+    }
     .sp-head {
-        min-height: 56px;
-        height: auto;
-        /* padding: 6px 12px 6px 16px; */
-        padding: 6px;
+        height: var(--hdr-h);
+        padding: env(safe-area-inset-top) 12px 0;
     }
     .sp-back {
-        display: inline-flex;
+        display: grid;
+    }
+    .sp-title {
+        position: absolute;
+        right: 64px;
+        bottom: 0;
+        left: 64px;
+        font-size: 17px;
+        line-height: 52px;
+        letter-spacing: -0.4px;
+        text-align: center;
     }
     .sp-main {
         flex-direction: column;
     }
     .sp-nav {
-        display: flex;
+        flex: 1;
+        gap: var(--sp-5);
         width: 100%;
-        height: 54px;
-        padding: 5px 8px;
-        gap: 4px;
+        min-height: 0;
+        padding: calc(var(--hdr-h) + 12px) 16px calc(28px + env(safe-area-inset-bottom));
         border-right: 0;
-        border-bottom: 1px solid var(--border);
-        overflow-x: auto;
-        overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
     }
-    .sp-nav .sb-row {
-        width: auto;
-        min-width: max-content;
-        height: 44px;
-        min-height: 44px;
-        padding: 0 12px;
-        border-radius: 12px;
+    .sp-nav-group,
+    .set-group,
+    .provider-list,
+    .models-list,
+    .folder-agents {
+        border-radius: 22px;
+    }
+    .sp-nav-group {
+        gap: 0;
+        background: var(--group-bg);
+        overflow: hidden;
+    }
+    .sp-nav-head {
+        margin-bottom: -14px;
+        padding: 0 16px;
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--text-secondary);
+    }
+    .sp-item {
+        position: relative;
+        gap: 12px;
+        height: 48px;
+        padding: 0 14px;
+        border-radius: 0;
+        font-size: 17px;
+        letter-spacing: -0.2px;
         touch-action: manipulation;
+        transition: background-color 320ms var(--ease);
     }
-    .sp-nav .sb-row.active {
-        background: var(--surface-3);
+    .sp-item.active {
+        background: none;
+        color: var(--text);
     }
-    .sp-nav .divider {
-        display: none;
+    .sp-item.accent,
+    .sp-item.active.accent {
+        color: var(--accent);
+    }
+    .sp-item.active .sp-tile.plain {
+        color: var(--accent);
+    }
+    .sp-item:active,
+    .sp-item.active:active {
+        background: var(--fill);
+        transition: none;
+    }
+    .sp-item + .sp-item::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 56px;
+        border-top: var(--hairline) solid var(--separator);
+    }
+    .sp-item-chev {
+        display: block;
+        flex: none;
+        width: 15px;
+        height: 15px;
+        color: var(--text-tertiary);
+        transform: rotate(-90deg);
+    }
+    .sp-tile {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+    .sp-tile .icon {
+        width: 19px;
+        height: 19px;
+    }
+    .sp-tile.plain .icon {
+        width: 22px;
+        height: 22px;
     }
     .sp-body {
-        padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
+        padding: calc(var(--hdr-h) + 12px) 16px calc(28px + env(safe-area-inset-bottom));
         -webkit-overflow-scrolling: touch;
     }
+    /* 편집 폼의 제목과 닫기는 탐색 바(제목·뒤로 버튼)가 맡는다 */
+    .sp-body .form-head {
+        display: none;
+    }
     .set-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(132px, 48%);
-        min-height: 52px;
-        height: auto;
+        min-height: 44px;
         gap: 12px;
     }
+    .set-group > .set-row,
+    .set-group > .ext-row {
+        min-height: 44px;
+        padding: 0 16px;
+    }
+    /* 이름 아래에 설명이 붙는 두 줄짜리 행은 위아래 숨 쉴 틈을 준다 */
+    .set-group > .set-row:has(.set-desc),
+    .set-group > .ext-row {
+        padding-block: 8px;
+    }
+    .set-group > * + *::before {
+        left: 16px;
+    }
     .set-row:has(.key-wrap) {
-        grid-template-columns: auto minmax(0, 1fr);
-        padding: 8px 0;
+        padding-block: 8px;
     }
     .set-label {
         min-width: 0;
-        line-height: 1.35;
+        font-size: 17px;
+        line-height: 1.3;
+        letter-spacing: -0.2px;
         overflow-wrap: anywhere;
+    }
+    .set-desc {
+        font-size: 13px;
+    }
+    .set-section > .set-desc,
+    .set-section > .field-label,
+    .agent-editor > .set-desc,
+    .sp-body .field > .field-label,
+    .set-warn {
+        padding-inline: 16px;
+        font-size: 13px;
     }
     .set-row:has(.key-wrap) .set-label {
         line-height: 44px;
     }
     .set-control {
-        width: 100%;
         min-width: 0;
-        flex: none;
         justify-content: flex-end;
     }
     .input,
@@ -4848,39 +5485,78 @@ body.sb-collapsed .btn-menu {
     .select-wrap select,
     .textarea {
         min-height: 44px;
-        font-size: 16px;
+        font-size: 17px;
     }
-    .select-wrap {
-        width: 100%;
+    .sp-body .field > .input,
+    .sp-body .field > .textarea,
+    .sp-body .field > .key-row > .input,
+    .sp-body .field > .select-wrap select,
+    .sp-body .models-panel > .input,
+    .sp-body .adv-panel > .textarea,
+    .sp-body .env-row > .input {
+        padding: 8px 16px;
+        border-radius: 22px;
     }
+    .sp-body .field > .set-desc,
+    .sp-body .adv-panel > .set-desc,
+    .sp-body .adv-panel > .field-label,
+    .sp-body .env-head > .field-label,
+    .sp-body .onb-error,
+    .sp-body .form-head,
+    .sp-body .empty-note {
+        padding-inline: 16px;
+    }
+    .sp-body .adv-panel > .field-label {
+        font-size: 13px;
+    }
+    .sp-body .nt-history {
+        padding-inline: 16px;
+        border-radius: 22px;
+    }
+    .ext-actions .btn:last-child {
+        min-width: 64px;
+    }
+    /* 크기 조절 손잡이가 둥근 모서리에 걸린다. 터치에서는 쓸 일도 없다 */
     .textarea {
         min-height: 96px;
+        resize: none;
     }
     .switch {
-        position: relative;
-        width: 44px;
-        height: 44px;
-    }
-    .switch .tr {
-        top: 8px;
-        right: 0;
-        bottom: auto;
-        left: 0;
-        height: 28px;
+        width: 51px;
+        height: 31px;
     }
     .switch .kn {
-        top: 10px;
-        width: 24px;
-        height: 24px;
+        width: 27px;
+        height: 27px;
     }
     .switch input:checked ~ .kn {
-        transform: translateX(16px);
+        transform: translateX(20px);
+    }
+    /* 누르고 있는 동안 손잡이가 옆으로 늘어난다 */
+    .switch:active .kn {
+        width: 33px;
+    }
+    .switch:active input:checked ~ .kn {
+        transform: translateX(14px);
+    }
+    .provider-card {
+        min-height: 44px;
+        padding: 0 16px;
+        touch-action: manipulation;
+    }
+    .provider-card + .provider-card::before {
+        left: 16px;
+    }
+    .provider-name {
+        font-size: 17px;
+    }
+    .models-list .radio-row {
+        padding-inline: 16px;
     }
     .radio-row,
-    .provider-card,
     .agent-head {
-        min-height: 52px;
-        padding: 10px 12px;
+        min-height: 44px;
+        padding: 6px 12px;
         touch-action: manipulation;
     }
     .provider-name,
@@ -4897,13 +5573,15 @@ body.sb-collapsed .btn-menu {
     .onb-wrap {
         padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
     }
+    .onb-content > .select-wrap {
+        width: 100%;
+    }
     .onb-title {
         font-size: 22px;
     }
     .btn {
         min-height: 44px;
     }
-    .sp-head .btn-icon,
     .key-row .btn-icon,
     .chip .chip-x {
         width: 44px;
@@ -4948,8 +5626,7 @@ body.sb-collapsed .btn-menu {
     .sb-row-action:hover {
         color: var(--text-tertiary);
     }
-    .file-attachment:hover,
-    .provider-card:hover {
+    .file-attachment:hover {
         border-color: var(--border);
     }
     .md a:hover {
@@ -4960,7 +5637,6 @@ body.sb-collapsed .btn-menu {
         background: transparent;
     }
     .ask-opt:hover:not(:disabled) {
-        border-color: var(--border);
         color: inherit;
     }
     .chip .chip-x:hover {
@@ -4987,52 +5663,430 @@ body.sb-collapsed .btn-menu {
         display: none;
     }
 
-    .td-chip {
-        height: 36px;
-        padding: 0 14px;
+    /* ── 할 일(모바일): 묶음 목록. 행을 누르면 상세 화면이 오른쪽에서 밀려 들어온다 ── */
+    .td-sec {
+        margin-bottom: var(--sp-5);
     }
+    .td-sec-head {
+        padding: 0 16px;
+    }
+    .td-sec-title {
+        font-size: 20px;
+        letter-spacing: -0.4px;
+    }
+    .td-sec-count {
+        font-size: 15px;
+        font-weight: 400;
+        color: var(--text-secondary);
+    }
+    .td-card {
+        border-radius: 22px;
+        background: var(--group-bg);
+        overflow: hidden;
+    }
+    /* 빈 섹션도 다른 섹션과 같은 묶음 판에 담는다(회색 글자만 떠 있지 않게) */
+    .td-empty {
+        padding: 13px 16px;
+        border-radius: 22px;
+        background: var(--group-bg);
+        font-size: 15px;
+        line-height: 1.4;
+        color: var(--text-secondary);
+    }
+    /* 할 일 화면의 헤더에는 제목만 둔다(아바타와 컴퓨터 버튼은 채팅에서만 뜻이 있다) */
+    body.todos-route #btnHdrComputer,
+    body.todos-route .hdr-avatar {
+        display: none;
+    }
+    .td-row {
+        gap: 2px;
+        padding: 0 16px 0 6px;
+        transition: background-color 320ms var(--ease);
+    }
+    .td-row:hover {
+        background: transparent;
+    }
+    .td-row:active {
+        background: var(--fill);
+        transition: none;
+    }
+    .td-row-title {
+        font-size: 17px;
+        letter-spacing: -0.2px;
+    }
+    /* 줄이 바뀔 때 구분점이 줄 끝에 매달리지 않게, 점 대신 간격으로 나눈다 */
+    .td-row-meta {
+        gap: 2px 10px;
+        font-size: 14px;
+    }
+    .td-row-meta .td-sep {
+        display: none;
+    }
+    /* 상세로 들어가는 행이므로 꺾쇠는 오른쪽을 가리킨다 */
+    .td-edit-cue {
+        align-self: center;
+        height: auto;
+        margin-top: 0;
+        color: var(--text-tertiary);
+        opacity: 1;
+    }
+    .td-edit-cue .icon {
+        transform: rotate(-90deg);
+    }
+    /* 체크 원(일시정지 버튼도 같다)의 가운데를 제목 첫 줄의 가운데에 맞춘다:
+       제목은 위 여백 13px + 줄 높이 24px의 절반, 버튼은 40px 상자의 절반. */
     .td-check {
         width: 40px;
         height: 40px;
-        margin-top: 4px;
+        margin-top: 3px;
     }
-    .td-row.is-editing {
-        padding-top: 4px;
+    /* 체크 원: iOS 미리 알림처럼 조금 크고 또렷한 테두리 */
+    .td-check::before {
+        width: 22px;
+        height: 22px;
+        border: 1.5px solid var(--text-tertiary);
     }
-    .td-edit-title {
-        padding-top: 8px;
+    .td-check.on::before {
+        border-color: transparent;
     }
-    .td-edit-head .td-hand-wrap {
-        margin-top: 4px;
-    }
-    .td-edit-body {
-        padding-left: 44px;
+    .td-check .icon {
+        width: 12px;
+        height: 12px;
     }
     .td-row + .td-row:not(.is-editing)::before {
-        left: 52px;
+        left: 50px;
     }
     .td-done-btn {
-        padding: 10px 12px;
+        padding: 10px 16px;
     }
-    .td-input {
-        padding: 9px 12px;
-    }
-    .td-hand-item {
-        padding: 12px;
+    /* 묶음 사이의 작은 소제목("자동화")도 다른 머리말과 같은 자리에서 시작한다 */
+    .td-sub-label {
+        padding-inline: 12px;
     }
     .td-sug-actions .btn {
         min-height: 40px;
     }
-    .td-edit-foot {
-        position: sticky;
-        bottom: 0;
-        margin: 0 -14px -8px -8px;
-        padding: 10px 14px calc(10px + env(safe-area-inset-bottom)) 8px;
-        background: var(--surface-3);
+
+    /* 상세 화면(todos.js의 renderDetail): 문서 맨 위 층에 놓이고, 설정 화면과 같은 머리·묶음·전환을 쓴다.
+       화면이 떠 있는 동안 밑의 할 일 목록은 왼쪽으로 30% 물러나 있다. */
+    .td-detail-host {
+        --hdr-h: calc(52px + env(safe-area-inset-top));
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 0;
+        z-index: 110;
+        display: block;
+        height: var(--app-height);
+        overflow: hidden;
+        pointer-events: none;
     }
-    .td-card > .td-row.is-editing:last-child .td-edit-foot {
-        border-bottom-left-radius: var(--radius-l);
-        border-bottom-right-radius: var(--radius-l);
+    .td-detail-host[hidden] {
+        display: none;
+    }
+    body.mobile-chat.td-detail-open #main {
+        transform: translateX(-30%);
+    }
+    .td-view {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--grouped-bg);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.35);
+        pointer-events: auto;
+    }
+    .td-view.sp-in-right {
+        animation: spInRight var(--nav-dur) var(--nav-ease) both;
+    }
+    .td-view.sp-out-left {
+        animation: spOutLeft var(--nav-dur) var(--nav-ease) both;
+    }
+    .td-view.sp-in-left {
+        animation: spInLeft var(--nav-dur) var(--nav-ease) both;
+    }
+    .td-view.sp-out-right {
+        animation: spOutRight var(--nav-dur) var(--nav-ease) both;
+    }
+    .td-view.sp-leaving {
+        pointer-events: none;
+    }
+    .td-view-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-5);
+        padding: calc(var(--hdr-h) + 12px) 16px calc(28px + env(safe-area-inset-bottom));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+    .td-view-body > * {
+        flex: none;
+    }
+    /* 제목 칸: 체크 원 + 제목 입력 */
+    .td-title-group .td-edit-head {
+        align-items: center;
+        min-height: 48px;
+        padding: 0 16px 0 4px;
+    }
+    .td-title-group .td-check {
+        margin: 0;
+    }
+    .td-edit-title {
+        padding: 10px 0;
+        font-size: 17px;
+    }
+    .td-prompt-group .td-edit-prompt {
+        display: block;
+        padding: 12px 16px;
+        font-size: 16px;
+    }
+    /* 값이 오른쪽에 보이고 누르면 한 단계 더 들어가는 행 */
+    .td-nav-row {
+        width: 100%;
+        text-align: left;
+        transition: background-color 320ms var(--ease);
+    }
+    .td-nav-row:active {
+        background: var(--fill);
+        transition: none;
+    }
+    .td-nav-row .set-label {
+        flex: none;
+    }
+    .td-nav-val {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        font-size: 17px;
+        color: var(--text-secondary);
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .td-nav-chev {
+        flex: none;
+        width: 15px;
+        height: 15px;
+        margin-left: -4px;
+        color: var(--text-tertiary);
+        transform: rotate(-90deg);
+    }
+    /* 동작 행(지금 실행·삭제): 폭을 채운 한 줄짜리 묶음 */
+    .td-act-group .btn {
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+        border-radius: 0;
+        background: none;
+        font-size: 17px;
+        color: var(--accent);
+    }
+    .td-act-group .td-foot-del {
+        color: var(--danger);
+    }
+    .td-offers-group {
+        padding: 10px 16px;
+    }
+
+    /* 일정 화면: 고를 것들은 체크가 붙는 목록, 그에 딸린 값(시각·날짜·간격)은 그 아래 묶음 */
+    .td-view .td-when-editor {
+        gap: var(--sp-5);
+    }
+    .td-view .td-chips,
+    .td-view .td-hand-pop {
+        position: static;
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0;
+        min-width: 0;
+        max-width: none;
+        max-height: none;
+        padding: 0;
+        border: 0;
+        border-radius: 22px;
+        background: var(--group-bg);
+        box-shadow: none;
+        overflow: hidden;
+    }
+    .td-view .td-chip,
+    .td-view .td-hand-item {
+        position: relative;
+        justify-content: flex-start;
+        width: 100%;
+        height: auto;
+        min-height: 44px;
+        padding: 6px 16px;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        font-size: 17px;
+        color: var(--text);
+        text-align: left;
+        transform: none;
+    }
+    .td-view .td-chip:active,
+    .td-view .td-hand-item:active {
+        background: var(--fill);
+        transform: none;
+    }
+    .td-view .td-chip + .td-chip::before,
+    .td-view .td-hand-item + .td-hand-item::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 16px;
+        border-top: var(--hairline) solid var(--separator);
+    }
+    /* 고른 항목 오른쪽의 체크 표시 */
+    .td-view .td-chip.on::after,
+    .td-view .td-hand-item.on::after {
+        content: "";
+        flex: none;
+        width: 7px;
+        height: 13px;
+        margin: -3px 6px 0 auto;
+        border: solid var(--accent);
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+    .td-view .td-when-row {
+        min-height: 44px;
+        padding: 6px 16px;
+        border-radius: 22px;
+        background: var(--group-bg);
+    }
+    .td-view .td-input {
+        padding: 7px 12px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--fill);
+        font-size: 17px;
+    }
+    .td-view .td-cron-hint,
+    .td-view .td-tz-note,
+    .td-view .td-when-suffix {
+        font-size: 15px;
+        color: var(--text-secondary);
+    }
+    /* 담당 화면: 소제목은 묶음 안의 머리말처럼, 지금 담당은 맨 위 행으로 */
+    .td-view .td-hand-sec {
+        padding: 12px 16px 4px;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .td-view .td-hand-cur {
+        min-height: 44px;
+        margin: 0;
+        padding: 6px 16px;
+        border-bottom: var(--hairline) solid var(--separator);
+    }
+    .td-view .td-hand-cur .td-chip {
+        width: auto;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: var(--radius-pill);
+        background: var(--fill);
+        font-size: 15px;
+        color: var(--accent);
+    }
+    .td-view .td-offer-name {
+        font-size: 17px;
+        font-weight: 400;
+    }
+    .td-view .td-offer-reason {
+        font-size: 13px;
+    }
+
+    /* ── 온보딩(모바일): 왼쪽 위에 뒤로, 오른쪽 위에 나중에 하기, 아래에 폭을 채운 다음 버튼 ── */
+    .onb-page {
+        background: var(--grouped-bg);
+    }
+    .onb-wrap {
+        position: relative;
+        padding: calc(env(safe-area-inset-top) + 64px) 16px calc(20px + env(safe-area-inset-bottom));
+    }
+    .onb-title {
+        margin-top: var(--sp-5);
+        padding-inline: 4px;
+        font-size: 28px;
+        letter-spacing: -0.6px;
+    }
+    .onb-desc {
+        padding-inline: 4px;
+        font-size: 15px;
+    }
+    .onb-content {
+        padding: var(--sp-5) 0;
+    }
+    .onb-actions {
+        display: block;
+    }
+    .onb-actions .spacer {
+        display: none;
+    }
+    .onb-actions .onb-go {
+        width: 100%;
+        min-height: 50px;
+        font-size: 17px;
+        font-weight: 600;
+    }
+    .onb-actions .onb-skip,
+    .onb-actions .onb-prev {
+        position: absolute;
+        top: calc(env(safe-area-inset-top) + 6px);
+    }
+    .onb-actions .onb-skip {
+        right: 6px;
+        min-height: 44px;
+        padding-inline: 10px;
+        background: none;
+        font-size: 17px;
+        color: var(--accent);
+    }
+    .onb-actions .onb-prev {
+        left: 12px;
+        display: grid;
+        place-items: center;
+        width: 40px;
+        min-height: 40px;
+        height: 40px;
+        margin-top: 2px;
+        padding: 0;
+        border-radius: 50%;
+        color: var(--text);
+        background: var(--glass);
+        box-shadow:
+            inset 0 0 0 var(--hairline) var(--glass-border),
+            inset 0 1px 0 var(--glass-shine);
+    }
+    .onb-prev .icon {
+        display: block;
+        width: 20px;
+        height: 20px;
+    }
+    .onb-prev span {
+        display: none;
+    }
+    /* 입력란과 선택 상자는 설정 화면의 묶음 한 칸과 같은 모양 */
+    .onb-page .input,
+    .onb-page .select-wrap select {
+        min-height: 48px;
+        padding: 8px 16px;
+        border-radius: 22px;
+        background: var(--group-bg);
+    }
+    .onb-page .select-wrap .icon {
+        right: 16px;
+    }
+    .onb-page .field > .field-label {
+        padding-inline: 16px;
+        font-size: 13px;
+        font-weight: 400;
     }
 }
 
@@ -5060,6 +6114,9 @@ body.computer-route #jumpLatest {
 
 /* 이름 옆에 나란히 붙는 상태 텍스트 (.hd-name-wrap 안에서 baseline 정렬) */
 .cp-status {
+    /* 자리가 모자라면 이름보다 상태 문구가 먼저 줄어든다 */
+    flex: 0 1000 auto;
+    min-width: 0;
     font-size: var(--fs-xs);
     color: var(--text-tertiary);
     white-space: nowrap;
@@ -5089,6 +6146,55 @@ body.computer-route #jumpLatest {
 .cp-tab.active {
     background: var(--surface-3);
     color: var(--text);
+}
+/* 모바일의 컴퓨터 화면: 채팅 위에 한 겹 올라오는 화면이다.
+   - 헤더 가운데의 이름 자리에 화면/터미널 전환 탭이 놓인다. 화면이 밀려 들어오고 나가는 동안 이름과 탭이
+     그 자리에서 서로 바뀌어 보인다(--gest-p: 화면이 밀려 나간 정도). 이름이 옆으로 튀지 않는다.
+   - 밑에 깔린 채팅은 보이지 않게만 해 둔다(display를 끄면 스크롤 위치를 잃어 돌아올 때 화면이 튄다). */
+@media (max-width: 860px) {
+    body.computer-route #scroller {
+        display: block;
+        visibility: hidden;
+    }
+    body.gest-inner.computer-route #scroller {
+        visibility: visible;
+    }
+    body.computer-route #hdrName {
+        opacity: 0;
+    }
+    body.gest-inner.computer-route #hdrName {
+        opacity: var(--gest-p, 0);
+    }
+    body.gest-settle.gest-inner #hdrName {
+        transition: opacity var(--nav-dur) var(--nav-ease);
+    }
+    body.computer-route .hdr-avatar {
+        margin-left: auto;
+    }
+    #header .cp-tabs {
+        position: absolute;
+        bottom: 8px;
+        left: 50%;
+        padding: 3px;
+        border-radius: 18px;
+        transform: translateX(-50%);
+    }
+    #header .cp-tab {
+        height: 30px;
+        padding: 0 16px;
+        border-radius: 15px;
+        font-size: 15px;
+    }
+    /* 상태 문구는 헤더 바로 밑 가운데에 작은 글자로 */
+    #header .cp-status {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        left: 0;
+        font-size: 12px;
+        text-align: center;
+        pointer-events: none;
+    }
 }
 
 .cp-pane {

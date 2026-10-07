@@ -187,12 +187,28 @@ export function sayTextsFromMessage(message) {
     return out;
 }
 
+// 미리보기 자리 표시 문자(사설 영역): 표·코드 블록·이미지. 클라이언트(markdown.js)가 아이콘으로 그린다.
+const PREVIEW_TABLE = "\uE000";
+const PREVIEW_CODE = "\uE001";
+const PREVIEW_IMAGE = "\uE002";
+// 표의 구분 행 한 칸(":---:" 등)과 구분 행 전체.
+const TABLE_CELL = "[ \\t]*:?-+:?[ \\t]*";
+const TABLE_DELIM = `(?:\\|${TABLE_CELL}(?:\\|${TABLE_CELL})*\\|?|${TABLE_CELL}(?:\\|${TABLE_CELL})+\\|?)`;
+const PREVIEW_TABLE_RE = new RegExp(`(^|\\n)[ \\t]*[^\\n]*\\|[^\\n]*\\n[ \\t]*${TABLE_DELIM}[ \\t]*(?=\\n|$)(?:\\n[ \\t]*[^\\n]*\\|[^\\n]*)*`, "g");
+
 export function stripMarkdownForPreview(text) {
     let s = String(text || "");
     if (!s) return "";
-    s = s.replace(/```[\s\S]*?```/g, " ");
+    // 한 줄에 옮기기 어려운 블록은 자리 표시 문자로 남긴다(목록에서 아이콘으로 그린다).
+    // 코드 블록: 줄 머리에서 시작하는 펜스만 잡는다(글 속에서 백틱 세 개를 언급한 것은 건드리지 않는다).
+    s = s.replace(/(^|\n)[ \t]*```[\s\S]*?(\n[ \t]*```|$)/g, `$1 ${PREVIEW_CODE} `);
+    // 표: 머리 행 + 구분 행 + 본문 행들. 구분 행은 파이프가 하나는 있어야 하고 줄 끝까지 구분 행이어야 한다
+    // (파이프가 든 문장 다음 줄의 "---"나 "--help"를 표로 잡지 않게).
+    s = s.replace(PREVIEW_TABLE_RE, `$1 ${PREVIEW_TABLE} `);
+    // 이미 한 줄로 펴져 저장된 표(예전 미리보기)
+    s = s.replace(/\|[^\n]*\|[ \t]*:?-{2,}:?[ \t]*\|[^\n]*/g, ` ${PREVIEW_TABLE} `);
     s = s.replace(/`([^`]+)`/g, "$1");
-    s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
+    s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ` ${PREVIEW_IMAGE} `);
     s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
     s = s.replace(/(\*\*|__)([^*_\n]+)\1/g, "$2");
     s = s.replace(/([*_])([^*_\n]+)\1/g, "$2");

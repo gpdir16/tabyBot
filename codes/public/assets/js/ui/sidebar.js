@@ -151,38 +151,70 @@
         return Number(state.state.convs.get(bot.uuid)?.meta?.unread) || 0;
     }
 
-    // 봇 행: 아바타 + 이름 + 대화 미리보기 + 실행중 점 + 안읽음 배지 + ⋯ 메뉴
+    // 목록 행의 시각: 메신저처럼 오늘이면 시:분, 엿새 안이면 요일, 그보다 오래되면 날짜만 쓴다.
+    function locale() {
+        const lang = T.i18n.getLang();
+        return lang === "ko" ? "ko-KR" : lang === "ja" ? "ja-JP" : "en-US";
+    }
+    // weekday=false: 검색 결과처럼 같은 주의 항목이 여러 줄 나오는 곳. 요일 대신 날짜를 써서 구별되게 한다.
+    function listTime(at, weekday = true) {
+        const ms = Date.parse(at || "");
+        if (!Number.isFinite(ms)) return "";
+        const d = new Date(ms);
+        const now = new Date();
+        const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+        const days = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+        try {
+            if (days <= 0) return new Intl.DateTimeFormat(locale(), { hour: "numeric", minute: "2-digit" }).format(d);
+            if (weekday && days < 7) return new Intl.DateTimeFormat(locale(), { weekday: "short" }).format(d);
+            const sameYear = d.getFullYear() === now.getFullYear();
+            return new Intl.DateTimeFormat(
+                locale(),
+                sameYear ? { month: "numeric", day: "numeric" } : { year: "2-digit", month: "numeric", day: "numeric" },
+            ).format(d);
+        } catch {
+            return "";
+        }
+    }
+
+    // 봇 행: 아바타 + (이름 · 시각) + (대화 미리보기 · 안읽음 배지)
     function buildRow(bot) {
         const live = state.conv(bot.uuid)?.live;
         const preview = previewOf(bot);
         const unread = unreadOf(bot);
         const empty = !preview;
         const previewText = empty ? t("botNoJob") : preview;
+        const time = empty ? "" : listTime(recencyOf(bot));
         const row = T.h(
             "div",
             {
                 class: "bot-row" + (state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""),
                 "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? "true" : null,
                 role: "button",
-                "aria-label": `${bot.name}. ${previewText}`.trim(),
+                "aria-label": `${bot.name}. ${T.md.previewPlain(previewText)}`.trim(),
                 tabindex: "0",
             },
             [
-                T.h("span", { class: "bot-avatar", text: initials(bot.name), style: `background:${safeColor(bot.color)}` }),
+                T.h("span", { class: "bot-avatar", text: initials(bot.name), style: `background-color:${safeColor(bot.color)}` }),
                 T.h("span", { class: "bot-meta" }, [
-                    T.h("span", { class: "bot-name" }, [
-                        document.createTextNode(bot.name),
-                        live ? T.h("span", { class: "live-dot", role: "status", "aria-label": T.i18n.t("runningState") }) : null,
+                    T.h("span", { class: "bot-line" }, [
+                        T.h("span", { class: "bot-name" }, [
+                            T.h("span", { class: "bot-name-text", text: bot.name }),
+                            live ? T.h("span", { class: "live-dot", role: "status", "aria-label": T.i18n.t("runningState") }) : null,
+                        ]),
+                        time ? T.h("span", { class: "bot-time", text: time }) : null,
                     ]),
-                    T.h("span", { class: "bot-persona" + (empty ? " is-empty" : ""), text: previewText }),
+                    T.h("span", { class: "bot-line" }, [
+                        T.h("span", { class: "bot-persona" + (live ? " is-live" : "") }, T.md.previewNodes(previewText)),
+                        unread
+                            ? T.h("span", {
+                                  class: "bot-unread",
+                                  text: unread > 99 ? "99+" : String(unread),
+                                  "aria-label": t("unreadCount", { n: unread }),
+                              })
+                            : null,
+                    ]),
                 ]),
-                unread
-                    ? T.h("span", {
-                          class: "bot-unread",
-                          text: unread > 99 ? "99+" : String(unread),
-                          "aria-label": t("unreadCount", { n: unread }),
-                      })
-                    : null,
             ],
         );
         // 우클릭/길게 누르기 메뉴: 메신저처럼 행에 따로 ⋯ 버튼을 두지 않는다.
@@ -216,7 +248,7 @@
             setIcon(menuBtn, "menu");
             return;
         }
-        setIcon(menuBtn, chatOpen ? "arrow-left" : "menu");
+        setIcon(menuBtn, chatOpen ? "chevron-left" : "menu");
         menuBtn.setAttribute("data-tip", t(chatOpen ? "back" : "menu"));
         menuBtn.setAttribute("aria-label", t(chatOpen ? "back" : "menu"));
         menuBtn.setAttribute("aria-expanded", "false");
@@ -234,7 +266,8 @@
         setMobileOpen(false);
         syncMobileNavigation();
         if (activeInHiddenPanel) {
-            requestAnimationFrame(() => (chatOpen ? menuBtn : searchEl)?.focus({ preventScroll: true }));
+            // 목록으로 돌아올 때는 포커스를 풀기만 한다. 검색란에 포커스를 주면 접혀 있던 검색 바가 열린다.
+            requestAnimationFrame(() => (chatOpen ? menuBtn?.focus({ preventScroll: true }) : document.activeElement?.blur?.()));
         }
         if (instant) requestAnimationFrame(() => document.body.classList.remove("mobile-route-sync"));
     }
@@ -242,12 +275,12 @@
     function showMobileList() {
         if (!isMobile()) return;
         setMobileChat(false);
-        if (/^(\/a\/|\/s\/|\/t(?:\/|$))/.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
+        if (/^(\/a\/|\/s(?:\/|$)|\/t(?:\/|$))/.test(location.pathname)) history.replaceState(null, "", "/" + location.search + location.hash);
         T.app?.renderRoute();
     }
 
     function setMobileChatFromRoute() {
-        if (isMobile()) setMobileChat(/^(\/a\/|\/s\/|\/c\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
+        if (isMobile()) setMobileChat(/^(\/a\/|\/s(?:\/|$)|\/c\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
     }
 
     function setMobileOpen(open) {
@@ -380,11 +413,13 @@
             [
                 T.h("span", { class: "bot-avatar todo-avatar" }, [T.icon("list", "icon-sm")]),
                 T.h("span", { class: "bot-meta" }, [
-                    T.h("span", { class: "bot-name" }, [
-                        document.createTextNode(t("todos")),
-                        pending ? T.h("span", { class: "attn-dot", "aria-hidden": "true" }) : null,
+                    T.h("span", { class: "bot-line" }, [
+                        T.h("span", { class: "bot-name" }, [
+                            T.h("span", { class: "bot-name-text", text: t("todos") }),
+                            pending ? T.h("span", { class: "attn-dot", "aria-hidden": "true" }) : null,
+                        ]),
                     ]),
-                    T.h("span", { class: "bot-persona" + (preview === t("todosNone") ? " is-empty" : ""), text: preview }),
+                    T.h("span", { class: "bot-line" }, [T.h("span", { class: "bot-persona", text: preview })]),
                 ]),
             ],
         );
@@ -419,15 +454,16 @@
     }
     // 폴더를 바꾼다. 탭 클릭·스와이프·가로 스크롤 모두 여기로 온다.
     // 새 목록이 넘어간 방향(오른쪽 탭이면 오른쪽)에서 미끄러져 들어온다.
-    function setActiveFolder(id) {
+    // slide=false: 손가락으로 밀어 넘길 때. 목록이 이미 손가락을 따라 들어왔으므로 애니메이션을 다시 틀지 않는다.
+    function setActiveFolder(id, slide = true) {
         const order = ["", ...(state.state.folders || []).map((f) => f.id)];
         const dir = order.indexOf(id || "") - order.indexOf(activeFolderId());
         lsSet(ACTIVE_TAB_KEY, id || "");
-        render();
+        render(true);
         listEl.style.transition = "";
         listEl.style.transform = "";
         listEl.classList.remove("slide-next", "slide-prev");
-        if (!dir) return;
+        if (!dir || !slide) return;
         void listEl.offsetWidth;
         listEl.classList.add(dir > 0 ? "slide-next" : "slide-prev");
     }
@@ -515,10 +551,32 @@
         const SWIPE_LOCK_PX = 10; // 방향을 정하는 최소 이동
         const SWIPE_COMMIT_PX = 64; // 이만큼 밀면 넘어간다
         const SWIPE_FLICK_PX_MS = 0.45; // 빠르게 튕기면 짧은 거리도 인정
+        const SETTLE_MS = 260;
+        const SETTLE = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1)`;
         let sw = null;
+        // 미는 동안 옆 폴더의 목록을 담아 지금 목록 바로 옆에 붙여 두는 층. 손가락을 따라 같이 움직인다.
+        let ghost = null; // { el, dir }
+        let settleTimer = 0;
+        const dropGhost = () => {
+            clearTimeout(settleTimer);
+            ghost?.el.remove();
+            ghost = null;
+            listEl.style.transition = "";
+            listEl.style.transform = "";
+        };
+        const fillGhost = (dir, folderId) => {
+            if (ghost?.dir === dir) return;
+            ghost?.el.remove();
+            const el = T.h("div", { class: "sb-scroll sb-ghost", "aria-hidden": "true" }, listRows(folderId));
+            el.style.top = `${listEl.offsetTop}px`;
+            el.style.height = `${listEl.offsetHeight}px`;
+            sidebarEl.append(el);
+            ghost = { el, dir };
+        };
         listEl.addEventListener(
             "touchstart",
             (e) => {
+                dropGhost(); // 자리 잡는 중에 다시 만지면 그 자리에서 끝낸다
                 sw = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: e.timeStamp, lock: null, dx: 0 } : null;
             },
             { passive: true },
@@ -535,11 +593,20 @@
                 }
                 if (sw.lock !== "x") return;
                 sw.dx = dx;
-                // 손가락을 따라 움직인다. 넘어갈 폴더가 없는 방향은 뻑뻑하게(고무줄).
-                const open = neighborFolder(dx < 0 ? 1 : -1) !== null;
+                const dir = dx < 0 ? 1 : -1;
+                const next = neighborFolder(dir);
                 listEl.classList.remove("slide-next", "slide-prev");
                 listEl.style.transition = "none";
-                listEl.style.transform = `translateX(${open ? dx : dx * 0.2}px)`;
+                if (next === null) {
+                    // 넘어갈 폴더가 없는 방향은 뻑뻑하게(고무줄) 조금만 따라온다.
+                    ghost?.el.remove();
+                    ghost = null;
+                    listEl.style.transform = `translateX(${dx * 0.2}px)`;
+                    return;
+                }
+                fillGhost(dir, next);
+                listEl.style.transform = `translateX(${dx}px)`;
+                ghost.el.style.transform = `translateX(${dx + dir * listEl.offsetWidth}px)`;
             },
             { passive: true },
         );
@@ -548,11 +615,39 @@
             sw = null;
             if (!cur || cur.lock !== "x") return;
             const dir = cur.dx < 0 ? 1 : -1;
+            const w = listEl.offsetWidth;
             const speed = Math.abs(cur.dx) / Math.max(1, e.timeStamp - cur.at);
             const commit = e.type === "touchend" && (Math.abs(cur.dx) > SWIPE_COMMIT_PX || (speed > SWIPE_FLICK_PX_MS && Math.abs(cur.dx) > 24));
-            if (commit && stepFolder(dir)) return;
-            listEl.style.transition = "transform 200ms var(--ease)";
-            listEl.style.transform = "";
+            const next = commit && ghost ? neighborFolder(dir) : null;
+            if (next === null) {
+                // 취소: 둘 다 제자리로 돌아간다.
+                listEl.style.transition = SETTLE;
+                listEl.style.transform = "";
+                if (ghost) {
+                    ghost.el.style.transition = SETTLE;
+                    ghost.el.style.transform = `translateX(${dir * w}px)`;
+                }
+                settleTimer = setTimeout(dropGhost, SETTLE_MS);
+                return;
+            }
+            // 넘어간다: 폴더를 바로 바꾸고(탭 밑줄이 같이 움직인다), 실제 목록은 들어오던 자리에서 이어서
+            // 들어오게 한다. 임시 층에는 떠나는 폴더의 목록을 담아 반대쪽으로 밀어 낸다.
+            // 새 목록은 미는 동안 보이던 대로 맨 위에서, 떠나는 목록은 보던 위치 그대로 나간다.
+            const from = activeFolderId();
+            const fromTop = listEl.scrollTop;
+            setActiveFolder(next, false);
+            listEl.scrollTop = 0;
+            ghost.el.replaceChildren(...listRows(from));
+            ghost.el.scrollTop = fromTop;
+            ghost.el.style.transform = `translateX(${cur.dx}px)`;
+            listEl.style.transition = "none";
+            listEl.style.transform = `translateX(${cur.dx + dir * w}px)`;
+            void listEl.offsetWidth;
+            listEl.style.transition = SETTLE;
+            listEl.style.transform = "translateX(0)";
+            ghost.el.style.transition = SETTLE;
+            ghost.el.style.transform = `translateX(${-dir * w}px)`;
+            settleTimer = setTimeout(dropGhost, SETTLE_MS);
         };
         listEl.addEventListener("touchend", end, { passive: true });
         listEl.addEventListener("touchcancel", end, { passive: true });
@@ -639,17 +734,6 @@
     }
 
     // 검색 히트 행: 에이전트 아바타 + 이름/시각 + 매치 스니펫
-    function hitTime(at) {
-        const ms = Date.parse(at || "");
-        if (!Number.isFinite(ms)) return "";
-        try {
-            const loc = T.i18n.getLang() === "ko" ? "ko-KR" : T.i18n.getLang() === "ja" ? "ja-JP" : "en-US";
-            return new Intl.DateTimeFormat(loc, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
-        } catch {
-            return "";
-        }
-    }
-
     function hitSnippetEl(hit) {
         const el = T.h("span", { class: "bot-persona sb-hit-snippet" });
         const s = String(hit.snippet || "");
@@ -668,14 +752,14 @@
 
     function buildHitRow(hit) {
         const bot = state.botByUuid(hit.conversationId);
-        const row = T.h("div", { class: "bot-row sb-hit", role: "button", tabindex: "0" }, [
-            T.h("span", { class: "bot-avatar", text: initials(bot?.name || "?"), style: `background:${safeColor(bot?.color)}` }),
+        const row = T.h("div", { class: "bot-row", role: "button", tabindex: "0" }, [
+            T.h("span", { class: "bot-avatar", text: initials(bot?.name || "?"), style: `background-color:${safeColor(bot?.color)}` }),
             T.h("span", { class: "bot-meta" }, [
-                T.h("span", { class: "bot-name" }, [
-                    document.createTextNode(bot?.name || ""),
-                    T.h("span", { class: "sb-hit-time", text: hitTime(hit.at) }),
+                T.h("span", { class: "bot-line" }, [
+                    T.h("span", { class: "bot-name" }, [T.h("span", { class: "bot-name-text", text: bot?.name || "" })]),
+                    T.h("span", { class: "bot-time", text: listTime(hit.at, false) }),
                 ]),
-                hitSnippetEl(hit),
+                T.h("span", { class: "bot-line" }, [hitSnippetEl(hit)]),
             ]),
         ]);
         const go = () => {
@@ -693,25 +777,113 @@
     }
 
     /* ── 렌더 ───────────────────────────────────────────────── */
-    // 폴더 탭이 활성이면 그 폴더 소속만 보여 준다. 검색 중에는 폴더와 무관하게 전체 결과를 보여 준다.
-    function render() {
-        if (!listEl) return;
-        listEl.replaceChildren();
-        renderTabs();
+    // 한 폴더("": 전체)의 목록 행들. 폴더를 미는 동안 옆 폴더를 미리 그릴 때도 쓴다.
+    function listRows(active) {
+        const rows = [];
         // 최근 메시지 순: 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
         const bots = state.state.bots.filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
-        const active = query ? "" : activeFolderId();
         const shown = active ? bots.filter((b) => folderOf(b) === active) : allExcludesFoldered() ? bots.filter((b) => !folderOf(b)) : bots;
-        for (const bot of shown) listEl.append(buildRow(bot));
-        if ((!active || query) && todosVisible()) listEl.append(buildTodosRow());
+        for (const bot of shown) rows.push(buildRow(bot));
+        if ((!active || query) && todosVisible()) rows.push(buildTodosRow());
         if (query && msgResults?.length) {
-            listEl.append(T.h("div", { class: "sb-sec", text: t("searchMsgs") }));
-            for (const hit of msgResults) listEl.append(buildHitRow(hit));
+            rows.push(T.h("div", { class: "sb-sec", text: t("searchMsgs") }));
+            for (const hit of msgResults) rows.push(buildHitRow(hit));
         }
-        if (!listEl.children.length) {
-            listEl.append(T.h("div", { class: "sb-empty", text: t("noBots") }));
+        if (!rows.length) rows.push(T.h("div", { class: "sb-empty", text: t("noBots") }));
+        return rows;
+    }
+
+    // 폴더 탭이 활성이면 그 폴더 소속만 보여 준다. 검색 중에는 폴더와 무관하게 전체 결과를 보여 준다.
+    // 손가락이 목록에 닿아 있는 동안에는 미뤘다가 떼면 그린다: 행을 갈아 끼우면 터치가 시작된 행이
+    // 떨어져 나가 이후의 움직임이 전달되지 않는다(폴더 넘기기·당겨서 검색·길게 누르기가 그 자리에서 멈춘다).
+    let listTouching = false;
+    let renderPending = false;
+    function render(force) {
+        if (!listEl) return;
+        if (listTouching && !force) {
+            renderPending = true;
+            return;
         }
+        renderPending = false;
+        renderTabs();
+        listEl.replaceChildren(...listRows(query ? "" : activeFolderId()));
+    }
+    function initTouchDefer() {
+        const release = (e) => {
+            if (e.touches.length) return;
+            listTouching = false;
+            if (renderPending) render();
+        };
+        listEl.addEventListener("touchstart", () => (listTouching = true), { passive: true });
+        // 문서의 캡처 단계에서 받는다: 뒤로/앞으로 제스처(gestures.js)가 전파를 막아도 놓치지 않는다.
+        document.addEventListener("touchend", release, { passive: true, capture: true });
+        document.addEventListener("touchcancel", release, { passive: true, capture: true });
+    }
+
+    /* 모바일 검색 바: 평소에는 접혀 있다. 목록 맨 위에서 아래로 당기거나 떠 있는 검색 버튼을 누르면
+       탐색 바 밑에 나타나고, 빈 채로 목록을 올리거나 닫기 버튼을 누르면 다시 접힌다. */
+    function initMobileSearch() {
+        const PULL_PX = 36; // 이만큼 당기거나 올리면 열고 닫는다
+        const closeBtn = document.getElementById("btnSearchClose");
+        const fab = document.getElementById("btnSearchFab");
+        const setSearching = (on) => {
+            sidebarEl.classList.toggle("searching", on);
+            closeBtn.hidden = !on;
+        };
+        const idle = () => !searchEl.value && document.activeElement !== searchEl;
+
+        searchEl.addEventListener("focus", () => {
+            if (isMobile()) setSearching(true);
+        });
+        // 빈 채로 포커스를 잃으면 접는다(다른 화면에 다녀와도 빈 검색 바가 열려 있지 않게).
+        searchEl.addEventListener("blur", () => {
+            if (!searchEl.value) setSearching(false);
+        });
+        fab.addEventListener("click", () => {
+            setSearching(true);
+            // 누른 그 자리에서 포커스를 줘야 iOS가 키보드를 올린다.
+            searchEl.focus();
+        });
+        // 닫기 버튼이 포커스를 가져가지 않게 해서, 누르는 순간 입력란이 먼저 흐려지는 일을 막는다.
+        closeBtn.addEventListener("pointerdown", (e) => e.preventDefault());
+        closeBtn.addEventListener("click", () => {
+            searchEl.value = "";
+            searchEl.dispatchEvent(new Event("input"));
+            searchEl.blur();
+            setSearching(false);
+        });
+
+        let pull = null;
+        listEl.addEventListener(
+            "touchstart",
+            (e) => {
+                pull = e.touches.length === 1 ? { y: e.touches[0].clientY, x: e.touches[0].clientX, top: listEl.scrollTop, axis: null } : null;
+            },
+            { passive: true },
+        );
+        listEl.addEventListener(
+            "touchmove",
+            (e) => {
+                if (!pull || !isMobile()) return;
+                const dy = e.touches[0].clientY - pull.y;
+                const dx = e.touches[0].clientX - pull.x;
+                // 처음 움직인 방향으로 정한다. 좌우 밀기(폴더 전환)로 시작했으면 손가락이 위아래로 흘러도 무시한다.
+                if (pull.axis === null && Math.max(Math.abs(dx), Math.abs(dy)) > 10) pull.axis = Math.abs(dy) > Math.abs(dx) ? "y" : "x";
+                if (pull.axis !== "y") return;
+                const open = sidebarEl.classList.contains("searching");
+                // 목록을 넘기기 시작하면 키보드를 내린다.
+                if (open && document.activeElement === searchEl && Math.abs(dy) > PULL_PX) searchEl.blur();
+                if (!open && pull.top <= 0 && dy > PULL_PX) {
+                    setSearching(true);
+                    pull = null;
+                } else if (open && idle() && dy < -PULL_PX) {
+                    setSearching(false);
+                    pull = null;
+                }
+            },
+            { passive: true },
+        );
     }
 
     /* ── 사이드바 크기/축소 ────────────────────────────────── */
@@ -835,6 +1007,7 @@
             scheduleMsgSearch();
             render();
         });
+        initMobileSearch();
         document.addEventListener("keydown", (e) => {
             if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -875,6 +1048,7 @@
         if (tabsEl && window.ResizeObserver) new ResizeObserver(() => placeTabIndicator(false)).observe(tabsEl);
 
         initFolderSwipe();
+        initTouchDefer();
         initResize();
         renderConn();
         render();

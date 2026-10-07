@@ -53,8 +53,10 @@
         const vv = window.visualViewport;
         const height = Math.round(vv?.height || window.innerHeight);
         const changed = vvLastHeight && Math.abs(height - vvLastHeight) > 1;
+        // 키보드로 높이가 바뀌어도 채팅은 맨 아래 메시지가 제자리에 있게 아래쪽을 기준으로 잡는다.
+        // 대화 목록은 위쪽이 기준이라 건드리지 않는다(스크롤 위치가 그대로 남는다).
         const anchors = changed
-            ? [...document.querySelectorAll("#scroller, .sb-scroll")].map((el) => ({
+            ? [...document.querySelectorAll("#scroller")].map((el) => ({
                   el,
                   fromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
               }))

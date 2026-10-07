@@ -1,5 +1,8 @@
 /* tabyBot 웹 클라이언트: 설정 페이지.
-   경로 기반 라우팅(/s/<탭>, /s/agents/<id>)으로 현재 화면을 공유/복원한다.
+   경로 기반 라우팅(/s, /s/<탭>, /s/agents/<id>)으로 현재 화면을 공유/복원한다.
+   모바일은 iOS 설정 앱 구조다: /s는 묶음 목록(root)이고, 항목을 누르면 상세 화면이 오른쪽에서 밀려 들어온다.
+   폴더·스킬·MCP의 편집 폼은 상세에서 한 단계 더 들어가는 화면이다(주소는 바뀌지 않는다).
+   데스크톱은 왼쪽에 같은 목록, 오른쪽에 상세를 나란히 둔다(root 화면이 따로 없다).
    변경은 즉시 PUT(낙관적 반영 + 실패 시 롤백 + 토스트).
    provider.apiKey는 쓰기 전용. 응답에 절대 포함되지 않는다. */
 (function (T) {
@@ -10,7 +13,15 @@
 
     const page = document.getElementById("settingsPage");
 
-    let openTab = null;
+    const mobileMq = window.matchMedia("(max-width: 860px)");
+    const isMobile = () => mobileMq.matches;
+    const VIEW_MS = 420; // 화면이 밀려 들어오고 나가는 시간(app.css의 --nav-dur와 같게)
+
+    let openTab = null; // "root"(모바일 목록) 또는 탭 id
+    let viewTimer = 0;
+    let viewBusy = false; // 화면이 밀려 움직이는 중(전환 애니메이션·뒤로 제스처). 이 동안에는 다시 그리지 않고 미뤄 둔다
+    let rebuildPending = false;
+    let rootScroll = 0; // 목록을 떠날 때의 스크롤 위치(돌아오면 되살린다)
     let returnPath = null; // 설정 진입 전 경로(닫을 때 돌아갈 페이지)
     let pushed = false; // open()에서 히스토리 항목을 push했는지
     let mobileFromList = false; // 모바일 목록 화면에서 열었는지
@@ -45,8 +56,9 @@
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
     const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
 
-    // 현재 경로를 설정 라우트로 해석한다. /s/가 아니면 null.
+    // 현재 경로를 설정 라우트로 해석한다. /s나 /s/…가 아니면 null.
     function routeFromPath() {
+        if (/^\/s\/?$/.test(location.pathname || "")) return { tab: "root", agentId: null };
         const m = /^\/s\/(general|folders|notices|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(
             location.pathname || "",
         );
@@ -63,6 +75,7 @@
 
     // 탭/에이전트를 /s/ 경로로 만든다.
     function pathFor(tab, agent) {
+        if (tab === "root") return "/s";
         if (tab === "agents") return "/s/agents/" + (agent === "__new__" ? "new" : agent);
         return "/s/" + (tab || "general");
     }
@@ -70,7 +83,7 @@
     // 탭/에이전트 전환: 현재 설정 페이지의 경로만 교체한다.
     function syncPath() {
         try {
-            history.replaceState(null, "", pathFor(openTab, editingAgent) + location.search + location.hash);
+            history.replaceState(history.state, "", pathFor(openTab, editingAgent) + location.search + location.hash);
         } catch (_) {}
     }
 
@@ -88,9 +101,12 @@
             tab = o.tab;
             agent = o.tab === "agents" ? o.agentId || firstAgentId() || "__new__" : null;
         } else {
-            tab = "general";
+            // 탭을 정하지 않고 열면 모바일은 목록, 데스크톱은 첫 탭이다.
+            tab = isMobile() ? "root" : "general";
             agent = null;
         }
+        // 설정이 닫혀 있다가 열리는 것이면 메인 패널째로 밀려 들어오므로 안에서는 전환하지 않는다.
+        if (page.hidden) page.replaceChildren();
         openTab = tab;
         editingAgent = agent;
         armDelete = null;
@@ -110,7 +126,7 @@
         modelAdvOpen = false;
         keyEditing = false;
         credsEditing = null;
-        returnPath = o.returnPath != null ? o.returnPath : /^\/s\//.test(location.pathname) ? returnPath || "/" : location.pathname;
+        returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;
         const wasChatOpen = document.body.classList.contains("mobile-chat");
         T.todosUI?.hide?.();
         T.sidebar?.showChat();
@@ -166,6 +182,10 @@
         armMcpDelete = null;
         folderEditing = null;
         armFolderDelete = null;
+        clearTimeout(viewTimer);
+        viewBusy = false;
+        rebuildPending = false;
+        rootScroll = 0;
         page.replaceChildren();
         if (mobileFromList) {
             mobileFromList = false;
@@ -177,7 +197,28 @@
     /* 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다. */
     function navigate(tab, agentId) {
         try {
-            history.pushState(null, "", pathFor(tab, agentId));
+            if (openTab === "root") {
+                // 목록에서 상세로: 항목을 쌓아 두면 뒤로 가기가 목록으로 돌아온다.
+                // 바로 밑에 목록이 있다는 표시를 항목에 남긴다(앞으로 가기·새로 고침 뒤에도 맞게).
+                rootScroll = page.querySelector(".sp-nav")?.scrollTop || 0;
+                history.pushState({ spFromRoot: true }, "", pathFor(tab, agentId));
+            } else if (isMobile()) {
+                history.replaceState(history.state, "", pathFor(tab, agentId));
+            } else {
+                history.pushState(null, "", pathFor(tab, agentId));
+            }
+        } catch (_) {}
+        T.app?.renderRoute();
+    }
+
+    // 상세에서 목록으로(모바일). 목록에서 쌓은 항목이면 그 항목을 걷어 내고, 아니면 경로만 바꾼다.
+    function popToRoot() {
+        if (history.state?.spFromRoot) {
+            history.back();
+            return;
+        }
+        try {
+            history.replaceState(null, "", "/s" + location.search + location.hash);
         } catch (_) {}
         T.app?.renderRoute();
     }
@@ -220,11 +261,119 @@
         return result;
     }
 
-    /* ── 프레임: 채팅 헤더와 같은 구조(뒤로 버튼 + 제목) ── */
-    function build() {
-        page.replaceChildren();
+    /* ── 프레임 ─────────────────────────────────────────────
+       화면 하나(.sp-view)는 머리(뒤로 버튼 + 제목)와 본문(목록 + 상세)으로 이뤄진다.
+       모바일에서는 data-view에 따라 목록과 상세 중 하나만 보인다. */
+    const NAV = [
+        [
+            { id: "general", label: "general", icon: "settings", color: "#8e8e93" },
+            { id: "folders", label: "folders", icon: "folder", color: "#0a84ff" },
+            { id: "notices", label: "notices", icon: "bell", color: "#ff453a" },
+        ],
+        [
+            { id: "provider", label: "provider", icon: "cloud", color: "#5e5ce6" },
+            { id: "model", label: "model", icon: "cpu", color: "#bf5af2" },
+            { id: "account", label: "account", icon: "person", color: "#30d158" },
+        ],
+        [
+            { id: "selfimprovement", label: "selfImprovement", icon: "sparkles", color: "#ff9f0a" },
+            { id: "skills", label: "skills", icon: "book", color: "#40c8e0" },
+            { id: "mcp", label: "mcpTab", icon: "plug", color: "#636366" },
+        ],
+    ];
 
+    // 편집 폼이 열려 있는가(상세에서 한 단계 더 들어간 화면).
+    function formOpen() {
+        return !!(folderEditing || skillEditing || mcpEditing);
+    }
+    function closeForm() {
+        folderEditing = null;
+        skillEditing = null;
+        mcpEditing = null;
+        build();
+    }
+    function formTitle() {
+        if (folderEditing)
+            return folderEditing.mode === "new" ? t("folderNew") : folderList().find((f) => f.id === folderEditing.id)?.name || t("folders");
+        if (skillEditing) return skillEditing.mode === "new" ? t("addSkill") : skillEditing.name;
+        if (mcpEditing) return mcpEditing.mode === "new" ? t("addMcpServer") : mcpEditing.name;
+        return "";
+    }
+
+    function tabTitle(tab, agentId) {
+        if (tab === "root") return t("settings");
+        if (tab === "agents") return agentId === "__new__" ? t("addAgent") : agentList().find((a) => a.id === agentId)?.name || t("agents");
+        const item = NAV.flat().find((x) => x.id === tab);
+        return item ? t(item.label) : t("settings");
+    }
+
+    // 목록의 한 행: 색 타일(또는 에이전트 아바타) + 이름 + 꺾쇠(모바일).
+    function navItem({ active, label, tile, accent, onclick }) {
+        return T.h(
+            "button",
+            {
+                class: "sp-item" + (active ? " active" : "") + (accent ? " accent" : ""),
+                role: "tab",
+                "aria-selected": String(!!active),
+                tabindex: active ? "0" : "-1",
+                onclick,
+            },
+            [tile, T.h("span", { class: "sp-item-label", text: label }), T.icon("chevron", "sp-item-chev")],
+        );
+    }
+
+    function buildNav(tab, agentId) {
+        const groups = NAV.map((items) =>
+            T.h(
+                "div",
+                { class: "sp-nav-group" },
+                items.map((x) =>
+                    navItem({
+                        active: tab === x.id,
+                        label: t(x.label),
+                        tile: T.h("span", { class: "sp-tile", style: `background-color:${x.color}` }, [T.icon(x.icon)]),
+                        onclick: () => navigate(x.id, null),
+                    }),
+                ),
+            ),
+        );
+        const agents = agentList().map((a) =>
+            navItem({
+                active: tab === "agents" && agentId === a.id,
+                label: a.name || "?",
+                tile: T.h("span", {
+                    class: "sp-tile round",
+                    text: ([...String(a.name || "?").trim()][0] || "?").toUpperCase(),
+                    style: /^#[0-9a-f]{6}$/i.test(String(a.color || "")) ? `background-color:${a.color}` : null,
+                }),
+                onclick: () => navigate("agents", a.id),
+            }),
+        );
+        agents.push(
+            navItem({
+                active: tab === "agents" && agentId === "__new__",
+                label: t("addAgent"),
+                accent: true,
+                tile: T.h("span", { class: "sp-tile plain" }, [T.icon("plus")]),
+                onclick: () => navigate("agents", "__new__"),
+            }),
+        );
+        return T.h("nav", { class: "sp-nav", role: "tablist", "aria-label": t("settings") }, [
+            ...groups,
+            T.h("div", { class: "sp-nav-head", text: t("agents") }),
+            T.h("div", { class: "sp-nav-group" }, agents),
+        ]);
+    }
+
+    function buildView(tab = openTab, agentId = editingAgent) {
+        const title = T.h("div", { id: "settingsTitle", class: "sp-title", text: tabTitle(tab, agentId) });
         const head = T.h("header", { class: "sp-head" }, [
+            // 채팅 헤더와 같은 점진적 블러: 내용이 헤더 밑으로 흐려지며 지나간다.
+            T.h(
+                "div",
+                { class: "pblur", "aria-hidden": "true" },
+                Array.from({ length: 8 }, () => T.h("i")),
+            ),
             // 데스크톱에서 사이드바가 접힌 상태로 설정에 들어오면 채팅 헤더(메뉴 버튼)가
             // 숨겨져 다시 펼칠 방법이 없다. 접힌 때만 보이는 펼치기 버튼을 둔다.
             T.h(
@@ -238,76 +387,183 @@
                 },
                 [T.icon("menu")],
             ),
-            // 채팅 헤더의 뒤로 버튼과 동일: 목록 화면으로 돌아간 뒤 라우터가 화면을 맞춘다.
+            // 모바일의 뒤로 버튼: 폼에서는 상세로, 상세에서는 설정 목록으로, 목록에서는 대화 목록으로 돌아간다.
             T.h(
                 "button",
                 {
                     class: "btn-icon sp-back",
                     "aria-label": t("back"),
                     onclick() {
+                        if (formOpen() && isMobile()) {
+                            closeForm();
+                            return;
+                        }
+                        if (tab !== "root" && isMobile()) {
+                            popToRoot();
+                            return;
+                        }
                         T.sidebar?.showList();
                         T.app?.renderRoute();
                     },
                 },
-                [T.icon("arrow-left")],
+                [T.icon("chevron-left")],
             ),
-            T.h("div", { id: "settingsTitle", class: "sp-title", text: t("settings") }),
-        ]);
-
-        const agents = agentList();
-        const nav = T.h("nav", { class: "sp-nav", role: "tablist", "aria-label": t("settings") }, [
-            tabBtn("general", t("general")),
-            tabBtn("folders", t("folders")),
-            tabBtn("notices", t("notices")),
-            tabBtn("provider", t("provider")),
-            tabBtn("model", t("model")),
-            tabBtn("account", t("account")),
-            tabBtn("selfimprovement", t("selfImprovement")),
-            tabBtn("skills", t("skills")),
-            tabBtn("mcp", t("mcpTab")),
-            T.h("hr", { class: "divider" }),
-            ...agents.map(agentNavBtn),
-            T.h("button", {
-                class: "sb-row" + (openTab === "agents" && editingAgent === "__new__" ? " active" : ""),
-                role: "tab",
-                "aria-selected": String(openTab === "agents" && editingAgent === "__new__"),
-                tabindex: openTab === "agents" && editingAgent === "__new__" ? "0" : "-1",
-                text: t("addAgent"),
-                onclick() {
-                    navigate("agents", "__new__");
-                },
-            }),
+            title,
         ]);
 
         const body = T.h("div", { class: "sp-body" });
-        if (openTab === "general") buildGeneral(body);
-        else if (openTab === "folders") buildFolders(body);
-        else if (openTab === "notices") buildNotices(body);
-        else if (openTab === "provider") buildProvider(body);
-        else if (openTab === "model") buildModel(body);
-        else if (openTab === "account") buildAccount(body);
-        else if (openTab === "selfimprovement") buildSelfImprovement(body);
-        else if (openTab === "skills") buildSkills(body);
-        else if (openTab === "mcp") buildMcp(body);
-        else buildAgents(body);
+        if (tab === "general") buildGeneral(body);
+        else if (tab === "folders") buildFolders(body);
+        else if (tab === "notices") buildNotices(body);
+        else if (tab === "provider") buildProvider(body);
+        else if (tab === "model") buildModel(body);
+        else if (tab === "account") buildAccount(body);
+        else if (tab === "selfimprovement") buildSelfImprovement(body);
+        else if (tab === "skills") buildSkills(body);
+        else if (tab === "mcp") buildMcp(body);
+        else if (tab === "agents") buildAgents(body);
+        groupRows(body);
 
-        page.append(head, T.h("div", { class: "sp-main" }, [nav, body]));
-        // 모바일 가로 탭바에서 활성 탭이 화면 밖에 있을 수 있으므로 보이게 스크롤한다.
-        nav.querySelector(".active")?.scrollIntoView({ block: "nearest", inline: "center" });
-    }
-
-    function tabBtn(id, label) {
-        return T.h("button", {
-            class: "sb-row" + (openTab === id ? " active" : ""),
-            role: "tab",
-            "aria-selected": String(openTab === id),
-            tabindex: openTab === id ? "0" : "-1",
-            text: label,
-            onclick() {
-                navigate(id, null);
+        // 깊이: 목록 0, 상세 1, 편집 폼 2. 깊이가 달라지면 화면이 밀려 들어오고 나간다.
+        // (폼 여부는 본문을 그린 뒤에 본다. 지워진 대상의 폼은 그리는 중에 닫힌다.)
+        const form = tab !== "root" && formOpen();
+        if (form) title.textContent = formTitle();
+        const level = tab === "root" ? 0 : form ? 2 : 1;
+        return T.h(
+            "div",
+            {
+                class: "sp-view",
+                dataset: { view: tab === "root" ? "root" : "detail", level: String(level), key: pathFor(tab, agentId) + (form ? "#form" : "") },
             },
-        });
+            [head, T.h("div", { class: "sp-main" }, [buildNav(tab, agentId), body])],
+        );
     }
+
+    // 이어진 설정 행들을 둥근 묶음(.set-group) 하나로 감싼다. 탭마다 행을 그냥 늘어놓아도 묶음 목록이 된다.
+    function groupRows(root) {
+        for (const box of [root, ...root.querySelectorAll(".set-section, .agent-editor, .adv-panel")]) {
+            let run = null;
+            for (const el of [...box.children]) {
+                if (el.matches(".set-row, .ext-row")) {
+                    if (!run) {
+                        run = T.h("div", { class: "set-group" });
+                        el.before(run);
+                    }
+                    run.append(el);
+                } else {
+                    run = null;
+                }
+            }
+        }
+    }
+
+    // 화면을 다시 그린다. 깊이가 달라졌으면 모바일에서 새 화면이 밀려 들어오고(깊어질 때) 옛 화면이 밀려 나간다(얕아질 때).
+    // 같은 화면을 다시 그릴 때는 스크롤 위치를 지킨다.
+    function build() {
+        const prev = page.querySelector(".sp-view:not(.sp-leaving)");
+        const view = buildView();
+        const sameKey = prev && prev.dataset.key === view.dataset.key;
+        const depth = prev ? Number(view.dataset.level) - Number(prev.dataset.level) : 0;
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const anim = depth && isMobile() && !reduce ? (depth > 0 ? "push" : "pop") : null;
+        // 화면이 움직이는 중에 통째로 갈아 끼우면 애니메이션이 끊기고 제스처가 죽는다.
+        // (모델·스킬 목록이 도착하거나 설정 이벤트가 올 때) 다 움직인 뒤에 한 번 그린다.
+        if (!anim && viewBusy) {
+            rebuildPending = true;
+            return;
+        }
+        clearTimeout(viewTimer);
+        for (const el of page.querySelectorAll(".sp-leaving")) el.remove();
+        const scrollBody = sameKey ? prev.querySelector(".sp-body")?.scrollTop || 0 : 0;
+        // 모바일 목록은 떠날 때 기억해 둔 위치로, 그 밖에는 직전 화면의 목록 위치로 되돌린다.
+        const scrollNav = view.dataset.view === "root" && !sameKey ? rootScroll : prev?.querySelector(".sp-nav")?.scrollTop || 0;
+        if (anim) {
+            // 얕아질 때 드러나는 화면은 떠날 때 보던 위치 그대로 나타난다.
+            const back = anim === "pop" ? leftScroll.get(view.dataset.key) || 0 : 0;
+            if (anim === "push") leftScroll.set(prev.dataset.key, prev.querySelector(".sp-body")?.scrollTop || 0);
+            prev.classList.add("sp-leaving", anim === "push" ? "sp-out-left" : "sp-out-right");
+            view.classList.add(anim === "push" ? "sp-in-right" : "sp-in-left");
+            // 위에 놓이는 쪽이 뒤에 온다: 들어갈 때는 새 화면이, 나올 때는 옛 화면이 위다.
+            if (anim === "push") page.append(view);
+            else page.prepend(view);
+            if (back) view.querySelector(".sp-body").scrollTop = back;
+            viewBusy = true;
+            viewTimer = setTimeout(() => {
+                prev.remove();
+                view.classList.remove("sp-in-right", "sp-in-left");
+                settleView();
+            }, VIEW_MS);
+        } else {
+            viewBusy = false;
+            rebuildPending = false;
+            page.replaceChildren(view);
+        }
+        if (scrollBody) view.querySelector(".sp-body").scrollTop = scrollBody;
+        const nav = view.querySelector(".sp-nav");
+        if (scrollNav) nav.scrollTop = scrollNav;
+        // 데스크톱 목록에서 선택된 항목이 화면 밖에 있을 수 있으므로 보이게 스크롤한다.
+        if (!isMobile()) nav.querySelector(".active")?.scrollIntoView({ block: "nearest" });
+    }
+    // 더 깊은 화면으로 들어갈 때 떠난 화면의 스크롤 위치(화면 key → scrollTop).
+    const leftScroll = new Map();
+
+    // 화면이 다 움직였다. 그사이 미뤄 둔 다시 그리기가 있으면 지금 한다.
+    function settleView() {
+        viewBusy = false;
+        if (!rebuildPending) return;
+        rebuildPending = false;
+        if (openTab && !page.hidden) build();
+    }
+
+    /* 뒤로 제스처(ui/gestures.js)가 위 화면을 손가락으로 밀어낼 때 쓴다.
+       begin: 지금 화면 밑에 한 단계 얕은 화면(폼이면 상세, 상세면 목록)을 깔아 두고 두 화면을 돌려준다.
+       end: 끝까지 밀었으면 그 화면으로 넘어가고, 아니면 깔아 둔 것을 치운다. */
+    const gesture = {
+        canPop: () => isMobile() && !!openTab && openTab !== "root" && !page.hidden,
+        begin() {
+            clearTimeout(viewTimer);
+            // 지난 전환이나 제스처가 남긴 화면을 치우고, 지금 보이는 화면 하나만 남긴다.
+            const views = [...page.querySelectorAll(".sp-view")];
+            const top = views.find((v) => !v.classList.contains("sp-leaving") && v.dataset.view !== "root") || views[views.length - 1];
+            for (const v of views) if (v !== top) v.remove();
+            top.classList.remove("sp-in-right", "sp-in-left");
+            const fromForm = top.dataset.level === "2";
+            let under;
+            if (fromForm) {
+                // 폼을 잠깐 닫은 것으로 치고 상세 화면을 그린다.
+                const saved = [folderEditing, skillEditing, mcpEditing];
+                folderEditing = skillEditing = mcpEditing = null;
+                under = buildView();
+                [folderEditing, skillEditing, mcpEditing] = saved;
+            } else {
+                under = buildView("root", null);
+            }
+            page.prepend(under);
+            if (fromForm) under.querySelector(".sp-body").scrollTop = leftScroll.get(under.dataset.key) || 0;
+            else under.querySelector(".sp-nav").scrollTop = rootScroll;
+            viewBusy = true;
+            return { top, under, fromForm };
+        },
+        end(commit, { top, under, fromForm }) {
+            if (!commit) {
+                under.remove();
+                settleView();
+                return;
+            }
+            // 이미 손가락을 따라 다 넘어왔으므로 애니메이션 없이 상태만 바꾼다.
+            top.remove();
+            viewBusy = false;
+            rebuildPending = false;
+            if (fromForm) {
+                // 깔아 둔 상세 화면이 그대로 지금 화면이 된다.
+                folderEditing = skillEditing = mcpEditing = null;
+                return;
+            }
+            openTab = "root";
+            editingAgent = null;
+            popToRoot();
+        },
+    };
 
     function agentList() {
         const s = state.state.settings;
@@ -316,20 +572,6 @@
 
     function firstAgentId() {
         return agentList()[0]?.id || null;
-    }
-
-    function agentNavBtn(agent) {
-        const active = openTab === "agents" && editingAgent === agent.id;
-        return T.h("button", {
-            class: "sb-row" + (active ? " active" : ""),
-            role: "tab",
-            "aria-selected": String(active),
-            tabindex: active ? "0" : "-1",
-            text: agent.name || "?",
-            onclick() {
-                navigate("agents", agent.id);
-            },
-        });
     }
 
     // 입력 중 재렌더 방지: 시트 내부에 포커스가 있으면 스킵
@@ -823,10 +1065,7 @@
         );
         if (!enabled) return box;
 
-        box.append(
-            T.h("div", { class: "set-label", text: t("autoModelRouting") }),
-            T.h("div", { class: "set-desc", text: t("autoModelRoutingDesc") }),
-        );
+        box.append(fieldLabel(t("autoModelRouting")), T.h("div", { class: "set-desc", text: t("autoModelRoutingDesc") }));
         const key = modelsKey(provider);
         const routingModels = modelsCache?.key === key ? modelsCache.routingModels || [] : [];
         const selected = new Set(Array.isArray(provider.autoModelCandidates) ? provider.autoModelCandidates : []);
@@ -1090,7 +1329,7 @@
 
     function oauthSection(kind, rerender) {
         const refresh = rerender || build;
-        const box = T.h("div", {});
+        const box = T.h("div", { class: "set-section" });
 
         if (oauthPending && oauthPending.kind === kind) {
             // 완료 감지: SSE 이벤트 + 상태 폴링 병행
@@ -1992,7 +2231,7 @@
     function buildSkills(body) {
         if (skillsCache === null && !skillsLoading && !skillsFailed) void loadSkillsList();
         const ssec = T.h("div", { class: "set-section" });
-        ssec.append(T.h("div", { class: "set-desc", text: t("skillsDesc") }));
+        if (!skillEditing) ssec.append(T.h("div", { class: "set-desc", text: t("skillsDesc") }));
         if (skillEditing) {
             ssec.append(skillForm());
         } else {
@@ -2021,7 +2260,7 @@
     function buildMcp(body) {
         if (mcpCache === null && !mcpLoading && !mcpFailed) void loadMcpList();
         const msec = T.h("div", { class: "set-section" });
-        msec.append(T.h("div", { class: "set-desc", text: t("mcpDesc") }));
+        if (!mcpEditing) msec.append(T.h("div", { class: "set-desc", text: t("mcpDesc") }));
         if (mcpEditing) {
             msec.append(mcpForm());
         } else {
@@ -2182,7 +2421,7 @@
                     T.h("span", {
                         class: "bot-avatar",
                         text: ([...String(a.name || "?").trim()][0] || "?").toUpperCase(),
-                        style: /^#[0-9a-f]{6}$/i.test(String(a.color || "")) ? `background:${a.color}` : null,
+                        style: /^#[0-9a-f]{6}$/i.test(String(a.color || "")) ? `background-color:${a.color}` : null,
                     }),
                     T.h("span", { class: "folder-agent-meta" }, [
                         T.h("span", { class: "folder-agent-name", text: a.name || "?" }),
@@ -2244,7 +2483,7 @@
     function buildFolders(body) {
         const s = state.state.settings || {};
         const sec = T.h("div", { class: "set-section" });
-        sec.append(T.h("div", { class: "set-desc", text: t("foldersDesc") }));
+        if (!folderEditing) sec.append(T.h("div", { class: "set-desc", text: t("foldersDesc") }));
         if (folderEditing) {
             sec.append(folderForm());
             body.append(sec);
@@ -2623,6 +2862,15 @@
         T.i18n.onChange(() => {
             if (openTab) build();
         });
+        // 모바일 목록(/s)을 보다가 폭이 넓어지면 데스크톱에는 그 화면이 없으므로 첫 탭을 연다.
+        mobileMq.addEventListener("change", () => {
+            if (!openTab || page.hidden) return;
+            if (!isMobile() && openTab === "root") {
+                openTab = "general";
+                syncPath();
+            }
+            build();
+        });
     }
 
     T.settingsUI = {
@@ -2632,6 +2880,7 @@
         hide,
         isOpen: () => !!openTab && !page.hidden,
         routeFromPath,
+        gesture,
         oauthSection,
         secretInput,
         resetOauth: () => (oauthPending = null),
