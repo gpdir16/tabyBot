@@ -11,7 +11,7 @@ Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI 
 ## What it can do
 
 - **Everyday chat.** Get answers in the browser. It accepts text, images, files, and almost any other format.
-- **Inference providers.** Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, or your own API endpoint.
+- **Inference providers.** Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Upstage, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, or your own API endpoint.
 - **Skills, MCP.** Add the capabilities and tools you want to the agent. Even if you don't install anything yourself, the agent finds and installs what it needs.
 - **Scheduled tasks.** Recurring jobs run on a schedule, report when they finish, and skip when they are not needed.
 - **Todos.** Manages todo lists for both you and the agents. You use it like a regular todo app. Agents watch the list, schedule work, and handle your tasks for you.

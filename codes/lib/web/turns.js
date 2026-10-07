@@ -114,7 +114,7 @@ export async function runTurn({
         // 같은 phase 연속 방출은 클라이언트 상태 깜빡임만 유발하므로 스킵
         if (phase === lastPhase && !detail) return;
         lastPhase = phase;
-        emit({ type: "status", conversationId: sessionKey, phase, detail });
+        emit({ type: "status", conversationId: sessionKey, phase, detail, automated: automated || undefined });
     };
 
     try {
@@ -137,7 +137,7 @@ export async function runTurn({
                             .startsWith("__SILENT__")
                     )
                         return;
-                    emit({ type: "delta", conversationId: sessionKey, text, full });
+                    emit({ type: "delta", conversationId: sessionKey, text, full, automated: automated || undefined });
                 },
                 onCheckpoint: automated
                     ? undefined // 자동 턴은 중간 체크포인트를 쓰지 않는다. 무의미 턴이면 통째로 저장을 건너뛴다.
@@ -250,23 +250,30 @@ export function dispatchMessage({ sessionKey, agentId, userText, displayText = n
     return { queued: false };
 }
 
+// 재시작으로 끊긴 턴을 이어서 돌린다. 한꺼번에 모델을 호출하지 않도록 하나씩 차례로 이어간다.
 export function recoverInterruptedTurns() {
-    for (const conversation of listConversations()) {
-        const sessionKey = conversation.id;
-        if (!hasRecoverableChatTurn(sessionKey) || !prepareChatTurnRecovery(sessionKey)) continue;
-
-        void scheduleWork(
-            "user",
-            () =>
-                runTurn({
-                    sessionKey,
-                    agentId: conversation.agentId,
-                    userText: RECOVERY_PROMPT,
-                    recovery: true,
-                }),
-            { sessionKey, cancellable: true },
-        ).catch((err) => console.error("Interrupted turn recovery failed:", err?.stack || err));
-    }
+    const targets = listConversations().filter((conversation) => hasRecoverableChatTurn(conversation.id));
+    void (async () => {
+        for (const conversation of targets) {
+            const sessionKey = conversation.id;
+            if (!prepareChatTurnRecovery(sessionKey)) continue;
+            try {
+                await scheduleWork(
+                    "user",
+                    () =>
+                        runTurn({
+                            sessionKey,
+                            agentId: conversation.agentId,
+                            userText: RECOVERY_PROMPT,
+                            recovery: true,
+                        }),
+                    { sessionKey, cancellable: true },
+                );
+            } catch (err) {
+                console.error("Interrupted turn recovery failed:", err?.stack || err);
+            }
+        }
+    })();
 }
 
 export function stopConversation(sessionKey) {

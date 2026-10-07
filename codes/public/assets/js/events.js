@@ -97,10 +97,16 @@
                 T.notices?.refresh();
                 break;
             case "status":
-                state.applyStatus(msg.conversationId, msg.phase, msg.detail || "", msg.elapsedMs != null ? msg.elapsedMs : null);
+                state.applyStatus(
+                    msg.conversationId,
+                    msg.phase,
+                    msg.detail || "",
+                    msg.elapsedMs != null ? msg.elapsedMs : null,
+                    Boolean(msg.automated),
+                );
                 break;
             case "delta":
-                state.applyDelta(msg.conversationId, typeof msg.full === "string" ? msg.full : undefined, msg.text || "");
+                state.applyDelta(msg.conversationId, typeof msg.full === "string" ? msg.full : undefined, msg.text || "", Boolean(msg.automated));
                 break;
             case "say": {
                 const sayText = String(msg.text || "").trim();

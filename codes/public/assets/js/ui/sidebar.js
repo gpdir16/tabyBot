@@ -111,7 +111,8 @@
             const text = snippet(inter[i]);
             if (text) return text;
         }
-        const liveText = snippet(live?.text);
+        // 자동 실행의 스트리밍 본문은 침묵으로 끝날 수 있어 답이 확정되기 전에는 미리보기로 쓰지 않는다.
+        const liveText = live?.automated ? "" : snippet(live?.text);
         if (liveText) return liveText;
         const fromMeta = snippet(c?.meta?.preview);
         if (fromMeta) return fromMeta;

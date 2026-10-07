@@ -26,8 +26,6 @@
     let pushed = false; // open()에서 히스토리 항목을 push했는지
     let mobileFromList = false; // 모바일 목록 화면에서 열었는지
     let editingAgent = null; // 에이전트 페이지 id ('__new__' = 추가)
-    let armDelete = null; // 삭제 확인 2단계 버튼 상태
-    let armCompressAll = false; // 전체 세션 압축 확인 2단계 버튼 상태
     let modelsCache = null; // { key, models }
     let modelsLoading = false;
     let modelsFailedKey = null;
@@ -48,10 +46,17 @@
     let mcpFailed = false;
     let skillEditing = null; // { mode:"new" } | { mode:"edit"|"view", name, source, builtin, content }
     let mcpEditing = null; // { mode:"new" } | { mode:"edit", name }
-    let armSkillDelete = null; // "<source>:<name>". 삭제 확인 2단계
-    let armMcpDelete = null; // name: 삭제 확인 2단계
     let folderEditing = null; // { mode:"new" } | { mode:"edit", id }
-    let armFolderDelete = null; // 폴더 id: 삭제 확인 2단계
+
+    // 이름이 붙은 항목의 삭제 확인. 확인하면 true.
+    function confirmDelete(name) {
+        return T.confirm({
+            title: t("confirmDeleteTitle", { name }),
+            text: t("confirmDeleteText"),
+            confirmLabel: t("delete"),
+            danger: true,
+        });
+    }
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
     const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
@@ -110,19 +115,13 @@
         if (page.hidden) page.replaceChildren();
         openTab = tab;
         editingAgent = agent;
-        armDelete = null;
-        armSkillDelete = null;
-        armMcpDelete = null;
         skillEditing = null;
         mcpEditing = null;
         // open({tab:"folders", folderId}). 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
         // open({tab:"folders", folderNew, folderAgent}). "폴더에 추가…" 안의 "새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
-        armNoticesClear = false;
         folderEditing = null;
         if (tab === "folders" && o.folderNew) folderEditing = { mode: "new", agentId: o.folderAgent || null };
         else if (tab === "folders" && o.folderId) folderEditing = { mode: "edit", id: o.folderId };
-        armFolderDelete = null;
-        armCompressAll = false;
         advOpen = null;
         modelAdvOpen = false;
         keyEditing = false;
@@ -183,10 +182,7 @@
         mcpFailed = false;
         skillEditing = null;
         mcpEditing = null;
-        armSkillDelete = null;
-        armMcpDelete = null;
         folderEditing = null;
-        armFolderDelete = null;
         clearTimeout(viewTimer);
         viewBusy = false;
         rebuildPending = false;
@@ -1265,22 +1261,21 @@
         );
 
         // 모든 봇의 세션 즉시 압축: 모델 전환 전 컨텍스트 오염 방지.
-        // 기록 재작성 + LLM 호출이 드는 작업이므로 2단계 확인을 거친다.
+        // 기록 재작성 + LLM 호출이 드는 작업이므로 확인 대화상자를 거친다.
         // 진행 상태(sessionsCompressing)는 서버가 SSE로 알려 새로고침해도 유지된다.
         const compressing = Boolean(s.sessionsCompressing);
         const compressAllBtn = T.h("button", {
-            class: "btn ghost" + (armCompressAll ? " danger" : ""),
-            text: compressing ? t("compressing") : armCompressAll ? t("compressAllConfirm") : t("compressAllNow"),
+            class: "btn ghost",
+            text: compressing ? t("compressing") : t("compressAllNow"),
             disabled: compressing,
-            onclick() {
+            async onclick() {
                 if (compressing) return;
-                if (!armCompressAll) {
-                    armCompressAll = true;
-                    compressAllBtn.classList.add("danger");
-                    compressAllBtn.textContent = t("compressAllConfirm");
-                    return;
-                }
-                armCompressAll = false;
+                const ok = await T.confirm({
+                    title: t("compressAllConfirmTitle"),
+                    text: t("compressAllNowDesc"),
+                    confirmLabel: t("compressAllConfirmButton"),
+                });
+                if (!ok) return;
                 compressAllBtn.disabled = true;
                 compressAllBtn.textContent = t("compressing");
                 T.api
@@ -1952,21 +1947,15 @@
         );
         if (!sk.builtin) {
             const delBtn = T.h("button", {
-                class: "btn ghost" + (armSkillDelete === key ? " danger" : ""),
-                text: armSkillDelete === key ? t("deleteConfirm") : t("delete"),
-                onclick() {
-                    if (armSkillDelete !== key) {
-                        armSkillDelete = key;
-                        delBtn.classList.add("danger");
-                        delBtn.textContent = t("deleteConfirm");
-                        return;
-                    }
+                class: "btn ghost",
+                text: t("delete"),
+                async onclick() {
+                    if (!(await confirmDelete(sk.name))) return;
                     delBtn.disabled = true;
                     T.api
                         .deleteSkill(sk.name, sk.source)
                         .then((r) => {
                             skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
-                            armSkillDelete = null;
                             build();
                         })
                         .catch((err) => {
@@ -1989,21 +1978,9 @@
         ]);
     }
 
-    // 스킬/MCP 편집 폼 공통 뼈대: 제목 + 닫기 X + 필드 나열.
-    function formHead(title, onClose) {
-        return T.h("div", { class: "form-head" }, [
-            T.h("div", { class: "form-title", text: title }),
-            T.h(
-                "button",
-                {
-                    class: "btn-icon",
-                    type: "button",
-                    "aria-label": t("close"),
-                    onclick: onClose,
-                },
-                [T.icon("x")],
-            ),
-        ]);
+    // 스킬/MCP/폴더 편집 폼 공통 머리글. 닫기는 아래 버튼 줄(취소/닫기)이 맡는다.
+    function formHead(title) {
+        return T.h("div", { class: "form-head" }, [T.h("div", { class: "form-title", text: title })]);
     }
 
     function fieldOf(label, control, desc) {
@@ -2019,7 +1996,7 @@
             build();
         };
         const form = T.h("div", { class: "agent-editor ext-form" });
-        form.append(formHead(isNew ? t("addSkill") : editing.name, close));
+        form.append(formHead(isNew ? t("addSkill") : editing.name));
 
         const nameInput = T.h("input", {
             class: "input",
@@ -2103,21 +2080,15 @@
             }),
         );
         const delBtn = T.h("button", {
-            class: "btn ghost" + (armMcpDelete === srv.name ? " danger" : ""),
-            text: armMcpDelete === srv.name ? t("deleteConfirm") : t("delete"),
-            onclick() {
-                if (armMcpDelete !== srv.name) {
-                    armMcpDelete = srv.name;
-                    delBtn.classList.add("danger");
-                    delBtn.textContent = t("deleteConfirm");
-                    return;
-                }
+            class: "btn ghost",
+            text: t("delete"),
+            async onclick() {
+                if (!(await confirmDelete(srv.name))) return;
                 delBtn.disabled = true;
                 T.api
                     .deleteMcpServer(srv.name)
                     .then((r) => {
                         mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
-                        armMcpDelete = null;
                         build();
                     })
                     .catch((err) => {
@@ -2150,7 +2121,7 @@
             build();
         };
         const form = T.h("div", { class: "agent-editor ext-form" });
-        form.append(formHead(isNew ? t("addMcpServer") : editing.name, close));
+        form.append(formHead(isNew ? t("addMcpServer") : editing.name));
 
         const nameInput = T.h("input", {
             class: "input",
@@ -2400,20 +2371,14 @@
             return btn;
         };
         const delBtn = T.h("button", {
-            class: "btn ghost" + (armFolderDelete === f.id ? " danger" : ""),
-            text: armFolderDelete === f.id ? t("deleteConfirm") : t("delete"),
-            onclick() {
-                if (armFolderDelete !== f.id) {
-                    armFolderDelete = f.id;
-                    delBtn.classList.add("danger");
-                    delBtn.textContent = t("deleteConfirm");
-                    return;
-                }
+            class: "btn ghost",
+            text: t("delete"),
+            async onclick() {
+                if (!(await confirmDelete(f.name))) return;
                 delBtn.disabled = true;
                 T.api
                     .deleteFolder(f.id)
                     .then((r) => {
-                        armFolderDelete = null;
                         applyFolderResult(r);
                     })
                     .catch((err) => {
@@ -2438,7 +2403,6 @@
                     text: t("edit"),
                     onclick() {
                         folderEditing = { mode: "edit", id: f.id };
-                        armFolderDelete = null;
                         build();
                     },
                 }),
@@ -2461,7 +2425,7 @@
             return T.h("div", { class: "set-desc", text: t("foldersEmpty") });
         }
         const form = T.h("div", { class: "agent-editor ext-form" });
-        form.append(formHead(isNew ? t("folderNew") : folder.name, close));
+        form.append(formHead(isNew ? t("folderNew") : folder.name));
 
         const nameInput = T.h("input", {
             class: "input",
@@ -2571,7 +2535,6 @@
                         class: "btn ghost",
                         onclick() {
                             folderEditing = { mode: "new" };
-                            armFolderDelete = null;
                             build();
                         },
                     },
@@ -2592,7 +2555,6 @@
 
     /* ── 알림 탭 ────────────────────────────────────────────
        서버가 보낸 시스템 알림의 기록. 새 알림은 모달로 뜨고(ui/notices.js), 여기서 지난 것을 다시 본다. */
-    let armNoticesClear = false;
     function buildNotices(body) {
         const sec = T.h("div", { class: "set-section" });
         sec.append(T.h("div", { class: "set-desc", text: t("noticesDesc") }));
@@ -2605,16 +2567,16 @@
         } else {
             sec.append(T.h("div", { class: "nt-list nt-history" }, list.map(T.notices.buildRow)));
             const clearBtn = T.h("button", {
-                class: "btn ghost" + (armNoticesClear ? " danger" : ""),
-                text: armNoticesClear ? t("deleteConfirm") : t("noticesClear"),
-                onclick() {
-                    if (!armNoticesClear) {
-                        armNoticesClear = true;
-                        clearBtn.classList.add("danger");
-                        clearBtn.textContent = t("deleteConfirm");
-                        return;
-                    }
-                    armNoticesClear = false;
+                class: "btn ghost",
+                text: t("noticesClear"),
+                async onclick() {
+                    const ok = await T.confirm({
+                        title: t("noticesClearConfirmTitle"),
+                        text: t("confirmDeleteText"),
+                        confirmLabel: t("noticesClear"),
+                        danger: true,
+                    });
+                    if (!ok) return;
                     clearBtn.disabled = true;
                     T.notices.clearAll().catch((err) => {
                         clearBtn.disabled = false;
@@ -2829,7 +2791,6 @@
                         return;
                     }
                     editingAgent = agent?.id || firstAgentId();
-                    armDelete = null;
                     syncPath();
                     build();
                 } catch (err) {
@@ -2862,15 +2823,10 @@
         if (!isNew && botsCount > 1) {
             const delBtn = T.h("button", {
                 type: "button",
-                class: "btn ghost" + (armDelete === agent.id ? " danger" : ""),
-                text: armDelete === agent.id ? t("deleteConfirm") : t("delete"),
-                onclick() {
-                    if (armDelete !== agent.id) {
-                        armDelete = agent.id;
-                        delBtn.classList.add("danger");
-                        delBtn.textContent = t("deleteConfirm");
-                        return;
-                    }
+                class: "btn ghost",
+                text: t("delete"),
+                async onclick() {
+                    if (!(await confirmDelete(agent.name))) return;
                     delBtn.disabled = true;
                     T.api
                         .deleteAgent(agent.id)
@@ -2884,7 +2840,6 @@
                                 else if (T.chat) T.chat.open(null);
                             }
                             editingAgent = agents[0]?.id || "__new__";
-                            armDelete = null;
                             syncPath();
                             build();
                         })
