@@ -8,6 +8,17 @@
     const isTouch = () => !!touchMq?.matches;
 
     let editId = null;
+    /* 모바일 상세 화면: 편집기를 목록 안에서 펼치지 않고, 설정 화면처럼 오른쪽에서 밀려 들어오는 화면에 그린다.
+       일정과 담당은 거기서 한 단계 더 들어간 화면에서 고른다. 뒤로 가면 바뀐 내용이 저장된다.
+       화면은 문서 맨 위 층(#app 밖)에 놓는다. 스크롤 영역 안에 두면 iOS에서 입력창 밑에 깔린다. */
+    const VIEW_MS = 420; // 화면이 밀려 들어오고 나가는 시간(app.css의 --nav-dur와 같게)
+    let sheetHost = null; // 상세 화면들이 놓이는 층
+    let detailView = "main"; // "main" | "when"(일정) | "who"(담당)
+    let viewTimer = 0;
+    let viewInstant = false; // 손가락으로 이미 다 밀어냈다: 다음 전환은 애니메이션 없이
+    // 편집기의 요소는 목록(page)이나 시트 어느 쪽에든 있을 수 있다.
+    const find = (sel) => page.querySelector(sel) || sheetHost?.querySelector(sel) || null;
+    const inUi = (el) => !!el && (page.contains(el) || !!sheetHost?.contains(el));
     let draft = null;
     let doneOpen = { user: false, agent: false, jobs: false };
     let handPopFor = null;
@@ -785,7 +796,7 @@
 
     function pullFields() {
         if (!draft || !page) return;
-        const q = (s) => page.querySelector(s);
+        const q = find;
         const tm = q(".td-time");
         const dt = q(".td-date");
         if (!composing) {
@@ -1592,7 +1603,7 @@
         const armed = draft.armDelete && Date.now() < (draft.armUntil || 0);
         const delBtn = T.h("button", {
             type: "button",
-            class: "btn ghost" + (armed ? " danger" : ""),
+            class: "btn ghost td-foot-del" + (armed ? " danger" : ""),
             text: armed ? t("deleteConfirm") : t("delete"),
             async onclick() {
                 if (saving) {
@@ -1630,10 +1641,10 @@
             },
         });
 
-        const cancelBtn = T.h("button", { type: "button", class: "btn ghost", text: t("cancel"), onclick: cancelEdit });
+        const cancelBtn = T.h("button", { type: "button", class: "btn ghost td-foot-cancel", text: t("cancel"), onclick: cancelEdit });
         const saveBtn = T.h("button", {
             type: "button",
-            class: "btn primary",
+            class: "btn primary td-foot-save",
             text: t("save"),
             async onclick() {
                 if (saveBtn.disabled) return;
@@ -1719,7 +1730,8 @@
         const editing = editId === item.id && draft;
         const job = isJob(item);
         const checked = done || (!job && !!item.periodDone);
-        if (editing) {
+        // 데스크톱은 행이 그 자리에서 편집기로 펼쳐진다. 모바일은 행을 그대로 두고 상세 화면에 편집기를 그린다(renderDetail).
+        if (editing && !isTouch()) {
             return T.h("div", { class: "td-row is-editing", role: "listitem", dataset: { id: item.id } }, [editEl(item, checked)]);
         }
         const row = T.h(
@@ -1906,6 +1918,253 @@
     }
 
     /* ── 섹션/빌드 ─────────────────────────────────────────── */
+    /* ── 모바일 상세 화면 ──────────────────────────────────── */
+    // 화면 하나: 설정 화면과 같은 머리(뒤로 버튼 + 가운데 제목)와 스크롤되는 본문.
+    function viewEl(item, level, title, onBack, body) {
+        const head = T.h("header", { class: "sp-head" }, [
+            T.h(
+                "div",
+                { class: "pblur", "aria-hidden": "true" },
+                Array.from({ length: 8 }, () => T.h("i")),
+            ),
+            T.h("button", { type: "button", class: "btn-icon sp-back", "aria-label": t("back"), onclick: onBack }, [T.icon("chevron-left")]),
+            T.h("div", { class: "sp-title", text: title }),
+        ]);
+        return T.h("div", { class: "td-view", dataset: { id: item.id, level: String(level), view: detailView } }, [
+            head,
+            T.h("div", { class: "td-view-body" }, body),
+        ]);
+    }
+
+    // 값이 오른쪽에 보이고 누르면 한 단계 더 들어가는 행.
+    function navRow(label, value, view) {
+        return T.h(
+            "button",
+            {
+                type: "button",
+                class: "set-row td-nav-row",
+                onclick() {
+                    pullFields();
+                    detailView = view;
+                    build();
+                },
+            },
+            [T.h("span", { class: "set-label", text: label }), T.h("span", { class: "td-nav-val", text: value }), T.icon("chevron", "td-nav-chev")],
+        );
+    }
+
+    // 담당 화면: "나"와 에이전트들을 한 목록에 두고, 지금 담당에 체크를 붙인다. 고르면 반영하고 앞 화면으로 돌아간다.
+    function whoListEl(item, offers, bots) {
+        const row = (name, color, on, reason, apply, toastMsg) => {
+            const btn = T.h("button", { type: "button", class: "td-hand-item" + (on ? " on" : ""), "aria-pressed": String(on) }, [
+                color ? dotEl(color) : null,
+                T.h("span", { class: "td-offer-main" }, [
+                    T.h("span", { class: "td-offer-name", text: name }),
+                    reason ? T.h("span", { class: "td-offer-reason", text: reason }) : null,
+                ]),
+            ]);
+            btn.addEventListener("click", () => {
+                detailView = "main";
+                if (on) build();
+                else assignFor(item, apply, toastMsg);
+            });
+            return btn;
+        };
+        const assign = (id) => () => {
+            const cur = items().find((r) => r.id === item.id);
+            if (!cur || cur.assignee?.id === id) return;
+            const offered = (cur.offers || []).find((o) => o.agentId === id);
+            return offered ? T.api.acceptHandoff(item.id, id) : T.api.updateTodo(item.id, { assigneeId: id });
+        };
+        const list = T.h("div", { class: "td-hand-pop", role: "listbox", "aria-label": t("todosAssignLabel") });
+        // 지금 실행 주체(서버의 executor): 맡은 에이전트, 또는 자동화 작업이면 그 작업을 가진 에이전트.
+        const now = item.executor || (item.assigneeId ? { id: item.assigneeId, name: t("todosAssigneeRemoved"), color: "#8e8e93" } : null);
+        // 자동화 작업은 사람이 직접 하는 일이 아니므로 "나"를 두지 않는다.
+        if (!isJob(item)) {
+            list.append(
+                row(
+                    t("todosMine"),
+                    null,
+                    !now,
+                    null,
+                    () => {
+                        const cur = items().find((r) => r.id === item.id);
+                        if (!cur?.assigneeId) return;
+                        return T.api.unassignTodo(item.id);
+                    },
+                    t("todosMovedDirect"),
+                ),
+            );
+        }
+        if (now) list.append(row(now.name, now.color || "#8e8e93", true, null, null, null));
+        for (const o of offers.filter((x) => x.agentId !== now?.id)) {
+            list.append(row(o.name, o.color, false, o.reason || t("todosOffersLabel"), assign(o.agentId), t("todosAssignedTo", { name: o.name })));
+        }
+        for (const b of bots.filter((x) => x.id !== now?.id && !offers.some((o) => o.agentId === x.id))) {
+            list.append(row(b.name, b.color, false, null, assign(b.id), t("todosAssignedTo", { name: b.name })));
+        }
+        return list;
+    }
+
+    // 상세에서 뒤로: 바뀐 내용을 저장하고 닫는다. 제목이 비었거나 일정이 잘못됐으면 알리고 머문다.
+    function leaveDetail() {
+        if (saving) return;
+        void commitDraft();
+    }
+    function backToMain() {
+        pullFields();
+        detailView = "main";
+        build();
+    }
+
+    // 데스크톱 편집기(editEl)를 그대로 만들어 그 부품들을 화면 구성에 맞게 옮겨 담는다.
+    // 입력과 버튼의 동작을 한 벌만 유지하기 위해서다.
+    function detailEl(item, checked) {
+        const ed = editEl(item, checked);
+        const head = ed.querySelector(".td-edit-head");
+        const when = ed.querySelector(".td-when-editor");
+        const offers = (item.offers || []).filter((o) => o.agentId !== item.assigneeId);
+        const bots = (state.state.bots || []).filter((b) => b.id !== item.assigneeId);
+        const done = item.status === "done";
+        const canAssign = !done && (item.assigneeId || offers.length || bots.length);
+
+        if (detailView === "when" && when) {
+            return viewEl(item, 2, t("todosSchedule"), backToMain, [when]);
+        }
+        if (detailView === "who" && canAssign) {
+            return viewEl(item, 2, t("todosAssignee"), backToMain, [whoListEl(item, offers, bots)]);
+        }
+        detailView = "main";
+
+        // 맡길 상대는 다음 화면에서 고르므로 제목 칸의 버튼은 뺀다.
+        head.querySelector(".td-hand-wrap")?.remove();
+        const body = [];
+        const wait = ed.querySelector(".td-wait-note");
+        if (wait) body.push(wait);
+        body.push(T.h("div", { class: "set-group td-title-group" }, [head]));
+        const prompt = ed.querySelector(".td-edit-prompt");
+        if (prompt) body.push(T.h("div", { class: "set-group td-prompt-group" }, [prompt]));
+
+        const rows = [];
+        if (when) rows.push(navRow(t("todosSchedule"), when.querySelector(".td-chip.on")?.textContent || t("todosWhenNone"), "when"));
+        if (canAssign) {
+            // 실행 주체(서버의 executor): 맡은 에이전트, 또는 자동화 작업이면 그 작업을 가진 에이전트. 둘 다 없을 때만 "나"다.
+            const who = item.executor?.name || (item.assigneeId ? t("todosAssigneeRemoved") : t("todosMine"));
+            rows.push(navRow(t("todosAssignee"), who, "who"));
+        }
+        if (rows.length) body.push(T.h("div", { class: "set-group" }, rows));
+        const doneOffers = ed.querySelector(".td-edit-offers");
+        if (doneOffers) body.push(T.h("div", { class: "set-group td-offers-group" }, [doneOffers]));
+
+        // 아래쪽 버튼 가운데 취소·저장은 뒤로 버튼이 맡는다. 남은 것(지금 실행·삭제)만 행으로 둔다.
+        const acts = [...ed.querySelectorAll(".td-edit-foot > .btn")].filter((b) => !b.matches(".td-foot-cancel, .td-foot-save"));
+        for (const b of acts.reverse()) body.push(T.h("div", { class: "set-group td-act-group" }, [b]));
+        return viewEl(item, 1, t("todosDetails"), leaveDetail, body);
+    }
+
+    // 편집 중인 항목이 있으면 상세 화면을 그리고, 없으면 닫는다. 깊이가 달라지면 화면이 밀려 들어오고 나간다.
+    function renderDetail(all) {
+        const item = isTouch() && editId && draft ? all.find((row) => row.id === editId) : null;
+        if (!item) {
+            closeDetail();
+            return;
+        }
+        if (!sheetHost) {
+            sheetHost = T.h("div", { class: "td-detail-host", hidden: true });
+            document.body.append(sheetHost);
+        }
+        clearTimeout(viewTimer);
+        for (const el of sheetHost.querySelectorAll(".sp-leaving")) el.remove();
+        const prev = sheetHost.hidden ? null : sheetHost.querySelector(".td-view");
+        const done = item.status === "done";
+        const view = detailEl(item, done || (!isJob(item) && !!item.periodDone));
+        const depth = Number(view.dataset.level) - (prev ? Number(prev.dataset.level) : 0);
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const anim = !depth || viewInstant || reduce ? null : depth > 0 ? "push" : "pop";
+        viewInstant = false;
+        sheetHost.hidden = false;
+        document.body.classList.add("td-detail-open");
+        if (!anim) {
+            const top = prev && prev.dataset.view === view.dataset.view ? prev.querySelector(".td-view-body").scrollTop : 0;
+            sheetHost.replaceChildren(view);
+            view.querySelector(".td-view-body").scrollTop = top;
+            return;
+        }
+        // 위에 놓이는 쪽이 뒤에 온다: 들어갈 때는 새 화면이, 나올 때는 옛 화면이 위다.
+        view.classList.add(anim === "push" ? "sp-in-right" : "sp-in-left");
+        if (prev) prev.classList.add("sp-leaving", anim === "push" ? "sp-out-left" : "sp-out-right");
+        if (anim === "push") sheetHost.append(view);
+        else sheetHost.prepend(view);
+        viewTimer = setTimeout(() => {
+            prev?.remove();
+            view.classList.remove("sp-in-right", "sp-in-left");
+        }, VIEW_MS);
+    }
+    // instant: 화면을 떠날 때나 손가락으로 이미 밀어냈을 때. 애니메이션 없이 바로 치운다.
+    function closeDetail(instant) {
+        detailView = "main";
+        if (!sheetHost || sheetHost.hidden) return;
+        clearTimeout(viewTimer);
+        document.body.classList.remove("td-detail-open");
+        const clear = () => {
+            sheetHost.hidden = true;
+            sheetHost.replaceChildren();
+        };
+        const view = sheetHost.querySelector(".td-view:not(.sp-leaving)");
+        if (instant || viewInstant || !view) {
+            viewInstant = false;
+            clear();
+            return;
+        }
+        if (sheetHost.contains(document.activeElement)) document.activeElement.blur();
+        for (const el of sheetHost.querySelectorAll(".sp-leaving")) el.remove();
+        view.classList.remove("sp-in-right", "sp-in-left");
+        view.classList.add("sp-leaving", "sp-out-right");
+        viewTimer = setTimeout(clear, VIEW_MS);
+    }
+
+    /* 뒤로 제스처(ui/gestures.js)가 상세 화면을 손가락으로 밀어낼 때 쓴다(설정 화면의 gesture와 같은 약속).
+       begin: 밀려 나갈 위 화면과 그 밑에서 드러날 화면을 돌려준다. 맨 앞 상세라면 밑은 할 일 목록(#main)이다. */
+    const gesture = {
+        host: () => sheetHost,
+        canPop: () => isTouch() && !!sheetHost && !sheetHost.hidden && !saving && !!editId,
+        begin() {
+            clearTimeout(viewTimer);
+            const views = [...sheetHost.querySelectorAll(".td-view")];
+            const top = views.find((v) => !v.classList.contains("sp-leaving")) || views[views.length - 1];
+            for (const v of views) if (v !== top) v.remove();
+            top.classList.remove("sp-in-right", "sp-in-left");
+            if (top.dataset.level !== "2") return { top, under: document.getElementById("main"), sub: false };
+            // 한 단계 들어간 화면: 그 밑에 앞 화면을 깔아 둔다.
+            pullFields();
+            const was = detailView;
+            detailView = "main";
+            const item = items().find((row) => row.id === editId);
+            const under = detailEl(item, item.status === "done" || (!isJob(item) && !!item.periodDone));
+            detailView = was;
+            sheetHost.prepend(under);
+            return { top, under, sub: true };
+        },
+        end(commit, { top, under, sub }) {
+            if (sub) {
+                if (!commit) {
+                    under.remove();
+                    return;
+                }
+                // 깔아 둔 앞 화면이 그대로 지금 화면이 된다.
+                top.remove();
+                detailView = "main";
+                return;
+            }
+            if (!commit) return;
+            // 이미 손가락을 따라 다 나갔다. 저장이 되면 애니메이션 없이 닫고, 안 되면(제목 없음 등) 다시 보인다.
+            viewInstant = true;
+            commitDraft().then((ok) => {
+                if (!ok) viewInstant = false;
+            });
+        },
+    };
+
     function doneToggleEl(doneItems, doneKey) {
         const frag = document.createDocumentFragment();
         const open = doneOpen[doneKey];
@@ -2041,14 +2300,14 @@
             ".td-edit-title,.td-edit-prompt,.td-time,.td-date,.td-num,.td-sel,.td-cron,.td-chip,.td-check,.td-done-btn,.td-handoff,.td-hand-item,.btn";
         const active = document.activeElement;
         let focus = null;
-        if (active && page.contains(active)) {
-            const host = active.closest?.(".td-row,.td-sug");
+        if (inUi(active)) {
+            const host = active.closest?.(".td-row,.td-sug,.td-view");
             const cls = [...(active.classList || [])].find((c) => SEL.includes("." + c));
             if (cls && host?.dataset?.id) {
                 const peers = [...host.querySelectorAll("." + cls)];
                 focus = {
                     rid: host.dataset.id,
-                    sel: host.classList.contains("td-sug") ? ".td-sug" : ".td-row",
+                    sel: host.classList.contains("td-sug") ? ".td-sug" : host.classList.contains("td-view") ? ".td-view" : ".td-row",
                     cls,
                     i: Math.max(0, peers.indexOf(active)),
                     s: active.selectionStart,
@@ -2104,9 +2363,12 @@
         }
         const wrap = T.h("div", { class: "td-wrap" }, wrapChildren);
         page.append(wrap);
+        renderDetail(all);
 
         if (focus) {
-            const host = focus.rid ? page.querySelector(`${focus.sel || ".td-row"}[data-id="${focus.rid}"]`) : null;
+            // 편집기가 상세 화면에 있으면 같은 id의 행이 목록에도 있다. 상세 화면 쪽을 먼저 찾는다.
+            const hostSel = `${focus.sel || ".td-row"}[data-id="${focus.rid}"]`;
+            const host = focus.rid ? sheetHost?.querySelector(hostSel) || page.querySelector(hostSel) : null;
             const el = host ? host.querySelectorAll("." + focus.cls)[focus.i] : null;
             if (el) {
                 el.focus({ preventScroll: true });
@@ -2116,7 +2378,7 @@
             }
         } else if (focusEdit) {
             focusEdit = false;
-            const input = page.querySelector(".td-edit-title");
+            const input = find(".td-edit-title");
             if (input && !isTouch()) {
                 input.focus({ preventScroll: true });
                 input.selectionStart = input.selectionEnd = input.value.length;
@@ -2247,6 +2509,7 @@
         else closeEditor();
         state.setCurrentTodo(null);
         page.replaceChildren();
+        closeDetail(true);
         T.chat?.refreshHeader?.();
         T.composer?.syncMode?.();
     }
@@ -2419,5 +2682,5 @@
         return parts.filter(Boolean).join(", ").slice(0, 180);
     }
 
-    T.todosUI = { init, open, hide, isOpen, routeFromPath, addFromComposer, describeDue };
+    T.todosUI = { init, open, hide, isOpen, routeFromPath, addFromComposer, describeDue, gesture };
 })((window.Taby = window.Taby || {}));

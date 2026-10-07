@@ -169,7 +169,11 @@
         const ms = Date.parse(at || "");
         if (!Number.isFinite(ms)) return "";
         try {
-            return new Intl.DateTimeFormat(i18nLocale(), { dateStyle: "full" }).format(new Date(ms));
+            // 메신저의 날짜 칩처럼 "10월 6일"만 쓴다. 올해가 아니면 연도를 붙인다.
+            const d = new Date(ms);
+            const opts =
+                d.getFullYear() === new Date().getFullYear() ? { month: "long", day: "numeric" } : { year: "numeric", month: "long", day: "numeric" };
+            return new Intl.DateTimeFormat(i18nLocale(), opts).format(d);
         } catch (_) {
             return "";
         }
@@ -178,7 +182,23 @@
     function msgTimeEl(at) {
         const label = fmtMsgTime(at);
         if (!label) return null;
-        return T.h("div", { class: "msg-time", text: label, title: fmtMsgTitle(at) });
+        return T.h("span", { class: "msg-time", text: label, title: fmtMsgTitle(at) });
+    }
+    // 시각을 글의 흐름 안에 둔다. 메신저처럼 마지막 줄 끝에 흘러 붙고, 자리가 모자라면 한 줄 아래로 내려간다.
+    // - 통계 푸터가 있으면 그 줄의 오른쪽 끝(시각이 따로 한 줄을 더 차지하지 않게)
+    // - 글이 문단(또는 보낸 글)으로 끝나면 그 마지막 줄 끝
+    // - 목록·코드·표로 끝나면 그 아래 오른쪽
+    // - 말풍선이 없으면(첨부만 있는 메시지) 첨부 아래
+    function placeTime(time, stack, bubble) {
+        if (!time) return;
+        const foot = bubble?.querySelector(":scope > .stats-footer");
+        const text = bubble?.querySelector(":scope > .bubble-text");
+        const lastBlock = bubble?.querySelector(":scope > .md")?.lastElementChild;
+        if (foot) foot.append(time);
+        else if (text) text.append(time);
+        else if (lastBlock?.tagName === "P") lastBlock.append(time);
+        else if (lastBlock) bubble.append(time);
+        else stack.append(time);
     }
     // 이미지 src: blob/data는 그대로, 파일 API는 쿼리 토큰을 붙인다.
     function setThumbSrc(img, pathOrUrl) {
@@ -301,8 +321,7 @@
             const bubble = T.h("div", { class: "bubble" }, [T.h("div", { class: "bubble-text", text: visibleText })]);
             stack.append(bubble);
         }
-        const time = msgTimeEl(at);
-        if (time) stack.append(time);
+        placeTime(msgTimeEl(at), stack, stack.querySelector(".bubble"));
         return T.h("div", { class: "msg-row user" + (optimistic ? " optimistic" : "") }, [stack]);
     }
 
@@ -317,143 +336,6 @@
         return T.h("div", { class: "stats-footer", text: parts.join(" · ") });
     }
 
-    // 복사/재생성 액션(라이브 확정 경로와 동일한 마크업을 쓴다)
-    function buildActions(text, opt) {
-        const o = opt || {};
-        const actions = T.h("div", { class: "msg-actions" });
-        const copyBtn = T.h(
-            "button",
-            {
-                class: "btn-icon",
-                "data-tip": t("copy"),
-                "aria-label": t("copy"),
-                onclick() {
-                    T.copyText(text).then((ok) => {
-                        copyBtn.classList.toggle("copied-ok", !!ok);
-                        if (ok) setTimeout(() => copyBtn.classList.remove("copied-ok"), 1200);
-                    });
-                },
-            },
-            [T.icon("copy")],
-        );
-        actions.append(copyBtn);
-        if (o.allowRegen) {
-            actions.append(
-                T.h(
-                    "button",
-                    {
-                        class: "btn-icon",
-                        "data-tip": t("regenerate"),
-                        "aria-label": t("regenerate"),
-                        onclick() {
-                            regenerate();
-                        },
-                    },
-                    [T.icon("send")],
-                ),
-            );
-        }
-        return actions;
-    }
-
-    // 모서리 근처일 때만 코너를 돌려준다. 한가운데는 null.
-    function hitCorner(el, x, y) {
-        const r = el.getBoundingClientRect();
-        const zoneX = Math.min(96, Math.max(44, r.width * 0.34));
-        const zoneY = Math.min(96, Math.max(44, r.height * 0.38));
-        const distL = x - r.left;
-        const distR = r.right - x;
-        const distT = y - r.top;
-        const distB = r.bottom - y;
-        if (distL < -16 || distR < -16 || distT < -16 || distB < -16) return null;
-        const nearX = distL <= zoneX || distR <= zoneX;
-        const nearY = distT <= zoneY || distB <= zoneY;
-        if (!nearX || !nearY) return null;
-        const h = distL <= distR ? "l" : "r";
-        const v = distT <= distB ? "t" : "b";
-        return v + h;
-    }
-
-    function dockOffset(actions, bubble, corner) {
-        const hang = 14;
-        const bw = bubble.offsetWidth;
-        const bh = bubble.offsetHeight;
-        const aw = actions.offsetWidth || 64;
-        const ah = actions.offsetHeight || 30;
-        const x = corner[1] === "r" ? Math.max(0, bw - aw) : 0;
-        const y = corner[0] === "b" ? bh - ah + hang : -hang;
-        return { x, y };
-    }
-
-    function bindActionDock(row, actions, anchor) {
-        const FADE_MS = 200;
-
-        function place(el, c) {
-            const { x, y } = dockOffset(el, anchor, c);
-            el.style.setProperty("--ax", `${x}px`);
-            el.style.setProperty("--ay", `${y}px`);
-            el.dataset.corner = c;
-        }
-
-        function spawnGhost() {
-            const ghost = actions.cloneNode(true);
-            ghost.classList.add("ghost", "show");
-            ghost.setAttribute("aria-hidden", "true");
-            actions.after(ghost);
-            void ghost.offsetWidth;
-            ghost.classList.remove("show");
-            setTimeout(() => ghost.remove(), FADE_MS + 40);
-        }
-
-        function clearGhosts() {
-            anchor.querySelectorAll(".msg-actions.ghost").forEach((g) => g.remove());
-        }
-
-        function hide() {
-            if (!actions.classList.contains("show")) return;
-            actions.classList.remove("show");
-            clearGhosts();
-            if (T.tooltip) T.tooltip.hide();
-        }
-
-        function go(c) {
-            if (!c) {
-                hide();
-                return;
-            }
-            const shown = actions.classList.contains("show");
-            if (shown && actions.dataset.corner === c) return;
-            if (shown) {
-                spawnGhost();
-                actions.classList.remove("show");
-                void actions.offsetWidth;
-            }
-            place(actions, c);
-            void actions.offsetWidth;
-            actions.classList.add("show");
-        }
-
-        function onPoint(e) {
-            if (e.pointerType === "touch") return;
-            if (actions.contains(e.target)) return;
-            go(hitCorner(anchor, e.clientX, e.clientY));
-        }
-
-        row.addEventListener("pointerenter", onPoint);
-        row.addEventListener("pointermove", onPoint);
-        row.addEventListener("pointerleave", (e) => {
-            if (e.relatedTarget && (row.contains(e.relatedTarget) || actions.contains(e.relatedTarget))) return;
-            hide();
-        });
-        actions.addEventListener("focusin", () => {
-            actions.classList.add("show");
-        });
-        actions.addEventListener("focusout", (e) => {
-            if (row.contains(e.relatedTarget)) return;
-            actions.classList.remove("show");
-        });
-    }
-
     function buildAssistant(text, opt) {
         const o = opt || {};
         const bubble = T.h("div", { class: "bubble" });
@@ -465,16 +347,11 @@
         const sf = o.stats && state.state.settings && state.state.settings.showReplyFooter ? statsFooter(o.stats) : null;
         if (sf) bubble.append(sf);
 
-        const actions = buildActions(text, { allowRegen: o.allowRegen });
-        bubble.append(actions);
         const stack = T.h("div", { class: "msg-stack" }, [bubble]);
         const atts = buildMessageAttachments(o.attachments);
         if (atts) stack.append(atts);
-        const time = msgTimeEl(o.at);
-        if (time) stack.append(time);
-        const row = T.h("div", { class: "msg-row assistant" }, [stack]);
-        bindActionDock(row, actions, bubble);
-        return row;
+        placeTime(msgTimeEl(o.at), stack, bubble);
+        return T.h("div", { class: "msg-row assistant" }, [stack]);
     }
 
     function buildToolCard(tool) {
@@ -694,14 +571,10 @@
             if (f.m.role === "user" && text.includes("[tabybot-scheduled]")) return false;
             return true;
         });
-        let lastA = -1;
         // 통계 푸터는 턴의 마지막 보이는 assistant 버블에만 단다. 중간 발화마다 달리지 않게.
         const lastOfTurn = new Map();
         visible.forEach((f, i) => {
-            if (f.m.role === "assistant") {
-                lastA = i;
-                lastOfTurn.set(f.turn, i);
-            }
+            if (f.m.role === "assistant") lastOfTurn.set(f.turn, i);
         });
 
         let lastDayKey = null;
@@ -720,12 +593,9 @@
                 el = buildAssistant(f.m.content || "", {
                     stats: lastOfTurn.get(f.turn) === i ? f.stats : null,
                     attachments: f.attachments,
-                    allowRegen: i === lastA && !c.live,
                     at: msgAt,
                 });
             }
-            // 길게 누르기 메뉴의 "재생성": hover 액션과 같은 조건(마지막 답변, 실행 중 아님).
-            if (f.m.role === "assistant" && i === lastA && !c.live) el.dataset.regen = "1";
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
             el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
             el.dataset.m = String(f.mi);
@@ -902,23 +772,6 @@
         }
     }
 
-    function regenerate() {
-        const c = state.currentConv();
-        if (!c || c.live) return;
-        let lastUser = null;
-        for (let i = c.turns.length - 1; i >= 0 && !lastUser; i--) {
-            const msgs = c.turns[i].messages;
-            for (let j = msgs.length - 1; j >= 0; j--) {
-                if (msgs[j].role === "user" && typeof msgs[j].content === "string" && msgs[j].content.trim()) {
-                    lastUser = msgs[j];
-                    break;
-                }
-            }
-        }
-        if (!lastUser) return;
-        submitMessage({ text: lastUser.content });
-    }
-
     /* ── 대화 열기 ──────────────────────────────────────────── */
     const REVALIDATE_AFTER_MS = 3000;
 
@@ -928,10 +781,10 @@
         open._token = token;
         state.setCurrent(id == null ? null : String(id));
 
-        // URL 동기화: /a/<uuid>?m=&q=. 설정 페이지(/s/)가 열려 있으면 경로를 덮지 않는다.
+        // URL 동기화: /a/<uuid>?m=&q=. 설정 페이지(/s, /s/…)가 열려 있으면 경로를 덮지 않는다.
         try {
             const bot = id ? state.botByUuid(String(id)) : null;
-            if (!/^\/s\//.test(location.pathname) && !/^\/t(?:\/|$)/.test(location.pathname) && !/^\/c\//.test(location.pathname)) {
+            if (!/^\/s(?:\/|$)/.test(location.pathname) && !/^\/t(?:\/|$)/.test(location.pathname) && !/^\/c\//.test(location.pathname)) {
                 const qs = new URLSearchParams();
                 if (o.params?.q) qs.set("q", o.params.q);
                 if (o.params?.m != null) qs.set("m", String(o.params.m));
@@ -1040,8 +893,8 @@
             const name = t("todos");
             document.title = name + " · tabyBot";
             hdrAvatar.append(T.icon("list", "icon-sm"));
-            hdrAvatar.style.background = "var(--text-tertiary)";
-            hdrAvatar.style.color = "var(--text)";
+            hdrAvatar.style.backgroundColor = "var(--accent)";
+            hdrAvatar.style.color = "#fff";
             hdrName.textContent = name;
             return;
         }
@@ -1049,7 +902,7 @@
         const name = bot ? bot.name : "";
         document.title = name ? `${name} · tabyBot` : "tabyBot";
         hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
-        hdrAvatar.style.background = bot?.color || "var(--surface-2)";
+        hdrAvatar.style.backgroundColor = bot?.color || "var(--surface-2)";
         hdrAvatar.style.color = "#fff";
         hdrName.textContent = name;
     }
@@ -1137,5 +990,5 @@
         refreshHeader();
     }
 
-    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget, isViewing, regenerate };
+    T.chat = { init, open, refreshCurrent, submitMessage, refreshHeader, openMessageTarget, isViewing };
 })((window.Taby = window.Taby || {}));

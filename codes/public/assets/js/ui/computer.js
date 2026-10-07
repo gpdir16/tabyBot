@@ -96,9 +96,12 @@
                 class: "btn-icon cp-back",
                 "data-tip": t("back"),
                 "aria-label": t("back"),
-                onclick: () => close(),
+                // 모바일에서는 밀어서 닫을 때와 같은 모양으로 밀려 나간 뒤 닫힌다.
+                onclick: () => {
+                    if (!T.gestures?.closeInner?.()) close();
+                },
             },
-            [T.icon("arrow-left")],
+            [T.icon("chevron-left")],
         );
         const status = T.h("span", { class: "cp-status" });
         const tabScreen = T.h("button", {
@@ -972,7 +975,7 @@
         if (hdrAvatar) {
             hdrAvatar.replaceChildren();
             hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
-            hdrAvatar.style.background = bot?.color || "var(--surface-2)";
+            hdrAvatar.style.backgroundColor = bot?.color || "var(--surface-2)";
             hdrAvatar.style.color = "#fff";
         }
         if (hdrName) hdrName.textContent = name;
@@ -1051,6 +1054,8 @@
                 const uuid = state.state.currentId;
                 if (!uuid || T.todosUI?.isOpen?.() || T.settingsUI?.isOpen?.()) return;
                 navigate(uuid);
+                // 모바일에서는 채팅 위로 오른쪽에서 밀려 들어온다.
+                T.gestures?.openInner?.();
             });
         }
     }

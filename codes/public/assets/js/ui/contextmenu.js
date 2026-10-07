@@ -117,7 +117,7 @@
                 const lift = state.lift;
                 lift.el.style.transform = "";
                 lift.el.style.height = `${lift.rect.height}px`;
-                lift.el.style.borderRadius = `${lift.radius}px`;
+                lift.el.style.borderRadius = radiusCss(lift.radii, 1);
                 lift.inner.style.transform = "";
             }
             setTimeout(done, CLOSE_MS);
@@ -259,6 +259,11 @@
         return Math.max(rect.top, 0);
     }
 
+    // 네 모서리 반지름을 CSS 값으로. 배율(k)로 줄여 그리는 동안에도 보이는 반지름이 같도록 나눈다.
+    function radiusCss(radii, k) {
+        return radii.map((r) => `${r / k}px`).join(" ");
+    }
+
     // 대상을 복제해 흐린 배경 위에 카드로 띄운다. 조상에 걸린 스타일(.msg-row.user .bubble 등)이
     // 그대로 먹도록 조상들의 클래스만 가진 껍데기(display: contents)로 감싼다.
     function buildLift(source) {
@@ -277,8 +282,11 @@
             shell.append(root);
             root = shell;
         }
+        // 네 모서리를 따로 읽는다: 말풍선은 묶음의 마지막일 때 한쪽 아래 모서리만 좁다.
         const cs = getComputedStyle(source);
-        const radius = parseFloat(cs.borderTopLeftRadius) || 0;
+        const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map(
+            (v) => parseFloat(v) || 0,
+        );
         // 화면 폭을 꽉 채운 대상(목록 행)은 살짝 줄여 양옆에 여백이 있는 카드로 띄운다.
         // 폭을 바꾸지 않고 배율로 줄이므로 안의 글자가 다시 줄바꿈되지 않는다.
         const scale = Math.min(1, (window.innerWidth - 2 * LIFT_MARGIN) / rect.width);
@@ -289,10 +297,10 @@
         el.style.top = `${rect.top}px`;
         el.style.width = `${rect.width}px`;
         el.style.height = `${rect.height}px`;
-        el.style.borderRadius = `${radius}px`;
+        el.style.borderRadius = radiusCss(radii, 1);
         // 손가락 아래에서 눌려 있던 크기 그대로 시작해 튀어 오른다.
         el.style.transform = `scale(${PRESS_SCALE})`;
-        return { el, inner, clone, rect, radius, scale, seenTop: visibleTop(source, rect) };
+        return { el, inner, clone, rect, radii, scale, seenTop: visibleTop(source, rect) };
     }
 
     // layout()이 계산해 둔 "떠 있는 모습"을 복제본에 입힌다.
@@ -341,7 +349,8 @@
                 inner: skip ? `translateY(${-skip}px)` : "",
                 // 높이가 줄면 가운데 기준 배율의 윗변도 달라지므로 그만큼 보정해 옮긴다.
                 transform: `translateY(${seenTop - (r.top + (h - seenH) / 2)}px) scale(${k})`,
-                radius: `${(lift.radius || LIFT_RADIUS) / k}px`,
+                // 모서리가 없는 대상(목록 행)은 띄울 때 카드처럼 둥글린다.
+                radius: lift.radii.some(Boolean) ? radiusCss(lift.radii, k) : `${LIFT_RADIUS / k}px`,
             };
             if (layer.classList.contains("in")) applyLift();
             top = seenTop + seenH + LIFT_GAP;
@@ -575,14 +584,14 @@
             items.push({ label: t("openImage"), icon: "eye", onSelect: () => openImage(img) });
         }
         const textEl = row.querySelector(".bubble-text, .md");
-        const text = String(textEl?.textContent || "");
+        // 코드 블록의 머리(언어 이름·복사 버튼)와 글 끝에 붙은 시각은 글이 아니므로 빼고 읽는다.
+        const plain = textEl?.cloneNode(true);
+        plain?.querySelectorAll(".codeblock-head, .msg-time").forEach((n) => n.remove());
+        const text = String(plain?.textContent || "");
         if (text.trim()) {
             if (items.length) items.push({ sep: true });
             items.push({ label: t("copyMessage"), icon: "copy", onSelect: () => void T.copyText(text) });
             items.push({ label: t("selectText"), icon: "text-select", onSelect: () => startTextSelection(row, textEl) });
-        }
-        if (row.dataset.regen === "1" && T.chat?.regenerate) {
-            items.push({ label: t("regenerate"), icon: "refresh", onSelect: () => T.chat.regenerate() });
         }
         if (!items.length) return null;
         return { items, source: target.closest(".bubble, .thumb, .file-attachment") || row.querySelector(".bubble") };

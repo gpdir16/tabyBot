@@ -253,7 +253,7 @@
         const actions = T.h("div", { class: "onb-actions" });
         actions.append(
             T.h("button", {
-                class: "btn ghost",
+                class: "btn ghost onb-skip",
                 text: t("onbSkip"),
                 async onclick() {
                     const button = this;
@@ -271,20 +271,25 @@
         );
         if (idx > 0) {
             actions.append(
-                T.h("button", {
-                    class: "btn ghost",
-                    text: t("onbPrev"),
-                    onclick() {
-                        idx--;
-                        render();
+                T.h(
+                    "button",
+                    {
+                        class: "btn ghost onb-prev",
+                        "aria-label": t("onbPrev"),
+                        onclick() {
+                            idx--;
+                            render();
+                        },
                     },
-                }),
+                    // 모바일에서는 왼쪽 위의 둥근 뒤로 버튼(꺾쇠)으로, 데스크톱에서는 글자 버튼으로 보인다.
+                    [T.icon("chevron-left"), T.h("span", { text: t("onbPrev") })],
+                ),
             );
         }
         actions.append(T.h("span", { class: "spacer" }));
         const last = idx === STEP_TOTAL - 1;
         const go = T.h("button", {
-            class: "btn primary",
+            class: "btn primary onb-go",
             text: last ? t("onbFinish") : t("onbNext"),
             onclick() {
                 if (last) save();
