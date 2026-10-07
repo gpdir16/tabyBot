@@ -8,13 +8,15 @@
     const isTouch = () => !!touchMq?.matches;
 
     let editId = null;
-    /* 모바일 상세 화면: 편집기를 목록 안에서 펼치지 않고, 설정 화면처럼 오른쪽에서 밀려 들어오는 화면에 그린다.
+    /* 상세 화면: 편집기를 목록 안에서 펼치지 않고, 설정 화면과 같은 모양의 화면에 그린다.
        일정과 담당은 거기서 한 단계 더 들어간 화면에서 고른다. 뒤로 가면 바뀐 내용이 저장된다.
-       화면은 문서 맨 위 층(#app 밖)에 놓는다. 스크롤 영역 안에 두면 iOS에서 입력창 밑에 깔린다. */
+       모바일: 오른쪽에서 밀려 들어와 화면을 덮는다. 문서 맨 위 층(#app 밖)에 놓는다(스크롤 영역 안에 두면 iOS에서 입력창 밑에 깔린다).
+       데스크톱: 덮지 않고 목록 오른쪽에 열로 이어 붙는다(#app 안의 마지막 열들). */
     const VIEW_MS = 420; // 화면이 밀려 들어오고 나가는 시간(app.css의 --nav-dur와 같게)
     let sheetHost = null; // 상세 화면들이 놓이는 층
     let detailView = "main"; // "main" | "when"(일정) | "who"(담당)
     let viewTimer = 0;
+    let closeAt = 0; // 데스크톱의 상세 열을 다 닫고 치울 때(performance.now 기준)
     let viewInstant = false; // 손가락으로 이미 다 밀어냈다: 다음 전환은 애니메이션 없이
     // 편집기의 요소는 목록(page)이나 시트 어느 쪽에든 있을 수 있다.
     const find = (sel) => page.querySelector(sel) || sheetHost?.querySelector(sel) || null;
@@ -1730,14 +1732,11 @@
         const editing = editId === item.id && draft;
         const job = isJob(item);
         const checked = done || (!job && !!item.periodDone);
-        // 데스크톱은 행이 그 자리에서 편집기로 펼쳐진다. 모바일은 행을 그대로 두고 상세 화면에 편집기를 그린다(renderDetail).
-        if (editing && !isTouch()) {
-            return T.h("div", { class: "td-row is-editing", role: "listitem", dataset: { id: item.id } }, [editEl(item, checked)]);
-        }
+        // 편집 중인 행도 그대로 두고, 편집기는 상세 화면에 그린다(renderDetail).
         const row = T.h(
             "div",
             {
-                class: "td-row" + (checked ? " is-done" : ""),
+                class: "td-row" + (checked ? " is-done" : "") + (editing ? " is-open" : ""),
                 role: "listitem",
                 tabindex: "0",
                 dataset: { id: item.id },
@@ -2064,13 +2063,18 @@
 
     // 편집 중인 항목이 있으면 상세 화면을 그리고, 없으면 닫는다. 깊이가 달라지면 화면이 밀려 들어오고 나간다.
     function renderDetail(all) {
-        const item = isTouch() && editId && draft ? all.find((row) => row.id === editId) : null;
+        const item = editId && draft ? all.find((row) => row.id === editId) : null;
         if (!item) {
             closeDetail();
             return;
         }
-        if (!sheetHost) {
-            sheetHost = T.h("div", { class: "td-detail-host", hidden: true });
+        if (!sheetHost) sheetHost = T.h("div", { class: "td-detail-host", hidden: true });
+        if (!isTouch()) {
+            renderDetailColumns(item);
+            return;
+        }
+        if (sheetHost.parentNode !== document.body) {
+            sheetHost.replaceChildren();
             document.body.append(sheetHost);
         }
         clearTimeout(viewTimer);
@@ -2100,6 +2104,49 @@
             view.classList.remove("sp-in-right", "sp-in-left");
         }, VIEW_MS);
     }
+    // 데스크톱: 상세 화면을 목록 오른쪽에 열로 놓는다. 일정·담당을 열면 그 오른쪽에 열이 하나 더 붙는다.
+    function renderDetailColumns(item) {
+        const app = document.getElementById("app");
+        if (sheetHost.parentNode !== app) {
+            sheetHost.replaceChildren();
+            app.append(sheetHost);
+        }
+        clearTimeout(viewTimer);
+        viewInstant = false;
+        const checked = item.status === "done" || (!isJob(item) && !!item.periodDone);
+        const want = detailView;
+        detailView = "main";
+        const views = [detailEl(item, checked)];
+        if (want !== "main") {
+            detailView = want;
+            // 고를 것이 없어진 화면(끝난 일의 담당 등)은 detailEl이 앞 화면으로 되돌린다.
+            const sub = detailEl(item, checked);
+            if (sub.dataset.level === "2") views.push(sub);
+        }
+        const old = sheetHost.hidden ? [] : [...sheetHost.querySelectorAll(".td-view:not(.col-out)")];
+        const tops = views.map(
+            (v) => old.find((o) => o.dataset.view === v.dataset.view && o.dataset.id === v.dataset.id)?.querySelector(".td-view-body").scrollTop,
+        );
+        // 닫힌 열(일정·담당에서 돌아옴)은 왼쪽 이웃 밑으로 미끄러져 들어간 뒤 치워진다.
+        // 같은 자리의 열이 다른 것으로 바뀔 때(다른 할 일을 고름)는 움직이지 않고 바로 바뀐다.
+        const key = (v) => v.dataset.id + ":" + v.dataset.view;
+        const sameLevel = (list, v) => list.some((x) => x.dataset.level === v.dataset.level);
+        // 닫히는 중인 열도 같은 자리에 새 열이 오면(다른 할 일로 바꿈) 바로 치운다.
+        const outs = sheetHost.hidden ? [] : [...sheetHost.querySelectorAll(".td-view.col-out")];
+        const gone = [...old.filter((o) => !views.some((v) => key(v) === key(o))), ...outs];
+        const leaving = gone.filter((o) => !sameLevel(views, o));
+        sheetHost.hidden = false;
+        sheetHost.replaceChildren(...views, ...leaving);
+        for (const v of leaving) T.columnOut(v);
+        views.forEach((v, i) => {
+            if (tops[i]) v.querySelector(".td-view-body").scrollTop = tops[i];
+        });
+        // 새로 생긴 열이 창 밖에 있으면 보이도록 앱의 가로 스크롤을 옮긴다.
+        const last = views[views.length - 1];
+        // 새로 열린 열은 오른쪽에서 미끄러져 들어온다(app.css의 col-in).
+        views.forEach((v, i) => T.columnIn(v, "t:" + key(v), tops[i] === undefined && !sameLevel(gone, v)));
+        if (tops[views.length - 1] === undefined) T.revealColumn(last);
+    }
     // instant: 화면을 떠날 때나 손가락으로 이미 밀어냈을 때. 애니메이션 없이 바로 치운다.
     function closeDetail(instant) {
         detailView = "main";
@@ -2111,6 +2158,14 @@
             sheetHost.replaceChildren();
         };
         const view = sheetHost.querySelector(".td-view:not(.sp-leaving)");
+        if (!isTouch() && !instant && view) {
+            // 데스크톱의 열은 왼쪽 이웃 밑으로 미끄러져 들어가며 닫힌다.
+            // 닫는 중에 다시 그려져도 숨기는 때를 미루지 않는다(처음 닫기 시작한 때부터 잰다).
+            if (sheetHost.querySelector(".td-view:not(.col-out)")) closeAt = performance.now() + VIEW_MS;
+            for (const v of sheetHost.querySelectorAll(".td-view")) T.columnOut(v);
+            viewTimer = setTimeout(clear, Math.max(0, closeAt - performance.now()));
+            return;
+        }
         if (instant || viewInstant || !view) {
             viewInstant = false;
             clear();
@@ -2173,9 +2228,6 @@
             T.h("span", { text: t("todosCompleted", { n: doneItems.length }) }),
         ]);
         btn.addEventListener("click", async () => {
-            const editing = editId ? items().find((r) => r.id === editId) : null;
-            const editingHere = editing?.status === "done" && secKeyOf(editing) === doneKey;
-            if (doneOpen[doneKey] && editingHere && draft && !(await commitDraft())) return;
             doneOpen[doneKey] = !doneOpen[doneKey];
             build();
         });
@@ -2235,9 +2287,6 @@
                 [T.icon("chevron", "icon-sm"), T.h("span", { text: `${t("todosAgent")} (${agentOpen.length})` })],
             );
             head.addEventListener("click", async () => {
-                const editing = editId ? items().find((r) => r.id === editId) : null;
-                const editingHere = editing && secKeyOf(editing) === "agent" && editing.status === "open";
-                if (!collapsed && editingHere && draft && !(await commitDraft())) return;
                 agentOpenCollapsed = !collapsed;
                 try {
                     localStorage.setItem(AGENT_OPEN_KEY, agentOpenCollapsed ? "1" : "0");
@@ -2308,6 +2357,8 @@
                 focus = {
                     rid: host.dataset.id,
                     sel: host.classList.contains("td-sug") ? ".td-sug" : host.classList.contains("td-view") ? ".td-view" : ".td-row",
+                    // 상세 화면은 열이 여럿일 수 있다(세부사항 + 일정/담당). 어느 열이었는지도 기억한다.
+                    view: host.classList.contains("td-view") ? host.dataset.view : null,
                     cls,
                     i: Math.max(0, peers.indexOf(active)),
                     s: active.selectionStart,
@@ -2328,9 +2379,6 @@
         const mineDone = all.filter((row) => row.status === "done" && !isJob(row) && !row.assigneeId).sort(doneDesc);
         const agentDone = all.filter((row) => row.status === "done" && !isJob(row) && row.assigneeId).sort(doneDesc);
         const jobsDone = all.filter((row) => row.status === "done" && isJob(row)).sort(doneDesc);
-
-        const editing = editId ? all.find((row) => row.id === editId) : null;
-        if (editing?.status === "done") doneOpen[secKeyOf(editing)] = true;
 
         const pending = suggestions();
         let wrapChildren;
@@ -2365,9 +2413,10 @@
         page.append(wrap);
         renderDetail(all);
 
+        let titleFocused = false;
         if (focus) {
             // 편집기가 상세 화면에 있으면 같은 id의 행이 목록에도 있다. 상세 화면 쪽을 먼저 찾는다.
-            const hostSel = `${focus.sel || ".td-row"}[data-id="${focus.rid}"]`;
+            const hostSel = `${focus.sel || ".td-row"}[data-id="${focus.rid}"]` + (focus.view ? `[data-view="${focus.view}"]:not(.col-out)` : "");
             const host = focus.rid ? sheetHost?.querySelector(hostSel) || page.querySelector(hostSel) : null;
             const el = host ? host.querySelectorAll("." + focus.cls)[focus.i] : null;
             if (el) {
@@ -2382,16 +2431,22 @@
             if (input && !isTouch()) {
                 input.focus({ preventScroll: true });
                 input.selectionStart = input.selectionEnd = input.value.length;
+                titleFocused = true;
             }
         } else {
             focusEdit = false;
         }
-        const targetRow = focusRowId || rowFocus;
+        // 방금 연 상세의 제목에 포커스를 줬으면, 누른 행으로 포커스를 되돌리지 않는다.
+        const targetRow = focusRowId || (titleFocused ? null : rowFocus);
         focusRowId = null;
         if (targetRow) {
             const el = page.querySelector(`.td-row[data-id="${targetRow}"]`);
             if (el) {
+                // 행을 보이게 하되 앱의 가로 스크롤(데스크톱의 열 위치)은 건드리지 않는다.
+                const app = document.getElementById("app");
+                const left = app.scrollLeft;
                 el.scrollIntoView({ block: "nearest" });
+                app.scrollLeft = left;
                 el.focus({ preventScroll: true });
             }
         } else if (doneBtnFocus >= 0) {
@@ -2608,17 +2663,20 @@
                 build();
             }
         };
-        page.addEventListener("compositionstart", (e) => {
+        // 편집기는 목록(page) 밖의 상세 화면에도 있으므로 문서에서 듣고, 할 일 화면 안의 입력만 받는다.
+        document.addEventListener("compositionstart", (e) => {
+            if (!inUi(e.target)) return;
             composing += 1;
             composingEl = e.target;
             clearTimeout(composingTimer);
             composingTimer = setTimeout(endComposition, 15000);
         });
-        page.addEventListener("compositionend", () => {
+        document.addEventListener("compositionend", (e) => {
+            if (!inUi(e.target)) return;
             composing = Math.max(0, composing - 1);
             if (!composing) endComposition();
         });
-        page.addEventListener("focusout", (e) => {
+        document.addEventListener("focusout", (e) => {
             if (composing && e.target === composingEl) endComposition();
         });
         state.on("bots", () => {

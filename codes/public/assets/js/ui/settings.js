@@ -101,8 +101,9 @@
             tab = o.tab;
             agent = o.tab === "agents" ? o.agentId || firstAgentId() || "__new__" : null;
         } else {
-            // 탭을 정하지 않고 열면 모바일은 목록, 데스크톱은 첫 탭이다.
-            tab = isMobile() ? "root" : "general";
+            // 탭을 정하지 않고 열면 모바일은 목록, 데스크톱은 목록 옆에 첫 탭까지 연다.
+            // 목록만 여는 것(/s)은 어디서든 된다. 데스크톱에서는 상세 열을 닫은 상태다.
+            tab = o.tab === "root" || isMobile() ? "root" : "general";
             agent = null;
         }
         // 설정이 닫혀 있다가 열리는 것이면 메인 패널째로 밀려 들어오므로 안에서는 전환하지 않는다.
@@ -138,10 +139,14 @@
                 pushed = true;
             } catch (_) {}
         }
+        const wasHidden = page.hidden;
         build();
         page.hidden = false;
         document.body.classList.add("settings-route");
+        // 숨겨진 채로 그린 열은 자리를 잴 수 없었다. 보이게 한 뒤 맨 오른쪽 열을 창 안으로 옮긴다(데스크톱).
+        if (wasHidden && !isMobile()) T.revealColumn([...page.querySelectorAll(".sp-view:not(.col-out)")].pop());
         T.sidebar?.syncRoute?.();
+        page.setAttribute("aria-label", t("settings"));
         page.focus({ preventScroll: true });
     }
 
@@ -196,16 +201,17 @@
 
     /* 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다. */
     function navigate(tab, agentId) {
+        // 이미 열려 있는 항목을 다시 눌렀다(데스크톱은 목록 열이 늘 보인다). 다시 그리면 열어 둔 편집 폼이 닫힌다.
+        if (tab === openTab && (agentId || null) === (editingAgent || null)) return;
         try {
             if (openTab === "root") {
                 // 목록에서 상세로: 항목을 쌓아 두면 뒤로 가기가 목록으로 돌아온다.
                 // 바로 밑에 목록이 있다는 표시를 항목에 남긴다(앞으로 가기·새로 고침 뒤에도 맞게).
                 rootScroll = page.querySelector(".sp-nav")?.scrollTop || 0;
                 history.pushState({ spFromRoot: true }, "", pathFor(tab, agentId));
-            } else if (isMobile()) {
-                history.replaceState(history.state, "", pathFor(tab, agentId));
             } else {
-                history.pushState(null, "", pathFor(tab, agentId));
+                // 상세에서 다른 상세로: 기록을 쌓지 않는다. 쌓으면 뒤로 가기가 지나온 항목을 하나씩 다시 연다.
+                history.replaceState(history.state, "", pathFor(tab, agentId));
             }
         } catch (_) {}
         T.app?.renderRoute();
@@ -331,7 +337,7 @@
                     navItem({
                         active: tab === x.id,
                         label: t(x.label),
-                        tile: T.h("span", { class: "sp-tile", style: `background-color:${x.color}` }, [T.icon(x.icon)]),
+                        tile: T.h("span", { class: "sp-tile sym", style: `--tile:${x.color}` }, [T.icon(x.icon)]),
                         onclick: () => navigate(x.id, null),
                     }),
                 ),
@@ -365,8 +371,9 @@
         ]);
     }
 
-    function buildView(tab = openTab, agentId = editingAgent) {
-        const title = T.h("div", { id: "settingsTitle", class: "sp-title", text: tabTitle(tab, agentId) });
+    // mark: 목록에서 강조할 항목({ tab, agentId }). 데스크톱의 목록 열이 옆에 열린 상세를 가리킬 때 쓴다.
+    function buildView(tab = openTab, agentId = editingAgent, mark = null) {
+        const title = T.h("div", { class: "sp-title", text: tabTitle(tab, agentId) });
         const head = T.h("header", { class: "sp-head" }, [
             // 채팅 헤더와 같은 점진적 블러: 내용이 헤더 밑으로 흐려지며 지나간다.
             T.h(
@@ -387,18 +394,20 @@
                 },
                 [T.icon("menu")],
             ),
-            // 모바일의 뒤로 버튼: 폼에서는 상세로, 상세에서는 설정 목록으로, 목록에서는 대화 목록으로 돌아간다.
+            // 뒤로 버튼: 폼에서는 상세로, 상세에서는 설정 목록으로, 목록에서는 대화 목록으로 돌아간다.
+            // (데스크톱에서는 그 열을 닫는 버튼이다. 목록 열에는 보이지 않는다.)
             T.h(
                 "button",
                 {
                     class: "btn-icon sp-back",
                     "aria-label": t("back"),
-                    onclick() {
-                        if (formOpen() && isMobile()) {
+                    onclick(e) {
+                        const level = e.currentTarget.closest(".sp-view")?.dataset.level;
+                        if (level === "2") {
                             closeForm();
                             return;
                         }
-                        if (tab !== "root" && isMobile()) {
+                        if (level === "1") {
                             popToRoot();
                             return;
                         }
@@ -435,7 +444,7 @@
                 class: "sp-view",
                 dataset: { view: tab === "root" ? "root" : "detail", level: String(level), key: pathFor(tab, agentId) + (form ? "#form" : "") },
             },
-            [head, T.h("div", { class: "sp-main" }, [buildNav(tab, agentId), body])],
+            [head, T.h("div", { class: "sp-main" }, [buildNav(mark ? mark.tab : tab, mark ? mark.agentId : agentId), body])],
         );
     }
 
@@ -460,6 +469,10 @@
     // 화면을 다시 그린다. 깊이가 달라졌으면 모바일에서 새 화면이 밀려 들어오고(깊어질 때) 옛 화면이 밀려 나간다(얕아질 때).
     // 같은 화면을 다시 그릴 때는 스크롤 위치를 지킨다.
     function build() {
+        if (!isMobile()) {
+            buildColumns();
+            return;
+        }
         const prev = page.querySelector(".sp-view:not(.sp-leaving)");
         const view = buildView();
         const sameKey = prev && prev.dataset.key === view.dataset.key;
@@ -506,6 +519,64 @@
     }
     // 더 깊은 화면으로 들어갈 때 떠난 화면의 스크롤 위치(화면 key → scrollTop).
     const leftScroll = new Map();
+
+    // 데스크톱: 목록 · 상세 · 편집 폼을 바꿔 끼우지 않고 왼쪽부터 열로 나란히 놓는다.
+    // 새 열이 생기면 그 열이 보이도록 앱의 가로 스크롤을 옮긴다.
+    function buildColumns() {
+        clearTimeout(viewTimer);
+        viewBusy = false;
+        rebuildPending = false;
+        const live = [...page.querySelectorAll(".sp-view:not(.col-out)")];
+        const old = new Map(live.map((v) => [v.dataset.key, v]));
+        const views = [buildView("root", null, { tab: openTab, agentId: editingAgent })];
+        if (openTab !== "root") {
+            // 폼이 열려 있으면 폼을 먼저 그린다(지워진 대상의 폼은 그리는 중에 닫힌다).
+            const top = buildView();
+            if (top.dataset.level === "2") {
+                // 폼을 잠깐 닫은 것으로 치고 그 밑의 상세 화면을 그린다.
+                const saved = [folderEditing, skillEditing, mcpEditing];
+                folderEditing = skillEditing = mcpEditing = null;
+                views.push(buildView());
+                [folderEditing, skillEditing, mcpEditing] = saved;
+            }
+            views.push(top);
+        }
+        // 같은 열을 다시 그릴 때는 스크롤 위치를 지킨다.
+        const scrolls = views.map((v) => {
+            const was = old.get(v.dataset.key);
+            return was ? [was.querySelector(".sp-nav").scrollTop, was.querySelector(".sp-body").scrollTop] : null;
+        });
+        const added = views.filter((v) => !old.has(v.dataset.key));
+        const gone = live.filter((v) => !views.some((n) => n.dataset.key === v.dataset.key));
+        // 열고 닫는 움직임(app.css의 col-in / col-out): 새 열은 왼쪽 이웃 밑에서 미끄러져 나오고, 닫힌 열은 그 밑으로 들어간다.
+        // 같은 자리의 열이 다른 것으로 바뀔 때(다른 항목을 고름)는 움직이지 않고 바로 바뀐다. 목록 열은 늘 있으므로 뺀다.
+        const sameLevel = (list, v) => list.some((x) => x.dataset.level === v.dataset.level);
+        for (const v of views) if (v.dataset.view !== "root") T.columnIn(v, "s:" + v.dataset.key, added.includes(v) && !sameLevel(gone, v));
+        // 아직 닫히는 중인 열과 이번에 닫힌 열은 맨 뒤(원래 있던 자리)에 남겨 두었다가 다 움직이면 치운다.
+        const leaving = [...page.querySelectorAll(".sp-view.col-out"), ...gone.filter((v) => !sameLevel(added, v))].filter(
+            (v) => !views.some((n) => n.dataset.key === v.dataset.key),
+        );
+        page.replaceChildren(...views, ...leaving);
+        for (const v of leaving) T.columnOut(v);
+        views.forEach((v, i) => {
+            if (!scrolls[i]) return;
+            v.querySelector(".sp-nav").scrollTop = scrolls[i][0];
+            v.querySelector(".sp-body").scrollTop = scrolls[i][1];
+        });
+        // 목록 열의 선택 항목이 가려져 있으면 그 열 안에서만 세로로 맞춘다.
+        // (scrollIntoView는 앱의 가로 스크롤까지 옮겨서, 오른쪽 열을 보고 있던 자리를 빼앗는다.)
+        const nav = views[0].querySelector(".sp-nav");
+        const act = nav.querySelector(".active");
+        if (act) {
+            const n = nav.getBoundingClientRect();
+            const a = act.getBoundingClientRect();
+            const top = n.top + (parseFloat(getComputedStyle(nav).paddingTop) || 0);
+            if (a.top < top) nav.scrollTop -= top - a.top;
+            else if (a.bottom > n.bottom) nav.scrollTop += a.bottom - n.bottom;
+        }
+        // 열이 새로 생겼으면 맨 오른쪽 열까지 보이게 한다.
+        if (added.length) T.revealColumn(views[views.length - 1]);
+    }
 
     // 화면이 다 움직였다. 그사이 미뤄 둔 다시 그리기가 있으면 지금 한다.
     function settleView() {
@@ -2862,13 +2933,10 @@
         T.i18n.onChange(() => {
             if (openTab) build();
         });
-        // 모바일 목록(/s)을 보다가 폭이 넓어지면 데스크톱에는 그 화면이 없으므로 첫 탭을 연다.
+        // 폭이 모바일과 데스크톱 사이를 오가면 화면 배치(한 화면씩 / 열로 나란히)가 달라지므로 다시 그린다.
         mobileMq.addEventListener("change", () => {
             if (!openTab || page.hidden) return;
-            if (!isMobile() && openTab === "root") {
-                openTab = "general";
-                syncPath();
-            }
+            page.replaceChildren();
             build();
         });
     }
