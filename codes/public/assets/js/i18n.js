@@ -172,7 +172,8 @@
             expand: "Expand sidebar",
             noBots: "No agents match",
             delete: "Delete",
-            deleteConfirm: "Delete?",
+            confirmDeleteTitle: 'Delete "{name}"?',
+            confirmDeleteText: "This can't be undone.",
             cancel: "Cancel",
             todosDetails: "Details",
             todosSchedule: "Schedule",
@@ -332,7 +333,9 @@
             compressOnModelChangeDesc:
                 "When the model changes, asks whether to compress every agent's session so the new model can start from a clean summary instead of the old model's raw context.",
             compressAllNow: "Compress all sessions now",
-            compressAllConfirm: "Compress all?",
+            compressAllConfirmTitle: "Compress all sessions?",
+            compressAllConfirmButton: "Compress",
+            noticesClearConfirmTitle: "Clear all notifications?",
             compressAllNowDesc:
                 "Summarizes every agent's current session. Useful before switching models to prevent old context from leaking in. Running sessions are skipped.",
             compressAllDone: "Compressed {n} session(s)",
@@ -631,7 +634,8 @@
             expand: "사이드바 펼치기",
             noBots: "일치하는 에이전트가 없어요",
             delete: "삭제",
-            deleteConfirm: "삭제?",
+            confirmDeleteTitle: '"{name}"을(를) 삭제할까요?',
+            confirmDeleteText: "삭제하면 되돌릴 수 없습니다.",
             cancel: "취소",
             todosDetails: "세부사항",
             todosSchedule: "일정",
@@ -792,7 +796,9 @@
             compressOnModelChangeDesc:
                 "모델이 바뀌면 모든 에이전트의 세션을 압축할지 물어봅니다. 확인하면 새 모델이 이전 모델의 원문 맥락 대신 깨끗한 요약으로 시작합니다.",
             compressAllNow: "모든 세션 지금 압축",
-            compressAllConfirm: "모두 압축할까요?",
+            compressAllConfirmTitle: "모든 세션을 압축할까요?",
+            compressAllConfirmButton: "압축",
+            noticesClearConfirmTitle: "모든 알림을 지울까요?",
             compressAllNowDesc:
                 "모든 에이전트의 현재 세션을 요약으로 압축합니다. 모델을 바꾸기 전에 이전 맥락이 섞이는 걸 막는 데 유용합니다. 실행 중인 세션은 건너뜁니다.",
             compressAllDone: "세션 {n}개를 압축했습니다",
@@ -1091,7 +1097,8 @@
             expand: "サイドバーを展開",
             noBots: "一致するエージェントがありません",
             delete: "削除",
-            deleteConfirm: "削除しますか？",
+            confirmDeleteTitle: "「{name}」を削除しますか？",
+            confirmDeleteText: "削除すると元に戻せません。",
             cancel: "キャンセル",
             todosDetails: "詳細",
             todosSchedule: "スケジュール",
@@ -1252,7 +1259,9 @@
             compressOnModelChangeDesc:
                 "モデルが変わると、すべてのエージェントのセッションを圧縮するか尋ねます。確認すると新しいモデルが前のモデルの生のコンテキストではなくクリーンな要約から始まります。",
             compressAllNow: "すべてのセッションを今すぐ圧縮",
-            compressAllConfirm: "すべて圧縮しますか？",
+            compressAllConfirmTitle: "すべてのセッションを圧縮しますか？",
+            compressAllConfirmButton: "圧縮",
+            noticesClearConfirmTitle: "すべての通知を消去しますか？",
             compressAllNowDesc:
                 "すべてのエージェントの現在のセッションを要約に圧縮します。モデルを切り替える前に古いコンテキストが混ざるのを防ぐのに便利です。実行中のセッションはスキップされます。",
             compressAllDone: "{n}件のセッションを圧縮しました",

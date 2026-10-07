@@ -215,8 +215,8 @@
     }
 
     /* ── SSE 이벤트 반영(mutator) ──────────────────────────── */
-    function freshLive() {
-        return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [] };
+    function freshLive(automated) {
+        return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [], automated };
     }
 
     // 목록 정렬(updatedAt)을 새 활동 시각으로 맞춘다. 정본은 뒤따르는
@@ -226,11 +226,13 @@
     }
 
     // live가 시작되는 전환 지점에서만 "live"를 방출한다(컴포저 정지 버튼 등이 구독).
-    function ensureLive(id) {
+    // 자동 실행(예약·능동 체크인)은 답이 나오기 전까지 목록 순서를 건드리지 않는다.
+    // 침묵으로 끝나면 기록에 남지 않으므로 먼저 올려 두면 순서가 튀었다가 되돌아간다.
+    function ensureLive(id, automated = false) {
         const c = conv(id);
         if (!c.live) {
-            c.live = freshLive();
-            touchMeta(c, id);
+            c.live = freshLive(automated);
+            if (!automated) touchMeta(c, id);
             emit("live", { id });
         }
         return c;
@@ -242,8 +244,8 @@
         return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
     }
 
-    function applyStatus(id, phase, detail, elapsedMs) {
-        const c = ensureLive(id);
+    function applyStatus(id, phase, detail, elapsedMs, automated = false) {
+        const c = ensureLive(id, automated);
         if (phase) c.live.phase = phase;
         // 툴 호출에 붙은 텍스트는 사용자에게 가지 않는 내부 메모: 버리기만 한다.
         // 사용자용 중간 발화는 user_say 호출(applySay)로만 들어온다.
@@ -256,8 +258,8 @@
         emit("status", { id });
     }
 
-    function applyDelta(id, full, text) {
-        const c = ensureLive(id);
+    function applyDelta(id, full, text, automated = false) {
+        const c = ensureLive(id, automated);
         // full이 지금까지 전체 누적. 없으면 text를 덧셈 폴백.
         c.live.text = typeof full === "string" ? full : c.live.text + (text || "");
         emit("delta", { id });
@@ -269,6 +271,8 @@
         if (!s.trim() || isSilentMarkedText(s)) return;
         const c = ensureLive(id);
         if (!c.live.intermediate.includes(s)) c.live.intermediate.push(s);
+        // 자동 실행은 실제로 사용자에게 말을 건 이 시점에 처음으로 목록 순서가 오른다.
+        if (c.live.automated) touchMeta(c, id);
         emit("status", { id });
     }
 
@@ -503,6 +507,9 @@
         })();
         const rawFinal = String(text || fallback || "");
         const snippet = (isSilentMarkedText(rawFinal) ? "" : rawFinal).replace(/\s+/g, " ").trim().slice(0, 120);
+        // 자동 실행이 말없이 끝났으면 기록에 남은 것이 없으므로 순서도 그대로 둔다.
+        const quietAuto = Boolean(liveSnap?.automated) && !snippet;
+        if (quietAuto) return;
         c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet && !silent ? { preview: snippet } : {}) });
     }
 

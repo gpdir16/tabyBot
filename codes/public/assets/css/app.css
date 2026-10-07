@@ -200,9 +200,6 @@ button {
     color: inherit;
     background: none;
     border: 0;
-    cursor: pointer;
-}
-button:disabled {
     cursor: default;
 }
 
@@ -527,7 +524,7 @@ kbd {
     border-radius: var(--radius-s);
     font-size: var(--fs-m);
     color: var(--text-secondary);
-    cursor: pointer;
+    cursor: default;
     transition:
         background var(--dur-1) var(--ease),
         color var(--dur-1) var(--ease);
@@ -966,6 +963,7 @@ kbd {
     margin-top: 0.25em;
 }
 .md a {
+    cursor: pointer; /* 네이티브처럼 버튼은 화살표, 본문 링크만 손가락 */
     color: var(--accent);
     text-decoration: none;
 }
@@ -1657,7 +1655,7 @@ kbd {
     width: 100%;
     padding: 0 14px 0 8px;
     text-align: left;
-    cursor: pointer;
+    cursor: default;
     transition: background var(--dur-1) var(--ease);
     scroll-margin-bottom: 96px;
     scroll-margin-top: 8px;
@@ -2648,7 +2646,7 @@ body.sb-collapsed .sp-expand {
     appearance: none;
     box-sizing: border-box;
     padding-right: 32px;
-    cursor: pointer;
+    cursor: default;
 }
 .select-wrap .icon {
     position: absolute;
@@ -2662,7 +2660,7 @@ body.sb-collapsed .sp-expand {
 /* 스위치 토글 */
 .switch {
     position: relative;
-    cursor: pointer;
+    cursor: default;
     width: 40px;
     height: 24px;
     flex: none;
@@ -2672,7 +2670,7 @@ body.sb-collapsed .sp-expand {
     inset: 0;
     opacity: 0;
     margin: 0;
-    cursor: pointer;
+    cursor: default;
 }
 .switch .tr {
     position: absolute;
@@ -3011,7 +3009,7 @@ body.sb-collapsed .sp-expand {
     font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-secondary);
-    cursor: pointer;
+    cursor: default;
 }
 .adv-toggle:hover {
     color: var(--text);
@@ -3044,7 +3042,7 @@ body.sb-collapsed .sp-expand {
     border-radius: 50%;
     border: 2px solid transparent;
     padding: 0;
-    cursor: pointer;
+    cursor: default;
     transition:
         transform var(--dur-1) var(--ease),
         border-color var(--dur-1) var(--ease);
@@ -3622,6 +3620,9 @@ body.sb-collapsed .sp-expand {
 }
 .nt-btn.strong {
     font-weight: 600;
+}
+.nt-btn.danger {
+    color: var(--danger);
 }
 .nt-btn + .nt-btn {
     border-left: 0.5px solid var(--border-strong);
@@ -4298,7 +4299,7 @@ body.resizing {
     font-size: var(--fs-m);
     font-weight: 500;
     letter-spacing: -0.005em;
-    cursor: pointer;
+    cursor: default;
     white-space: nowrap;
     user-select: none;
     -webkit-user-select: none;
@@ -4404,7 +4405,7 @@ body.resizing {
     align-items: center;
     gap: var(--sp-3);
     padding: 8px var(--sp-3);
-    cursor: pointer;
+    cursor: default;
     transition: background-color var(--dur-1) var(--ease);
 }
 .folder-agent {
@@ -6175,7 +6176,7 @@ body.computer-route #jumpLatest {
     font: inherit;
     font-size: var(--fs-s);
     color: var(--text-secondary);
-    cursor: pointer;
+    cursor: default;
     white-space: nowrap;
 }
 .cp-tab.active {
@@ -6250,7 +6251,7 @@ body.computer-route #jumpLatest {
     font: inherit;
     font-size: var(--fs-s);
     color: var(--text);
-    cursor: pointer;
+    cursor: default;
     white-space: nowrap;
 }
 .cp-start:hover {
@@ -6413,7 +6414,7 @@ body.kb-open .cp-terminal:not(.hidden) .cp-termkeyswrap {
     font: inherit;
     font-size: var(--fs-s);
     font-weight: 500;
-    cursor: pointer;
+    cursor: default;
     white-space: nowrap;
     transition:
         background var(--dur-1) var(--ease),

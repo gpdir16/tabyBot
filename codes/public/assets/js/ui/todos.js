@@ -573,7 +573,6 @@
             orig: { title: item.title || "", prompt: item.prompt || "" },
             origSched: schedSig(item),
             origAssignee: item.assigneeId || null,
-            armDelete: false,
         };
     }
 
@@ -1602,40 +1601,23 @@
             }
         };
 
-        const armed = draft.armDelete && Date.now() < (draft.armUntil || 0);
         const delBtn = T.h("button", {
             type: "button",
-            class: "btn ghost td-foot-del" + (armed ? " danger" : ""),
-            text: armed ? t("deleteConfirm") : t("delete"),
+            class: "btn ghost td-foot-del",
+            text: t("delete"),
             async onclick() {
-                if (saving) {
-                    const wasArmed = !!(draft?.armDelete && Date.now() < (draft.armUntil || 0));
-                    queuePending(() => {
-                        if (!routeFromPath()) return;
-                        if (wasArmed) void doDelete();
-                        else if (items().some((row) => row.id === item.id)) {
-                            openEdit(item.id);
-                            if (draft && editId === item.id) {
-                                draft.armDelete = true;
-                                draft.armUntil = Date.now() + 4000;
-                                if (isOpen()) build();
-                            }
-                        }
-                    });
-                    return;
-                }
                 if (!draft) return;
-                if (!draft.armDelete || Date.now() >= (draft.armUntil || 0)) {
-                    draft.armDelete = true;
-                    draft.armUntil = Date.now() + 4000;
-                    delBtn.classList.add("danger");
-                    delBtn.textContent = t("deleteConfirm");
-                    setTimeout(() => {
-                        if (draft?.armDelete && Date.now() >= (draft.armUntil || 0)) {
-                            draft.armDelete = false;
-                            if (isOpen()) build();
-                        }
-                    }, 4200);
+                const ok = await T.confirm({
+                    title: t("confirmDeleteTitle", { name: (item.title || "").trim() || t("todos") }),
+                    text: t("confirmDeleteText"),
+                    confirmLabel: t("delete"),
+                    danger: true,
+                });
+                if (!ok || !draft || editId !== item.id) return;
+                if (saving) {
+                    queuePending(() => {
+                        if (routeFromPath() && items().some((row) => row.id === item.id)) void doDelete();
+                    });
                     return;
                 }
                 delBtn.disabled = true;
