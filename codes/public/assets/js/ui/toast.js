@@ -5,7 +5,7 @@
 
    확인이 필요한 일(서버 알림, 새 버전, 서버 연결 불가, 에이전트 오류)은 여기가 아니라
    경고창(T.notices.alert, ui/notices.js)으로 띄운다. */
-(function (T) {
+((T) => {
     "use strict";
 
     const root = document.getElementById("toasts");
@@ -17,7 +17,7 @@
     let timer = 0;
 
     function dismiss(el) {
-        if (!el || !el.isConnected) return;
+        if (!el?.isConnected) return;
         if (current === el) current = null;
         el.classList.remove("in");
         el.classList.add("out");
@@ -30,7 +30,7 @@
         if (!root || !message) return;
         const failed = level === "error" || level === "warn";
         dismiss(current);
-        const el = T.h("div", { class: "toast" + (failed ? " error" : "") }, [T.h("span", { text: message })]);
+        const el = T.h("div", { class: `toast${failed ? " error" : ""}` }, [T.h("span", { text: message })]);
         el.addEventListener("click", () => dismiss(el));
         root.append(el);
         current = el;
@@ -41,4 +41,4 @@
     }
 
     T.toast = { show };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

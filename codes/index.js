@@ -27,7 +27,7 @@ function startSharedDisplay() {
             if (r?.sess) process.env.DISPLAY = `:${r.sess.display}`;
             else if (r?.error) console.warn(`tabyBot: shared display unavailable: ${r.error}`);
         })
-        .catch(() => {});
+        .catch((err) => console.warn(`tabyBot: shared display setup failed: ${err?.message || err}`));
 }
 
 async function main() {

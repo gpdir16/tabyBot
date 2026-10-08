@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { SESSION_DIR, USER_DIR } from "./paths.js";
-import { writeFileAtomic, writeJsonAtomic } from "./atomic-file.js";
+import { readJsonFile, writeFileAtomic, writeJsonAtomic } from "./atomic-file.js";
 
-export const DEFAULT_AGENT_ID = "main";
+const DEFAULT_AGENT_ID = "main";
 export const DEFAULT_AGENT_NAME = "tabyBot";
 
 const AGENTS_PATH = path.join(USER_DIR, "agents.json");
@@ -17,31 +17,13 @@ const MAX_PERSONA = 500;
 const MAX_MODEL = 128;
 const MAX_ID = 24;
 
-const TOPIC_COLORS = [7322096, 16766590, 13338331, 9367192, 16749490, 16478047];
-
-function readJson(filePath, fallback) {
-    if (!fs.existsSync(filePath)) return fallback;
-    try {
-        return JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch (err) {
-        console.error("tabyBot: invalid agents.json:", err.message);
-        return fallback;
-    }
-}
-
-function writeJson(filePath, data) {
-    writeJsonAtomic(filePath, data);
-}
-
 function newUuid() {
     return crypto.randomUUID();
 }
 
-function withSeed(agents) {
+function withSeed(stored) {
     // 봇이 하나도 없을 때만 첫 봇을 만든다. 특정 id를 특권 봇으로 취급하지 않는다.
-    if (!agents.length) {
-        agents = [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME, persona: "", createdAt: new Date().toISOString() }];
-    }
+    const agents = stored.length ? stored : [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME, persona: "", createdAt: new Date().toISOString() }];
     let mutated = false;
     for (const a of agents) {
         if (!a.uuid) {
@@ -79,10 +61,10 @@ function statMtime() {
     }
 }
 
-export function loadAgentsStore() {
+function loadAgentsStore() {
     const mtime = statMtime();
     if (agentsCache && mtime !== -1 && agentsCache.mtime === mtime) return agentsCache.store;
-    const raw = readJson(AGENTS_PATH, { agents: [], folders: [] });
+    const raw = readJsonFile(AGENTS_PATH, { agents: [], folders: [] }, { label: "agents.json" });
     const { agents, mutated } = withSeed(Array.isArray(raw?.agents) ? raw.agents.filter((a) => a && typeof a.id === "string") : []);
     const folders = normalizeFolders(raw?.folders);
     const folderIds = new Set(folders.map((f) => f.id));
@@ -92,13 +74,13 @@ export function loadAgentsStore() {
             a.folder = "";
         }
     }
-    if (mutated) writeJson(AGENTS_PATH, { agents, folders });
+    if (mutated) writeJsonAtomic(AGENTS_PATH, { agents, folders });
     agentsCache = { mtime: mutated ? statMtime() : mtime, store: { agents, folders } };
     return agentsCache.store;
 }
 
-export function saveAgentsStore(store) {
-    writeJson(AGENTS_PATH, { agents: store.agents || [], folders: store.folders || [] });
+function saveAgentsStore(store) {
+    writeJsonAtomic(AGENTS_PATH, { agents: store.agents || [], folders: store.folders || [] });
     agentsCache = { mtime: statMtime(), store };
 }
 
@@ -202,7 +184,7 @@ export function findAgentByNameOrId(query) {
     return listAgents().find((a) => a.id.toLowerCase() === q || String(a.name || "").toLowerCase() === q) || null;
 }
 
-export function slugifyAgentId(name, existingIds = []) {
+function slugifyAgentId(name, existingIds = []) {
     const ascii = String(name || "")
         .normalize("NFKD")
         .replace(/[\u0300-\u036f]/g, "")
@@ -211,7 +193,7 @@ export function slugifyAgentId(name, existingIds = []) {
         .replace(/^-+|-+$/g, "")
         .slice(0, MAX_ID);
 
-    let base = ascii || "agent";
+    const base = ascii || "agent";
 
     const used = new Set(existingIds);
     if (!used.has(base)) return base;
@@ -222,7 +204,7 @@ export function slugifyAgentId(name, existingIds = []) {
     return `${base.slice(0, 16)}-${Date.now().toString(36).slice(-6)}`;
 }
 
-export function normalizeAgentName(name) {
+function normalizeAgentName(name) {
     const trimmed = String(name || "")
         .trim()
         .replace(/\s+/g, " ");
@@ -231,7 +213,7 @@ export function normalizeAgentName(name) {
     return { name: trimmed };
 }
 
-export function normalizeAgentPersona(persona) {
+function normalizeAgentPersona(persona) {
     let trimmed = String(persona || "").trim();
     if (trimmed === "-" || trimmed === "—") trimmed = "";
     if (trimmed.length > MAX_PERSONA) return { error: "persona_too_long", max: MAX_PERSONA };
@@ -239,13 +221,13 @@ export function normalizeAgentPersona(persona) {
 }
 
 // 빈 문자열은 "전역 설정을 따른다"는 뜻. 선택형 오버라이드 공통 규칙.
-export function normalizeAgentModel(model) {
+function normalizeAgentModel(model) {
     const trimmed = String(model || "").trim();
     if (trimmed.length > MAX_MODEL) return { error: "model_too_long", max: MAX_MODEL };
     return { model: trimmed };
 }
 
-export function normalizeAgentThinkingLevel(value) {
+function normalizeAgentThinkingLevel(value) {
     const v = String(value || "")
         .trim()
         .toLowerCase();
@@ -254,7 +236,7 @@ export function normalizeAgentThinkingLevel(value) {
     return { thinkingLevel: v };
 }
 
-export function normalizeAgentColor(value) {
+function normalizeAgentColor(value) {
     const v = String(value || "")
         .trim()
         .toLowerCase();
@@ -290,7 +272,7 @@ export function ensureAgentMemory(id) {
     return file;
 }
 
-export function canAddAgent() {
+function canAddAgent() {
     return listAgents().length < MAX_AGENTS;
 }
 

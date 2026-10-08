@@ -7,7 +7,7 @@ export const QUIET_EMPTY_HINT = "If the user does not need a message, reply with
 
 const sessions = new Map();
 
-export class AgentSession {
+class AgentSession {
     constructor(chatId) {
         this.chatId = String(chatId);
         this.abortController = new AbortController();
@@ -55,7 +55,7 @@ export function endAgentSession(chatId) {
     sessions.delete(String(chatId));
 }
 
-export function getActiveAgentSession(chatId) {
+function getActiveAgentSession(chatId) {
     const session = sessions.get(String(chatId));
     return session?.running ? session : null;
 }

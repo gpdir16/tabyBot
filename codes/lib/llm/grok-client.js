@@ -1,127 +1,10 @@
-import { sanitizeMessagesForApi } from "./sanitize-messages.js";
+import { streamWithFallback, throwIfAborted } from "./transport.js";
+import { buildPayload, buildStreamResult } from "./responses-request.js";
 import { loadGrokTokens, ensureFreshToken } from "./grok-tokens.js";
 import { consumeResponsesStream } from "./responses-stream.js";
 
 // OAuth 세션은 개발자 API(api.x.ai)가 아니라 CLI 프록시를 사용
 const BASE_URL = "https://cli-chat-proxy.grok.com/v1";
-
-function isAbortError(err) {
-    return err?.name === "AbortError" || err?.code === "ABORT_ERR";
-}
-
-function normalizeErrorText(err) {
-    return String(err?.message || err || "")
-        .toLowerCase()
-        .trim();
-}
-
-function isTransientTransportError(err) {
-    const text = normalizeErrorText(err);
-    if (!text) return false;
-    return (
-        text.includes("premature close") ||
-        text.includes("socket hang up") ||
-        text.includes("fetch failed") ||
-        text.includes("network error") ||
-        text.includes("connection reset") ||
-        text.includes("connection terminated") ||
-        text.includes("econnreset") ||
-        text.includes("etimedout") ||
-        text.includes("eai_again") ||
-        text.includes("und_err_socket") ||
-        text.includes("terminated")
-    );
-}
-
-function messagesToResponsesInput(messages) {
-    const sanitized = sanitizeMessagesForApi(messages);
-    const instructions = [];
-    const input = [];
-
-    for (const msg of sanitized) {
-        if (msg.role === "system" || msg.role === "developer") {
-            const text = typeof msg.content === "string" ? msg.content : "";
-            if (text) instructions.push(text);
-            continue;
-        }
-
-        if (msg.role === "tool") {
-            input.push({
-                type: "function_call_output",
-                call_id: msg.tool_call_id,
-                output: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
-            });
-            continue;
-        }
-
-        if (msg.role === "assistant" && msg.tool_calls?.length) {
-            if (msg.content) {
-                input.push({
-                    type: "message",
-                    role: "assistant",
-                    content: extractTextContent(msg.content),
-                });
-            }
-            for (const tc of msg.tool_calls) {
-                input.push({
-                    type: "function_call",
-                    call_id: tc.id,
-                    name: tc.function?.name,
-                    arguments: tc.function?.arguments || "{}",
-                });
-            }
-            continue;
-        }
-
-        input.push({
-            type: "message",
-            role: msg.role === "assistant" ? "assistant" : "user",
-            content: extractTextContent(msg.content),
-        });
-    }
-
-    return { instructions: instructions.join("\n\n") || undefined, input };
-}
-
-function extractTextContent(content) {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-        return content.map((p) => {
-            if (p.type === "text") return { type: "input_text", text: p.text };
-            if (p.type === "image_url") {
-                return { type: "input_image", image_url: p.image_url?.url || p.image_url };
-            }
-            return p;
-        });
-    }
-    return content;
-}
-
-function convertTools(tools) {
-    if (!tools?.length) return undefined;
-    return tools.map((t) => {
-        if (t.type === "function" && t.function) {
-            return {
-                type: "function",
-                name: t.function.name,
-                description: t.function.description,
-                parameters: t.function.parameters,
-                ...(t.function.strict !== undefined ? { strict: t.function.strict } : {}),
-            };
-        }
-        return t;
-    });
-}
-
-function convertToolChoice(tool_choice) {
-    if (!tool_choice || tool_choice === "auto") return "auto";
-    if (tool_choice === "none") return "none";
-    if (tool_choice === "required") return "required";
-    if (typeof tool_choice === "object") {
-        return { type: "function", name: tool_choice.function?.name };
-    }
-    return "auto";
-}
 
 function buildAuthHeaders(accessToken) {
     // CLI 프록시는 Grok CLI 식별 헤더가 없으면 미권한 API 클라이언트로 취급
@@ -142,33 +25,6 @@ function buildHeaders(accessToken) {
     };
 }
 
-function buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam }) {
-    const { instructions, input } = messagesToResponsesInput(messages);
-    const payload = {
-        model,
-        input,
-        store: false,
-    };
-    if (instructions) payload.instructions = instructions;
-
-    const convertedTools = convertTools(tools);
-    if (convertedTools) {
-        payload.tools = convertedTools;
-        payload.tool_choice = convertToolChoice(tool_choice);
-    }
-
-    const level = String(thinkingLevel || "").toLowerCase();
-    if (level && level !== "off" && level !== "none") {
-        if (thinkingParam === "reasoning") {
-            payload.reasoning = { effort: level };
-        } else {
-            payload[thinkingParam || "reasoning_effort"] = level;
-        }
-    }
-
-    return payload;
-}
-
 async function getAuth() {
     const stored = loadGrokTokens();
     return ensureFreshToken(stored);
@@ -185,11 +41,7 @@ export async function grokComplete({
     thinkingLevel,
     thinkingParam = "reasoning",
 }) {
-    if (signal?.aborted) {
-        const err = new Error("Stopped by user.");
-        err.name = "AbortError";
-        throw err;
-    }
+    throwIfAborted(signal);
 
     const { accessToken } = await getAuth();
     const headers = buildHeaders(accessToken);
@@ -201,37 +53,15 @@ export async function grokComplete({
     const requestOptions = { method: "POST", headers, signal };
 
     if (useStream) {
-        let lastErr = null;
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-            let content = "";
-            try {
+        return streamWithFallback({
+            signal,
+            runStream: async () => {
                 const res = await fetchGrokResponses(headers, { ...payload, stream: true }, requestOptions);
                 const result = await consumeResponsesStream(res, signal, onTextDelta);
-                content = result.content;
-                return buildStreamResult(content, result.toolCalls, result.usage);
-            } catch (err) {
-                if (signal?.aborted || isAbortError(err)) {
-                    const abortErr = new Error("Stopped by user.");
-                    abortErr.name = "AbortError";
-                    abortErr.partialText = content;
-                    throw abortErr;
-                }
-                lastErr = err;
-                if (!isTransientTransportError(err)) throw err;
-                if (attempt === 0) continue;
-            }
-        }
-
-        try {
-            return await grokCompleteCollected({ headers, payload, signal });
-        } catch (fallbackErr) {
-            if (signal?.aborted || isAbortError(fallbackErr)) {
-                const abortErr = new Error("Stopped by user.");
-                abortErr.name = "AbortError";
-                throw abortErr;
-            }
-            throw lastErr || fallbackErr;
-        }
+                return buildStreamResult(result.content, result.toolCalls, result.usage);
+            },
+            runFallback: () => grokCompleteCollected({ headers, payload, signal }),
+        });
     }
     return grokCompleteCollected({ headers, payload, signal });
 }
@@ -260,14 +90,6 @@ async function grokCompleteCollected({ headers, payload, signal }) {
     const res = await fetchGrokResponses(headers, { ...payload, stream: true }, { method: "POST", headers, signal });
     const { content, usage, toolCalls } = await consumeResponsesStream(res, signal, null);
     return buildStreamResult(content, toolCalls, usage);
-}
-
-function buildStreamResult(content, toolCalls, usage) {
-    const message = { role: "assistant" };
-    if (content) message.content = content;
-    if (toolCalls?.length) message.tool_calls = toolCalls;
-    const finish_reason = toolCalls?.length ? "tool_calls" : "stop";
-    return { choices: [{ message, finish_reason }], usage };
 }
 
 const SKIP_MODEL = /embed|moderat|whisper|dall-e|dalle|tts|sora|transcrib|rerank|guard|imagine|video|image/i;

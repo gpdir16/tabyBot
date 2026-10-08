@@ -1,7 +1,7 @@
 /* tabyBot 웹 클라이언트: REST 클라이언트.
    계정이 있으면 모든 요청에 Authorization: Bearer <세션 토큰> 헤더.
    세션 토큰은 localStorage('tabybot.web.token')에 보관. */
-(function (T) {
+((T) => {
     "use strict";
 
     const TOKEN_KEY = "tabybot.web.token";
@@ -17,12 +17,14 @@
         try {
             if (v) localStorage.setItem(TOKEN_KEY, v);
             else localStorage.removeItem(TOKEN_KEY);
-        } catch (_) {}
+        } catch {
+            // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 저장하지 않고 넘어간다
+        }
     }
 
     class ApiError extends Error {
         constructor(status, payload, network) {
-            super(network ? "network error" : "API error " + status);
+            super(network ? "network error" : `API error ${status}`);
             this.status = status || 0;
             this.payload = payload;
             this.network = !!network;
@@ -71,7 +73,7 @@
             if (o.rawName) headers["X-File-Name"] = encodeURIComponent(o.rawName);
         }
         const tk = getToken();
-        if (tk) headers.Authorization = "Bearer " + tk;
+        if (tk) headers.Authorization = `Bearer ${tk}`;
 
         let res;
         try {
@@ -110,17 +112,17 @@
         accountUpdate: (b) => request("/api/account", { method: "PUT", json: b }),
 
         conversations: () => request("/api/conversations"),
-        conversation: (id) => request("/api/conversations/" + enc(id)),
+        conversation: (id) => request(`/api/conversations/${enc(id)}`),
 
         sendMessage: (id, text, attachmentIds) => {
             const body = { text };
             if (Array.isArray(attachmentIds) && attachmentIds.length) body.attachmentIds = attachmentIds;
-            return request("/api/conversations/" + enc(id) + "/messages", { method: "POST", json: body });
+            return request(`/api/conversations/${enc(id)}/messages`, { method: "POST", json: body });
         },
-        markRead: (id) => request("/api/conversations/" + enc(id) + "/read", { method: "POST", json: {} }),
-        stopConversation: (id) => request("/api/conversations/" + enc(id) + "/stop", { method: "POST", json: {} }),
-        searchMessages: (q) => request("/api/search/messages?q=" + enc(q || "")),
-        eventsPoll: (since, recentMs) => request("/api/events/poll?since=" + enc(since || 0) + (recentMs ? "&recentMs=" + enc(recentMs) : "")),
+        markRead: (id) => request(`/api/conversations/${enc(id)}/read`, { method: "POST", json: {} }),
+        stopConversation: (id) => request(`/api/conversations/${enc(id)}/stop`, { method: "POST", json: {} }),
+        searchMessages: (q) => request(`/api/search/messages?q=${enc(q || "")}`),
+        eventsPoll: (since, recentMs) => request(`/api/events/poll?since=${enc(since || 0)}${recentMs ? `&recentMs=${enc(recentMs)}` : ""}`),
 
         upload: (file) =>
             request("/api/uploads", {
@@ -139,42 +141,42 @@
 
         agents: () => request("/api/agents"),
         createAgent: (b) => request("/api/agents", { method: "POST", json: b }),
-        updateAgent: (id, b) => request("/api/agents/" + enc(id), { method: "PATCH", json: b }),
-        deleteAgent: (id) => request("/api/agents/" + enc(id), { method: "DELETE" }),
+        updateAgent: (id, b) => request(`/api/agents/${enc(id)}`, { method: "PATCH", json: b }),
+        deleteAgent: (id) => request(`/api/agents/${enc(id)}`, { method: "DELETE" }),
 
         skills: () => request("/api/skills"),
-        skill: (name, source) => request("/api/skills/" + enc(name) + (source ? "?source=" + enc(source) : "")),
+        skill: (name, source) => request(`/api/skills/${enc(name)}${source ? `?source=${enc(source)}` : ""}`),
         createSkill: (b) => request("/api/skills", { method: "POST", json: b }),
-        updateSkill: (name, b) => request("/api/skills/" + enc(name), { method: "PUT", json: b }),
-        deleteSkill: (name, source) => request("/api/skills/" + enc(name) + (source ? "?source=" + enc(source) : ""), { method: "DELETE" }),
+        updateSkill: (name, b) => request(`/api/skills/${enc(name)}`, { method: "PUT", json: b }),
+        deleteSkill: (name, source) => request(`/api/skills/${enc(name)}${source ? `?source=${enc(source)}` : ""}`, { method: "DELETE" }),
 
         mcpServers: () => request("/api/mcp"),
         createMcpServer: (b) => request("/api/mcp", { method: "POST", json: b }),
-        updateMcpServer: (name, b) => request("/api/mcp/" + enc(name), { method: "PUT", json: b }),
-        deleteMcpServer: (name) => request("/api/mcp/" + enc(name), { method: "DELETE" }),
+        updateMcpServer: (name, b) => request(`/api/mcp/${enc(name)}`, { method: "PUT", json: b }),
+        deleteMcpServer: (name) => request(`/api/mcp/${enc(name)}`, { method: "DELETE" }),
 
         createFolder: (b) => request("/api/folders", { method: "POST", json: b }),
-        updateFolder: (id, b) => request("/api/folders/" + enc(id), { method: "PATCH", json: b }),
-        deleteFolder: (id) => request("/api/folders/" + enc(id), { method: "DELETE" }),
+        updateFolder: (id, b) => request(`/api/folders/${enc(id)}`, { method: "PATCH", json: b }),
+        deleteFolder: (id) => request(`/api/folders/${enc(id)}`, { method: "DELETE" }),
         orderFolders: (ids) => request("/api/folders/order", { method: "POST", json: { ids } }),
 
         todos: () => request("/api/todos"),
         createTodo: (b) => request("/api/todos", { method: "POST", json: b }),
-        updateTodo: (todoId, b) => request("/api/todos/" + enc(todoId), { method: "PATCH", json: b }),
-        deleteTodo: (todoId) => request("/api/todos/" + enc(todoId), { method: "DELETE" }),
-        completeTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/complete", { method: "POST", json: {} }),
-        reopenTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/reopen", { method: "POST", json: {} }),
-        approveTodo: (id, b) => request("/api/todos/suggestions/" + enc(id) + "/approve", { method: "POST", json: b || {} }),
-        rejectTodo: (id) => request("/api/todos/suggestions/" + enc(id) + "/reject", { method: "POST", json: {} }),
-        acceptHandoff: (todoId, agentId) => request("/api/todos/" + enc(todoId) + "/handoff/" + enc(agentId), { method: "POST", json: {} }),
-        unassignTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/unassign", { method: "POST", json: {} }),
-        runTodo: (todoId) => request("/api/todos/" + enc(todoId) + "/run", { method: "POST", json: {} }),
+        updateTodo: (todoId, b) => request(`/api/todos/${enc(todoId)}`, { method: "PATCH", json: b }),
+        deleteTodo: (todoId) => request(`/api/todos/${enc(todoId)}`, { method: "DELETE" }),
+        completeTodo: (todoId) => request(`/api/todos/${enc(todoId)}/complete`, { method: "POST", json: {} }),
+        reopenTodo: (todoId) => request(`/api/todos/${enc(todoId)}/reopen`, { method: "POST", json: {} }),
+        approveTodo: (id, b) => request(`/api/todos/suggestions/${enc(id)}/approve`, { method: "POST", json: b || {} }),
+        rejectTodo: (id) => request(`/api/todos/suggestions/${enc(id)}/reject`, { method: "POST", json: {} }),
+        acceptHandoff: (todoId, agentId) => request(`/api/todos/${enc(todoId)}/handoff/${enc(agentId)}`, { method: "POST", json: {} }),
+        unassignTodo: (todoId) => request(`/api/todos/${enc(todoId)}/unassign`, { method: "POST", json: {} }),
+        runTodo: (todoId) => request(`/api/todos/${enc(todoId)}/run`, { method: "POST", json: {} }),
 
         notices: () => request("/api/notices"),
         readNotices: (ids) => request("/api/notices/read", { method: "POST", json: Array.isArray(ids) ? { ids } : {} }),
         clearNotices: () => request("/api/notices", { method: "DELETE" }),
 
-        answerAsk: (askId, body) => request("/api/asks/" + enc(askId) + "/answer", { method: "POST", json: body }),
+        answerAsk: (askId, body) => request(`/api/asks/${enc(askId)}/answer`, { method: "POST", json: body }),
 
         computerStatus: () => request("/api/computer/status"),
         computerScreenStart: (geometry) => request("/api/computer/screen/start", { method: "POST", json: geometry ? { geometry } : {} }),
@@ -182,8 +184,8 @@
         computerBrowserOpen: (agentId, url) => request("/api/computer/browser/open", { method: "POST", json: { agentId, url } }),
 
         authStatus: () => request("/api/auth/status"),
-        startOauth: (kind) => request("/api/auth/" + enc(kind) + "/start", { method: "POST", json: {} }),
-        cancelOauth: (kind) => request("/api/auth/" + enc(kind) + "/cancel", { method: "POST", json: {} }),
+        startOauth: (kind) => request(`/api/auth/${enc(kind)}/start`, { method: "POST", json: {} }),
+        cancelOauth: (kind) => request(`/api/auth/${enc(kind)}/cancel`, { method: "POST", json: {} }),
 
         pushConfig: () => request("/api/push/config"),
         pushSubscribe: (sub) => request("/api/push/subscribe", { method: "POST", json: sub }),
@@ -191,11 +193,11 @@
 
         // img src / 일반 링크는 Authorization 헤더를 못 붙이므로 쿼리 토큰을 쓴다.
         fileHref: (id) => {
-            const path = "/api/files/" + enc(id);
+            const path = `/api/files/${enc(id)}`;
             const tk = getToken();
-            return tk ? path + "?token=" + encodeURIComponent(tk) : path;
+            return tk ? `${path}?token=${encodeURIComponent(tk)}` : path;
         },
     };
 
     T.api = api;
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

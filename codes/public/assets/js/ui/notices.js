@@ -7,7 +7,7 @@
    기록은 서버(/api/notices)가 들고 있어서, 그 순간 앱을 열어 두지 않았거나 다른 기기에서
    열어도 읽지 않은 알림이 뜨고, 지난 알림은 설정의 알림 탭에서 다시 볼 수 있다.
    정본은 항상 서버 목록이다: 알림 이벤트가 오면 목록을 다시 받아 "읽지 않은 것"을 순서대로 띄운다. */
-(function (T) {
+((T) => {
     "use strict";
 
     const { state } = T;
@@ -68,7 +68,9 @@
             .then((r) => {
                 if (seq === reqSeq) apply(r);
             })
-            .catch(() => {});
+            .catch(() => {
+                /* 읽음 표시 실패는 다음 알림 이벤트에서 서버 기준으로 바로잡힌다 */
+            });
     }
 
     function clearAll() {
@@ -102,7 +104,9 @@
         closeModal();
         try {
             if (location.pathname !== path) history.pushState(null, "", path);
-        } catch (_) {}
+        } catch {
+            // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
+        }
         T.app?.renderRoute?.();
     }
 
@@ -142,7 +146,7 @@
         const actions = actionsFor(n).map((a) =>
             T.h("button", { class: "btn ghost btn-sm", type: "button", text: a.label, onclick: () => runAction(n, a) }),
         );
-        return T.h("div", { class: `nt-row ${level}` + (n.read ? " read" : "") }, [
+        return T.h("div", { class: `nt-row ${level}${n.read ? " read" : ""}` }, [
             T.icon(LEVEL_ICON[level], "nt-icon"),
             T.h("div", { class: "nt-body" }, [
                 // 마크다운 파이프라인을 거쳐 살균되고, 주소는 눌러서 열 수 있는 링크가 된다.
@@ -221,7 +225,7 @@
         const actions = d.actions;
         // 버튼: 동작이 없으면 "확인" 하나. 있으면 "닫기"와 동작(굵게)을 나란히, 셋 이상이면 세로로 쌓는다.
         const dismiss = T.h("button", {
-            class: "nt-btn" + (actions.length ? "" : " strong"),
+            class: `nt-btn${actions.length ? "" : " strong"}`,
             type: "button",
             text: t(actions.length ? "close" : "noticeOk"),
             onclick: d.dismiss,
@@ -230,7 +234,7 @@
             dismiss,
             ...actions.map((a, i) =>
                 T.h("button", {
-                    class: "nt-btn" + (i === actions.length - 1 ? " strong" : ""),
+                    class: `nt-btn${i === actions.length - 1 ? " strong" : ""}`,
                     type: "button",
                     text: a.label,
                     onclick: a.run,
@@ -247,7 +251,7 @@
                         // 마크다운 파이프라인을 거쳐 살균되고, 주소는 눌러서 열 수 있는 링크가 된다.
                         T.md.render(d.text, { extraClass: "nt-alert-text", highlight: false }),
                     ]),
-                    T.h("div", { class: "nt-alert-btns" + (buttons.length > 2 ? " stack" : "") }, buttons),
+                    T.h("div", { class: `nt-alert-btns${buttons.length > 2 ? " stack" : ""}` }, buttons),
                 ]),
             ],
         );
@@ -309,4 +313,4 @@
         items: () => items,
         loaded: () => loaded,
     };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

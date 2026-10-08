@@ -15,7 +15,11 @@ self.addEventListener("install", (event) => {
     event.waitUntil(
         caches
             .open(CACHE)
-            .then((cache) => cache.addAll(PRECACHE).catch(() => {}))
+            .then((cache) =>
+                cache.addAll(PRECACHE).catch(() => {
+                    /* 캐시·메시지 전달은 최선 시도라 실패해도 동작에는 영향이 없다 */
+                }),
+            )
             .then(() => self.skipWaiting()),
     );
 });
@@ -98,7 +102,9 @@ self.addEventListener("fetch", (event) => {
                     caches
                         .open(CACHE)
                         .then((c) => c.put(req, copy))
-                        .catch(() => {});
+                        .catch(() => {
+                            /* 캐시·메시지 전달은 최선 시도라 실패해도 동작에는 영향이 없다 */
+                        });
                 }
                 return res;
             })
@@ -142,17 +148,19 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const target = (event.notification.data && event.notification.data.url) || "/";
+    const target = event.notification.data?.url || "/";
     event.waitUntil(
         self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
             const existing = list.find((c) => "focus" in c);
             if (existing) {
                 try {
                     existing.postMessage({ type: "sw-navigate", url: target });
-                } catch (_) {}
+                } catch {
+                    // 캐시·메시지 전달은 최선 시도라 실패해도 동작에는 영향이 없다
+                }
                 return existing.focus();
             }
-            const url = appToken ? target + (target.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(appToken) : target;
+            const url = appToken ? `${target + (target.includes("?") ? "&" : "?")}token=${encodeURIComponent(appToken)}` : target;
             if (self.clients.openWindow) return self.clients.openWindow(url);
         }),
     );
@@ -166,7 +174,7 @@ self.addEventListener("pushsubscriptionchange", (event) => {
         for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
         return out;
     };
-    const auth = appToken ? { Authorization: "Bearer " + appToken } : {};
+    const auth = appToken ? { Authorization: `Bearer ${appToken}` } : {};
     event.waitUntil(
         (async () => {
             const cfg = await fetch("/api/push/config", { headers: auth }).then((r) => (r.ok ? r.json() : null));
@@ -180,6 +188,8 @@ self.addEventListener("pushsubscriptionchange", (event) => {
                 headers: { "Content-Type": "application/json", ...auth },
                 body: JSON.stringify(sub.toJSON()),
             });
-        })().catch(() => {}),
+        })().catch(() => {
+            /* 푸시 구독 갱신은 최선 시도라 실패해도 다음 기회에 다시 한다 */
+        }),
     );
 });

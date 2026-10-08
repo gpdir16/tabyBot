@@ -14,7 +14,7 @@
         <link rel="apple-touch-icon" href="/assets/icons/icon-192-maskable.png" />
         <title>tabyBot</title>
         <link rel="stylesheet" href="assets/vendor/highlight-github-dark.min.css" />
-        <!-- 지연 로드(터미널 탭을 열 때 computer.js가 주입): 브라우저는 모르는 rel을 무시한다 -->
+        <!-- 지연 로드(터미널 탭을 열 때 ui/computer/terminal.js가 주입): 브라우저는 모르는 rel을 무시한다 -->
         <link rel="lazy-style" data-group="xterm" href="assets/vendor/xterm/xterm.css" />
         <link rel="lazy-script" data-group="xterm" href="assets/vendor/xterm/xterm.js" />
         <link rel="lazy-script" data-group="xterm" href="assets/vendor/xterm/xterm-addon-fit.js" />
@@ -427,26 +427,68 @@
   보장하기 위해 IIFE + 네임스페이스 패턴을 사용한다(빌드 도구 없음 유지).
   의존성 순서는 유틸/i18n, 상태, API, 마크다운, SSE, UI, 부트다.
 -->
-        <script src="assets/js/i18n.js"></script>
-        <script src="assets/js/state.js"></script>
+        <script src="assets/js/util.js"></script>
+        <script src="assets/js/dom.js"></script>
+        <script src="assets/js/i18n/en.js"></script>
+        <script src="assets/js/i18n/ko.js"></script>
+        <script src="assets/js/i18n/ja.js"></script>
+        <script src="assets/js/i18n/index.js"></script>
+        <script src="assets/js/state/store.js"></script>
+        <script src="assets/js/state/live.js"></script>
+        <script src="assets/js/state/snapshot.js"></script>
         <script src="assets/js/api.js"></script>
         <script src="assets/js/markdown.js"></script>
         <script src="assets/js/notifications.js"></script>
         <script src="assets/js/events.js"></script>
         <script src="assets/js/ui/toast.js"></script>
         <script src="assets/js/ui/confirm.js"></script>
-        <script src="assets/js/ui/contextmenu.js"></script>
+        <script src="assets/js/ui/contextmenu/menu.js"></script>
+        <script src="assets/js/ui/contextmenu/lift.js"></script>
+        <script src="assets/js/ui/contextmenu/providers.js"></script>
+        <script src="assets/js/ui/contextmenu/gesture.js"></script>
         <script src="assets/js/ui/gestures.js"></script>
         <script src="assets/js/ui/tooltip.js"></script>
-        <script src="assets/js/ui/sidebar.js"></script>
-        <script src="assets/js/ui/chat.js"></script>
+        <script src="assets/js/ui/sidebar/list.js"></script>
+        <script src="assets/js/ui/sidebar/mobile.js"></script>
+        <script src="assets/js/ui/sidebar/folders.js"></script>
+        <script src="assets/js/ui/sidebar/layout.js"></script>
+        <script src="assets/js/ui/sidebar/main.js"></script>
+        <script src="assets/js/ui/chat/scroll.js"></script>
+        <script src="assets/js/ui/chat/format.js"></script>
+        <script src="assets/js/ui/chat/bubbles.js"></script>
+        <script src="assets/js/ui/chat/render.js"></script>
+        <script src="assets/js/ui/chat/main.js"></script>
         <script src="assets/js/ui/viewer.js"></script>
         <script src="assets/js/ui/composer.js"></script>
-        <script src="assets/js/ui/settings.js"></script>
-        <script src="assets/js/ui/todos.js"></script>
+        <script src="assets/js/ui/settings/components.js"></script>
+        <script src="assets/js/ui/settings/router.js"></script>
+        <script src="assets/js/ui/settings/layout.js"></script>
+        <script src="assets/js/ui/settings/general.js"></script>
+        <script src="assets/js/ui/settings/account.js"></script>
+        <script src="assets/js/ui/settings/provider.js"></script>
+        <script src="assets/js/ui/settings/selfimprovement.js"></script>
+        <script src="assets/js/ui/settings/extensions.js"></script>
+        <script src="assets/js/ui/settings/folders.js"></script>
+        <script src="assets/js/ui/settings/agents.js"></script>
+        <script src="assets/js/ui/todos/time.js"></script>
+        <script src="assets/js/ui/todos/data.js"></script>
+        <script src="assets/js/ui/todos/draft.js"></script>
+        <script src="assets/js/ui/todos/row.js"></script>
+        <script src="assets/js/ui/todos/editor.js"></script>
+        <script src="assets/js/ui/todos/suggestions.js"></script>
+        <script src="assets/js/ui/todos/detail.js"></script>
+        <script src="assets/js/ui/todos/sections.js"></script>
+        <script src="assets/js/ui/todos/main.js"></script>
         <script src="assets/js/ui/notices.js"></script>
-        <script src="assets/js/ui/computer.js"></script>
-        <script src="assets/js/ui/onboarding.js"></script>
+        <script src="assets/js/ui/computer/page.js"></script>
+        <script src="assets/js/ui/computer/gestures.js"></script>
+        <script src="assets/js/ui/computer/screen.js"></script>
+        <script src="assets/js/ui/computer/terminal.js"></script>
+        <script src="assets/js/ui/computer/main.js"></script>
+        <script src="assets/js/ui/onboarding/auth.js"></script>
+        <script src="assets/js/ui/onboarding/steps.js"></script>
+        <script src="assets/js/ui/onboarding/models.js"></script>
+        <script src="assets/js/ui/onboarding/wizard.js"></script>
         <script src="assets/js/app.js"></script>
     </body>
 </html>

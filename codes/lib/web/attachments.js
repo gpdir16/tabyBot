@@ -3,9 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { isVisionImageMime, visionImagePart } from "../llm/vision.js";
 import { sanitizeTextForLlm } from "../llm/sanitize-messages.js";
+import { ATTACHED_FILES_MARK } from "../agent/history/messages.js";
 import { getFile } from "./files.js";
 
-export function resolveAttachedFile(file) {
+function resolveAttachedFile(file) {
     if (!file) return null;
     if (file.id) {
         const found = getFile(file.id);
@@ -72,7 +73,7 @@ export function formatAttachedFilesPrompt(files) {
 
 function typedUserText(text) {
     let s = String(text || "");
-    const marks = ["[User attached files]", "\n\n[첨부 이미지:", "\n\n[첨부 파일:", "\n\n[Image too large:"];
+    const marks = [ATTACHED_FILES_MARK, "\n\n[첨부 이미지:", "\n\n[첨부 파일:", "\n\n[Image too large:"];
     let cut = -1;
     for (const mark of marks) {
         const i = s.indexOf(mark);

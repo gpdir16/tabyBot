@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { USER_DIR } from "../paths.js";
 import { writeJsonAtomic } from "../atomic-file.js";
+import { parseJwtClaims, sleep } from "./transport.js";
 
 const ISSUER = "https://auth.x.ai";
 const DEVICE_CODE_URL = `${ISSUER}/oauth2/device/code`;
@@ -10,17 +11,6 @@ const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
 const SCOPE = "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write";
 const AUTH_FILE = path.join(USER_DIR, "grok-auth.json");
 const EXPIRY_MARGIN_MS = 5 * 60_000;
-
-function parseJwtClaims(token) {
-    if (typeof token !== "string") return null;
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    try {
-        return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    } catch {
-        return null;
-    }
-}
 
 function expiresAtFromTokens(tokens, fallbackExpiresIn) {
     const access = tokens.access_token || tokens.accessToken;
@@ -57,7 +47,7 @@ export function loadGrokTokens() {
     }
 }
 
-export function saveGrokTokens(tokens) {
+function saveGrokTokens(tokens) {
     try {
         fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
         const data = {
@@ -96,7 +86,7 @@ function tokenHeaders() {
     };
 }
 
-export async function refreshGrokToken(refreshToken) {
+async function refreshGrokToken(refreshToken) {
     const res = await fetch(TOKEN_URL, {
         method: "POST",
         headers: tokenHeaders(),
@@ -242,22 +232,4 @@ export async function pollGrokDeviceFlow({ deviceCode, intervalMs, expiresAt, si
         const desc = data.error_description || err;
         throw new Error(`Device auth failed: ${res.status} ${desc}`.trim());
     }
-}
-
-function sleep(ms, signal) {
-    return new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-            reject(new Error("Login cancelled."));
-            return;
-        }
-        const onAbort = () => {
-            clearTimeout(timer);
-            reject(new Error("Login cancelled."));
-        };
-        const timer = setTimeout(() => {
-            signal?.removeEventListener("abort", onAbort);
-            resolve();
-        }, ms);
-        if (signal) signal.addEventListener("abort", onAbort, { once: true });
-    });
 }

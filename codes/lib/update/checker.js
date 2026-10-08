@@ -16,18 +16,18 @@ function updateConfig() {
     return loadAgentConfig().updateCheck ?? {};
 }
 
-export function normalizeVersion(tag) {
+function normalizeVersion(tag) {
     return String(tag || "")
         .trim()
         .replace(/^v/i, "")
         .split("-")[0];
 }
 
-export function isSemverTag(tag) {
+function isSemverTag(tag) {
     return /^(v)?\d+\.\d+(\.\d+)?([\w.-]*)?$/i.test(String(tag || "").trim());
 }
 
-export function compareSemver(a, b) {
+function compareSemver(a, b) {
     const pa = normalizeVersion(a)
         .split(".")
         .map((n) => Number(n) || 0);
@@ -63,7 +63,7 @@ async function fetchJson(url) {
     return res.json();
 }
 
-export async function fetchReleases(repo) {
+async function fetchReleases(repo) {
     const data = await fetchJson(`https://api.github.com/repos/${repo}/releases?per_page=20`);
     if (!Array.isArray(data)) return [];
     return data.filter((r) => !r.draft && !r.prerelease && isSemverTag(r.tag_name));
@@ -78,7 +78,7 @@ async function fetchGhcrToken(imageName) {
     return data?.token || null;
 }
 
-export async function isImagePublished(imageName, tag) {
+async function isImagePublished(imageName, tag) {
     const token = await fetchGhcrToken(imageName);
     if (!token) return false;
 
@@ -96,7 +96,7 @@ export async function isImagePublished(imageName, tag) {
     return res.ok;
 }
 
-export function candidateImageTags(tagName) {
+function candidateImageTags(tagName) {
     const tag = String(tagName || "").trim();
     if (!tag) return [];
     const bare = tag.replace(/^v/i, "");

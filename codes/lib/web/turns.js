@@ -16,7 +16,7 @@ import { beginAgentSession, endAgentSession, enqueueAgentMessage, isAgentSession
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
 import { setTodoHandlers } from "../todos/scheduler.js";
-import { SCHEDULED_TURN_MARKER } from "../tools/todo-tool.js";
+import { SCHEDULED_TURN_MARKER, isScheduledTurnText } from "../agent/history/messages.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
 import { ensureConversation, getConversationMeta, listConversations } from "./conversations.js";
@@ -52,7 +52,7 @@ function isUnremarkableAutoTurn(result) {
         if (m?.role === "user") {
             if (Array.isArray(m.content)) return false; // 이미지 관측 등: 도구가 무언가 수행했다
             const text = typeof m.content === "string" ? m.content : "";
-            if (text && !text.includes(SCHEDULED_TURN_MARKER) && !isInternalStoredMessage(m)) return false;
+            if (text && !isScheduledTurnText(text) && !isInternalStoredMessage(m)) return false;
         }
         if (m?.role === "assistant") {
             for (const tc of m.tool_calls || []) {
@@ -92,7 +92,7 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null, 
     }
 }
 
-export async function runTurn({
+async function runTurn({
     sessionKey,
     agentId,
     userText,

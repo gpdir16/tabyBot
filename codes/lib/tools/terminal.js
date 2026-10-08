@@ -158,7 +158,9 @@ function killProcessTree(pid) {
     } catch {
         try {
             process.kill(pid, "SIGTERM");
-        } catch {}
+        } catch {
+            // 이미 닫혔거나 정리된 대상이면 무시한다
+        }
     }
     setTimeout(() => {
         try {
@@ -166,7 +168,9 @@ function killProcessTree(pid) {
         } catch {
             try {
                 process.kill(pid, "SIGKILL");
-            } catch {}
+            } catch {
+                // 이미 닫혔거나 정리된 대상이면 무시한다
+            }
         }
     }, 2000);
 }

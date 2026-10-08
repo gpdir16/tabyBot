@@ -1,7 +1,9 @@
-import fs from "node:fs";
 import path from "node:path";
 import { CONFIG_DIR, USER_DIR } from "./paths.js";
-import { writeJsonAtomic } from "./atomic-file.js";
+import { readJsonFile, writeJsonAtomic } from "./atomic-file.js";
+
+// 깨진 파일은 경로와 함께 오류로 남기고 fallback을 쓴다.
+const readJson = (filePath, fallback = null) => readJsonFile(filePath, fallback, { label: `JSON in ${filePath}` });
 
 function substituteEnv(value) {
     if (typeof value !== "string") return value;
@@ -19,16 +21,6 @@ function substituteDeep(obj) {
         return out;
     }
     return obj;
-}
-
-function readJson(filePath, fallback = null) {
-    if (!fs.existsSync(filePath)) return fallback;
-    try {
-        return JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch (err) {
-        console.error(`tabyBot: invalid JSON in ${filePath}:`, err.message);
-        return fallback;
-    }
 }
 
 export function loadAgentConfig() {

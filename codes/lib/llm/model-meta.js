@@ -20,7 +20,7 @@ export function loadModelMeta() {
     }
 }
 
-export function saveModelMeta(meta) {
+function saveModelMeta(meta) {
     writeJsonAtomic(META_PATH, meta);
 }
 

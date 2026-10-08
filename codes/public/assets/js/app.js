@@ -2,7 +2,7 @@
    테마와 i18n을 초기화하고, 모듈을 init한 뒤, bootstrap/settings/bots를 받는다.
    configured=false면 온보딩을, 401이면 로그인 화면을 띄우고, 실패하면 오프라인 모드로 간다.
    그다음 SSE를 연결한다. file:// 에서는 네트워크 시도 없이 오프라인 모드로 진입한다. */
-(function (T) {
+((T) => {
     "use strict";
 
     const { state } = T;
@@ -35,7 +35,9 @@
         if (themeMeta) themeMeta.setAttribute("content", v === "light" ? "#ffffff" : "#000000");
         try {
             localStorage.setItem(THEME_KEY, v);
-        } catch (_) {}
+        } catch {
+            // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 저장하지 않고 넘어간다
+        }
         // 토글 아이콘: 다크에서는 sun(라이트로 전환), 라이트에서는 moon
         const use = document.querySelector("#themeIcon use");
         if (use) use.setAttribute("href", v === "dark" ? "#i-sun" : "#i-moon");
@@ -227,7 +229,7 @@
         params.delete("q");
         params.delete("m");
         const query = params.toString();
-        history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
+        T.util.replaceUrl(location.pathname + (query ? `?${query}` : "") + location.hash);
     }
 
     // 현재 경로가 설정 페이지(/s/...)인지 해석한다.
@@ -237,8 +239,82 @@
 
     function openSettings(tab) {
         const returnPath = location.pathname + location.search + location.hash;
-        history.pushState(null, "", "/s/" + (tab || "model"));
+        history.pushState(null, "", `/s/${tab || "model"}`);
         T.settingsUI.open({ tab: tab || "model", fromUrl: true, returnPath });
+    }
+
+    // ?token=을 로그인 토큰으로 받아 주소에서 지운다. 서버가 거절하면 이전 토큰으로 되돌린다.
+    async function adoptTokenParam() {
+        const params = new URLSearchParams(location.search);
+        const token = params.get("token");
+        if (!token) return;
+        params.delete("token");
+        const query = params.toString();
+        T.util.replaceUrl(location.pathname + (query ? `?${query}` : "") + location.hash);
+        const prev = T.api.getToken();
+        T.api.setToken(token);
+        try {
+            await T.api.bootstrap();
+        } catch (_) {
+            T.api.setToken(prev);
+        }
+    }
+
+    // 부트 데이터는 한 번에 병렬로 받는다. 순차 왕복은 느린 회선에서 그대로 지연이 된다.
+    function fetchBootData() {
+        return Promise.allSettled([
+            T.api.accountState(),
+            T.api.bootstrap(),
+            T.api.getSettings(),
+            T.api.agents(),
+            T.api.conversations(),
+            (() => {
+                const ticket = state.todosTicket();
+                return T.api.todos().then((r) => ({ ticket, r }));
+            })(),
+        ]);
+    }
+
+    // 계정 게이트: 계정이 없으면 생성 화면(건너뛰기 가능), 있고 세션이 무효면 로그인 화면을 띄운다.
+    // 화면을 띄웠으면(부트를 여기서 멈춰야 하면) true. account/state 실패는 bootstrap이 같은 오류로 처리한다.
+    function showAccountGate(acctR) {
+        const acct = acctR.status === "fulfilled" ? acctR.value : null;
+        if (!acct) return false;
+        state.state.account = acct;
+        if (!acct.hasAccount && !T.onboarding.setupSkipped()) {
+            T.onboarding.showAuth("setup", () => boot());
+            return true;
+        }
+        if (acct.hasAccount && !acct.authed) {
+            handleUnauthorized();
+            return true;
+        }
+        return false;
+    }
+
+    // 받은 부트 데이터를 상태에 반영한다. 일부 요청이 실패해도 나머지는 반영하고 경고창으로 알린다.
+    function applyBootData(bsR, settingsR, agentsR, convsR, todosR) {
+        if (bsR.status === "rejected") throw bsR.reason;
+        const bs = bsR.value;
+        state.state.bootstrap = bs;
+        state.emit("bootstrap");
+        state.state.offline = false;
+        T.notices.dismiss("offline");
+
+        T.i18n.init(bs.language);
+
+        const failed = (r) => T.notices.alert({ text: T.api.errorText(r.reason, t("errorPrefix")) });
+        if (settingsR.status === "rejected") failed(settingsR);
+        else if (settingsR.value && typeof settingsR.value === "object") state.setSettings(settingsR.value);
+        if (agentsR.status === "rejected") failed(agentsR);
+        else state.applyAgents(agentsR.value);
+        if (convsR.status === "rejected") failed(convsR);
+        else state.replaceConversations(convsR.value?.conversations || []);
+        if (todosR.status === "rejected") {
+            state.state.todosFailed = true;
+            failed(todosR);
+        } else state.applyTodos(todosR.value.ticket, todosR.value.r);
+        return bs;
     }
 
     async function boot() {
@@ -249,21 +325,10 @@
         }
 
         try {
-            const tp = new URLSearchParams(location.search).get("token");
-            if (tp) {
-                const params = new URLSearchParams(location.search);
-                params.delete("token");
-                const q = params.toString();
-                history.replaceState(null, "", location.pathname + (q ? `?${q}` : "") + location.hash);
-                const prev = T.api.getToken();
-                T.api.setToken(tp);
-                try {
-                    await T.api.bootstrap();
-                } catch (_) {
-                    T.api.setToken(prev);
-                }
-            }
-        } catch (_) {}
+            await adoptTokenParam();
+        } catch {
+            // 토큰 파라미터 처리에 실패해도 일반 시작 흐름으로 넘어간다
+        }
 
         const token = ++bootToken;
         // 경로가 가리키는 대화(없으면 가장 최근 대화)는 스냅샷 표시 전에 잡아 둔다.
@@ -279,56 +344,11 @@
         }
 
         try {
-            // 2) 부트 데이터는 한 번에 병렬로 받는다. 순차 왕복은 느린 회선에서 그대로 지연이 된다.
-            const [acctR, bsR, settingsR, agentsR, convsR, todosR] = await Promise.allSettled([
-                T.api.accountState(),
-                T.api.bootstrap(),
-                T.api.getSettings(),
-                T.api.agents(),
-                T.api.conversations(),
-                (() => {
-                    const ticket = state.todosTicket();
-                    return T.api.todos().then((r) => ({ ticket, r }));
-                })(),
-            ]);
+            // 2) 서버에서 부트 데이터를 받아 반영한다.
+            const [acctR, bsR, settingsR, agentsR, convsR, todosR] = await fetchBootData();
             if (token !== bootToken) return;
-
-            // 계정 게이트: 계정이 없으면 생성 화면(건너뛰기 가능),
-            // 있고 세션이 무효면 로그인 화면을 먼저 띄운다.
-            // account/state 실패는 bootstrap이 같은 오류로 처리한다.
-            const acct = acctR.status === "fulfilled" ? acctR.value : null;
-            if (acct) {
-                state.state.account = acct;
-                if (!acct.hasAccount && !T.onboarding.setupSkipped()) {
-                    T.onboarding.showAuth("setup", () => boot());
-                    return;
-                }
-                if (acct.hasAccount && !acct.authed) {
-                    handleUnauthorized();
-                    return;
-                }
-            }
-
-            if (bsR.status === "rejected") throw bsR.reason;
-            const bs = bsR.value;
-            state.state.bootstrap = bs;
-            state.emit("bootstrap");
-            state.state.offline = false;
-            T.notices.dismiss("offline");
-
-            T.i18n.init(bs.language);
-
-            const failed = (r) => T.notices.alert({ text: T.api.errorText(r.reason, t("errorPrefix")) });
-            if (settingsR.status === "rejected") failed(settingsR);
-            else if (settingsR.value && typeof settingsR.value === "object") state.setSettings(settingsR.value);
-            if (agentsR.status === "rejected") failed(agentsR);
-            else state.applyAgents(agentsR.value);
-            if (convsR.status === "rejected") failed(convsR);
-            else state.replaceConversations((convsR.value && convsR.value.conversations) || []);
-            if (todosR.status === "rejected") {
-                state.state.todosFailed = true;
-                failed(todosR);
-            } else state.applyTodos(todosR.value.ticket, todosR.value.r);
+            if (showAccountGate(acctR)) return;
+            const bs = applyBootData(bsR, settingsR, agentsR, convsR, todosR);
 
             booted = true;
             // 미리보기 채우기는 화면을 막지 않는다.
@@ -410,7 +430,9 @@
             n += 1;
             state
                 .refreshTurns(id)
-                .catch(() => {})
+                .catch(() => {
+                    /* 실패해도 다음 이벤트나 재접속 때 다시 받는다 */
+                })
                 .then(() => idle(next));
         };
         idle(next);
@@ -500,4 +522,4 @@
     boot();
 
     T.app = { applyTheme, retryBoot: boot, renderRoute, openSettings, handleUnauthorized };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

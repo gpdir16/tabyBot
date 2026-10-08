@@ -8,7 +8,13 @@ import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
 import { countMessagesTokens } from "./context.js";
 import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
+import { PENDING_USER_PREFIX } from "./history/messages.js";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
+
+const SILENT_REPLY_TOKEN = "__SILENT__";
+const TOOL_BUDGET_ERROR = { error: "Tool call budget exceeded for this turn." };
+const EMPTY_STATS = { toolCallCount: 0, modelCallCount: 0, tokensUsed: 0, contextWindow: 128000 };
+
 function parseToolArgs(raw) {
     try {
         return { ok: true, args: JSON.parse(raw || "{}") };
@@ -19,19 +25,6 @@ function parseToolArgs(raw) {
 
 function providerKey(provider) {
     return [provider.id, provider.type, provider.baseURL, provider.model, provider.autoMode, ...(provider.autoModelCandidates || [])].join("\u0000");
-}
-
-function buildStats(llm, messages, contextBaseLength, toolCallCount, modelCallCount) {
-    const model = llm.provider.model;
-    const contextWindow = llm.modelMeta?.contextWindow ?? 128000;
-    const loadedContext = countMessagesTokens(messages.slice(0, contextBaseLength), model);
-    const peakContext = countMessagesTokens(messages, model);
-    return {
-        toolCallCount,
-        modelCallCount,
-        tokensUsed: Math.max(loadedContext, peakContext),
-        contextWindow,
-    };
 }
 
 function deliveredAttachmentsFromMessages(messages) {
@@ -51,18 +44,6 @@ function deliveredAttachmentsFromMessages(messages) {
     return attachments;
 }
 
-function buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCount, extra = {}) {
-    const turnMessages = extractTurnMessages(messages, contextBaseLength);
-    return {
-        ...extra,
-        stats: buildStats(llm, messages, contextBaseLength, toolCallCount, modelCallCount),
-        turnMessages,
-        deliveredAttachments: deliveredAttachmentsFromMessages(turnMessages),
-    };
-}
-
-const SILENT_REPLY_TOKEN = "__SILENT__";
-
 // 모델이 마커 앞뒤에 잡담을 붙여도 침묵 의사로 인정한다. 마커가 있으면 전달하지 않는다.
 function isSilentReply(content) {
     if (typeof content !== "string") return false;
@@ -70,22 +51,8 @@ function isSilentReply(content) {
     return t.startsWith(SILENT_REPLY_TOKEN) || t.endsWith(SILENT_REPLY_TOKEN);
 }
 
-function injectPendingUserMessages(messages, session) {
-    if (!session) return false;
-    const pending = session.drainPendingMessages();
-    if (!pending.length) return false;
-    messages.push({
-        role: "user",
-        content: `The user sent additional message(s) while you were working:\n\n${pending.join("\n\n")}`,
-    });
-    return true;
-}
-function pushToolResult(messages, toolCallId, result) {
-    messages.push({
-        role: "tool",
-        tool_call_id: toolCallId,
-        content: toolResultContent(result),
-    });
+function isStoppedError(err, session) {
+    return Boolean(session?.isAborted?.() || err?.name === "AbortError");
 }
 
 function buildToolImageObservation(result, { visionEnabled = false } = {}) {
@@ -97,87 +64,244 @@ function buildToolImageObservation(result, { visionEnabled = false } = {}) {
     };
 }
 
-function pushSkippedToolResults(messages, toolCalls, startIndex = 0, result = { ok: false, aborted: true, error: "Stopped by user." }) {
-    for (let i = startIndex; i < toolCalls.length; i += 1) {
-        pushToolResult(messages, toolCalls[i].id, result);
+// 한 턴의 진행 상태. 메시지 목록·호출 횟수·중단 여부 같은 값을 묶어 두고,
+// 결과 만들기·체크포인트·빈 답변 복구를 메서드로 처리한다.
+class AgentTurn {
+    constructor({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries }) {
+        this.llm = llm;
+        this.messages = messages;
+        this.contextBaseLength = contextBaseLength;
+        this.session = session;
+        this.setStatus = setStatus;
+        this.onTextDelta = onTextDelta;
+        this.onCheckpoint = onCheckpoint;
+        this.quietEmpty = quietEmpty;
+        this.maxEmptyReplyRetries = maxEmptyReplyRetries;
+        this.toolCallCount = 0;
+        this.modelCallCount = 0;
+        this.partialText = null; // 스트리밍 중 지금까지 받은 본문. 중단되면 이것을 돌려준다.
     }
-}
 
-function finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, { partialText = null } = {}) {
-    return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-        text: partialText?.trim() || null,
-        error: "stopped_by_user",
-    });
-}
+    get stopRequested() {
+        return Boolean(this.session?.isAborted?.());
+    }
 
-function isStoppedError(err, session) {
-    return Boolean(session?.isAborted?.() || err?.name === "AbortError");
-}
+    stats() {
+        const contextWindow = this.llm.modelMeta?.contextWindow ?? 128000;
+        const loadedContext = countMessagesTokens(this.messages.slice(0, this.contextBaseLength));
+        const peakContext = countMessagesTokens(this.messages);
+        return {
+            toolCallCount: this.toolCallCount,
+            modelCallCount: this.modelCallCount,
+            tokensUsed: Math.max(loadedContext, peakContext),
+            contextWindow,
+        };
+    }
 
-function shouldStop(session) {
-    return Boolean(session?.isAborted?.());
-}
+    result(extra = {}) {
+        const turnMessages = extractTurnMessages(this.messages, this.contextBaseLength);
+        return {
+            ...extra,
+            stats: this.stats(),
+            turnMessages,
+            deliveredAttachments: deliveredAttachmentsFromMessages(turnMessages),
+        };
+    }
 
-function checkpointMessages(messages, contextBaseLength, onCheckpoint) {
-    onCheckpoint?.(extractTurnMessages(messages, contextBaseLength));
-}
+    stopped(partialText = this.partialText) {
+        return this.result({ text: partialText?.trim() || null, error: "stopped_by_user" });
+    }
 
-async function completeTextReply(
-    llm,
-    messages,
-    { onTextDelta, onCheckpoint, contextBaseLength, setStatus, maxRetries, modelCallCount, session, partialTextRef, quietEmpty = false },
-) {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        if (shouldStop(session)) return null;
+    // 모델 답변을 모은 결과(usage 포함)를 최종 결과로 바꾼다.
+    replyResult(reply) {
+        return this.result({ text: reply.silent ? null : reply.text, usage: reply.usage, silent: reply.silent || false });
+    }
 
-        if (attempt > 0) {
-            messages.push({ role: "user", content: quietEmpty ? QUIET_EMPTY_HINT : EMPTY_REPLY_HINT });
+    checkpoint() {
+        this.onCheckpoint?.(extractTurnMessages(this.messages, this.contextBaseLength));
+    }
+
+    // 작업 중에 사용자가 보낸 메시지를 대화에 합친다. 합쳤으면 true.
+    injectPendingUserMessages() {
+        if (!this.session) return false;
+        const pending = this.session.drainPendingMessages();
+        if (!pending.length) return false;
+        this.messages.push({
+            role: "user",
+            content: `${PENDING_USER_PREFIX}\n\n${pending.join("\n\n")}`,
+        });
+        return true;
+    }
+
+    pushToolResult(toolCallId, result) {
+        this.messages.push({ role: "tool", tool_call_id: toolCallId, content: toolResultContent(result) });
+    }
+
+    pushSkippedToolResults(toolCalls, startIndex = 0, result = { ok: false, aborted: true, error: "Stopped by user." }) {
+        for (let i = startIndex; i < toolCalls.length; i += 1) this.pushToolResult(toolCalls[i].id, result);
+    }
+
+    // 스트리밍 콜백: 받은 본문을 기억하고 상태를 "streaming"으로 알린다.
+    streamDelta() {
+        if (!this.onTextDelta) return undefined;
+        return (delta, full) => {
+            this.partialText = full;
+            this.setStatus("streaming");
+            this.onTextDelta(delta, full);
+        };
+    }
+
+    // 도구 없이 텍스트 답변만 받는다. 빈 답변이면 힌트를 붙여 maxEmptyReplyRetries번까지 다시 묻는다.
+    // 중단되거나 끝내 비어 있으면 null.
+    async completeTextReply() {
+        for (let attempt = 0; attempt < this.maxEmptyReplyRetries; attempt++) {
+            if (this.stopRequested) return null;
+
+            if (attempt > 0) {
+                this.messages.push({ role: "user", content: this.quietEmpty ? QUIET_EMPTY_HINT : EMPTY_REPLY_HINT });
+            }
+
+            this.setStatus("thinking");
+            this.modelCallCount += 1;
+            let response;
+            try {
+                response = await this.llm.complete({
+                    messages: this.messages,
+                    tool_choice: "none",
+                    stream: Boolean(this.onTextDelta),
+                    onTextDelta: this.streamDelta(),
+                    signal: this.session?.signal,
+                });
+            } catch (err) {
+                if (isStoppedError(err, this.session)) {
+                    if (err.partialText) this.partialText = err.partialText;
+                    return null;
+                }
+                throw err;
+            }
+
+            if (this.stopRequested) return null;
+
+            const raw = response.choices?.[0]?.message;
+            if (!raw) continue;
+
+            const msg = assistantMessageToPlain(raw);
+            if (msg.content?.trim()) {
+                this.messages.push(msg);
+                this.checkpoint();
+                if (isSilentReply(msg.content)) return { text: null, usage: response.usage, silent: true };
+                return { text: msg.content, usage: response.usage };
+            }
         }
 
-        setStatus("thinking");
-        const streamDelta = onTextDelta
-            ? (_delta, full) => {
-                  if (partialTextRef) partialTextRef.value = full;
-                  setStatus("streaming");
-                  onTextDelta(_delta, full);
-              }
-            : undefined;
+        return null;
+    }
 
-        modelCallCount.value += 1;
-        let response;
-        try {
-            response = await llm.complete({
-                messages,
-                tool_choice: "none",
-                stream: Boolean(onTextDelta),
-                onTextDelta: streamDelta,
-                signal: session?.signal,
+    // 도구를 쓰지 않은 답변을 처리한다. 다음 라운드로 이어져야 하면 undefined, 끝이면 결과.
+    async finishTextOnlyReply(choice, response) {
+        if (choice.content?.trim()) {
+            this.messages.push(choice);
+            this.checkpoint();
+            if (this.injectPendingUserMessages()) return undefined;
+            if (isSilentReply(choice.content)) return this.result({ text: null, usage: response.usage, silent: true });
+            return this.result({ text: choice.content, usage: response.usage });
+        }
+
+        if (this.stopRequested) return this.stopped();
+
+        const recovered = await this.completeTextReply();
+        if (this.stopRequested) return this.stopped(this.partialText || recovered?.text);
+        if (recovered) {
+            if (this.injectPendingUserMessages()) return undefined;
+            return this.replyResult(recovered);
+        }
+
+        if (this.quietEmpty) return this.result({ text: null, silent: true });
+        return this.result({ text: null, error: "empty_reply_exhausted" });
+    }
+
+    // 도구 호출을 차례로 실행한다. 중단되면 결과를 돌려주고, 아니면 undefined.
+    async runToolCalls(toolCalls, ctx) {
+        const { maxToolCalls, toolContext, visionSupport } = ctx;
+        const imageObservations = [];
+
+        for (let toolIndex = 0; toolIndex < toolCalls.length; toolIndex += 1) {
+            const tc = toolCalls[toolIndex];
+            if (this.toolCallCount >= maxToolCalls) {
+                this.pushSkippedToolResults(toolCalls, toolIndex, TOOL_BUDGET_ERROR);
+                this.checkpoint();
+                break;
+            }
+
+            if (this.stopRequested) {
+                this.pushSkippedToolResults(toolCalls, toolIndex);
+                return this.stopped();
+            }
+
+            this.setStatus("tools", tc.function.name);
+
+            const parsed = parseToolArgs(tc.function.arguments);
+            if (!parsed.ok) {
+                this.pushToolResult(tc.id, {
+                    ok: false,
+                    error: `Tool arguments were not valid JSON for ${tc.function.name}; the call was not executed.`,
+                });
+                this.checkpoint();
+                continue;
+            }
+            this.toolCallCount += 1;
+
+            const result = await executeTool(tc.function.name, parsed.args, {
+                ...toolContext,
+                messages: this.messages,
+                model: this.llm.provider.model,
+                modelMeta: this.llm.modelMeta,
+                signal: this.session?.signal,
+                onStatusPhase: this.setStatus,
             });
-        } catch (err) {
-            if (isStoppedError(err, session)) {
-                if (partialTextRef && err.partialText) partialTextRef.value = err.partialText;
-                return null;
+
+            this.pushToolResult(tc.id, result);
+            if (this.stopRequested) {
+                this.pushSkippedToolResults(toolCalls, toolIndex + 1);
+                this.checkpoint();
+                return this.stopped();
             }
-            throw err;
+            this.checkpoint();
+            const imageObservation = buildToolImageObservation(result, { visionEnabled: visionSupport });
+            if (imageObservation) imageObservations.push(imageObservation);
         }
 
-        if (shouldStop(session)) return null;
-
-        const raw = response.choices?.[0]?.message;
-        if (!raw) continue;
-
-        const msg = assistantMessageToPlain(raw);
-        if (msg.content?.trim()) {
-            messages.push(msg);
-            checkpointMessages(messages, contextBaseLength, onCheckpoint);
-            if (isSilentReply(msg.content)) {
-                return { text: null, usage: response.usage, silent: true };
-            }
-            return { text: msg.content, usage: response.usage };
+        if (imageObservations.length) {
+            this.messages.push(...imageObservations);
+            this.checkpoint();
         }
+        return undefined;
     }
 
-    return null;
+    // 라운드를 다 쓴 뒤: 도구 없이 마지막 답변을 받고, 그사이 들어온 사용자 메시지에도 답한다.
+    async finishAfterRounds(maxRounds) {
+        if (this.stopRequested) return this.stopped();
+
+        const recovered = await this.completeTextReply();
+        if (this.stopRequested) return this.stopped(this.partialText || recovered?.text);
+        if (recovered) {
+            let latest = recovered;
+            for (let extraRound = 0; extraRound < maxRounds; extraRound += 1) {
+                if (!this.injectPendingUserMessages()) break;
+
+                if (this.stopRequested) return this.stopped(this.partialText || latest.text);
+
+                const extra = await this.completeTextReply();
+                if (this.stopRequested) return this.stopped(this.partialText || extra?.text);
+                if (!extra) break;
+                latest = extra;
+            }
+            return this.replyResult(latest);
+        }
+
+        if (this.quietEmpty) return this.result({ text: null, silent: true });
+        return this.result({ text: null, error: "tool_rounds_exceeded" });
+    }
 }
 
 export async function runAgent(userMessage, options = {}) {
@@ -188,7 +312,7 @@ export async function runAgent(userMessage, options = {}) {
             return {
                 text: err.partialText?.trim() || null,
                 error: "stopped_by_user",
-                stats: { toolCallCount: 0, modelCallCount: 0, tokensUsed: 0, contextWindow: 128000 },
+                stats: EMPTY_STATS,
                 turnMessages: [],
             };
         }
@@ -197,7 +321,7 @@ export async function runAgent(userMessage, options = {}) {
             text: null,
             error: "agent_error",
             errorDetail: err?.message || String(err),
-            stats: { toolCallCount: 0, modelCallCount: 0, tokensUsed: 0, contextWindow: 128000 },
+            stats: EMPTY_STATS,
             turnMessages: [],
         };
     }
@@ -230,21 +354,12 @@ async function runAgentTurn(
         model: agent?.model?.trim() || "",
         thinkingLevel: agent?.thinkingLevel || "",
     };
-    let llm = await createLlmClient(agentOverrides);
-    let activeProviderKey = providerKey(llm.provider);
+    const llm = await createLlmClient(agentOverrides);
     const agentConfig = loadAgentConfig();
     const setStatus = (phase, detail = null) => onStatusPhase?.(phase, detail);
     const maxRounds = agentConfig.maxToolRoundsPerTurn ?? agentConfig.maxToolRounds ?? 16;
     const maxToolCalls = agentConfig.maxToolCallsPerTurn ?? 20;
     const maxEmptyReplyRetries = agentConfig.maxEmptyReplyRetries ?? 8;
-    const modelCallCountRef = { value: 0 };
-
-    const runtimeInfo = {
-        model: llm.provider.model,
-        sessionKey: resolvedSessionKey,
-        channel: "web",
-        agentId: resolvedAgentId,
-    };
 
     setStatus("generating");
     const contextResult = await ensureWithinContextLimit(llm, userMessage, llm.modelMeta, {
@@ -252,78 +367,68 @@ async function runAgentTurn(
         onStatusPhase: setStatus,
         attachments,
         session,
-        runtimeInfo,
+        runtimeInfo: {
+            model: llm.provider.model,
+            sessionKey: resolvedSessionKey,
+            channel: "web",
+            agentId: resolvedAgentId,
+        },
         history: persistHistory === false ? (history ?? []) : history,
     });
-    let messages = contextResult.messages;
+    const messages = contextResult.messages;
+    // 사용자 메시지는 messages의 마지막이다. -1로 두면 extractTurnMessages가 그것을 이번 턴에 포함한다.
+    const contextBaseLength = messages.length - 1;
 
-    if (shouldStop(session)) {
-        return finishStoppedTurn(llm, messages, messages.length - 1, 0, modelCallCountRef, { partialText: null });
-    }
+    const turn = new AgentTurn({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries });
+
+    if (turn.stopRequested) return turn.stopped(null);
+
     const tools = await getAllToolDefinitions();
-    const contextBaseLength = messages.length - 1; // user message is last in messages; -1 keeps it in extractTurnMessages
-
-    let toolCallCount = 0;
-    const fileSnapshots = new Map();
-    let visionSupport = Boolean(llm.modelMeta?.supportsVision);
-
-    const partialTextRef = { value: null };
+    const toolContext = {
+        chatId,
+        sessionKey: resolvedSessionKey,
+        agentId: resolvedAgentId,
+        consultDepth,
+        todoId,
+        fileSnapshots: new Map(),
+    };
+    let activeProviderKey = providerKey(turn.llm.provider);
+    let visionSupport = Boolean(turn.llm.modelMeta?.supportsVision);
 
     for (let round = 0; round < maxRounds; round++) {
+        // 설정에서 모델이나 프로바이더가 바뀌었으면 다음 라운드부터 새 클라이언트를 쓴다.
         const configuredProvider = applyAgentOverrides(getMergedProvider(loadUserConfig()), agentOverrides);
-        const configuredProviderKey = providerKey(configuredProvider);
-        if (configuredProviderKey !== activeProviderKey) {
-            llm = await createLlmClient(agentOverrides);
-            activeProviderKey = providerKey(llm.provider);
-            visionSupport = Boolean(llm.modelMeta?.supportsVision);
+        if (providerKey(configuredProvider) !== activeProviderKey) {
+            turn.llm = await createLlmClient(agentOverrides);
+            activeProviderKey = providerKey(turn.llm.provider);
+            visionSupport = Boolean(turn.llm.modelMeta?.supportsVision);
         }
-        injectPendingUserMessages(messages, session);
-        if (shouldStop(session)) {
-            return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                partialText: partialTextRef.value,
-            });
-        }
+        turn.injectPendingUserMessages();
+        if (turn.stopRequested) return turn.stopped();
 
-        const toolsEnabled = toolCallCount < maxToolCalls;
-        const useStream = Boolean(onTextDelta);
+        const toolsEnabled = turn.toolCallCount < maxToolCalls;
+        turn.setStatus("thinking");
 
-        setStatus("thinking");
-
-        const streamDelta =
-            useStream && onTextDelta
-                ? (_delta, full) => {
-                      partialTextRef.value = full;
-                      setStatus("streaming");
-                      onTextDelta(_delta, full);
-                  }
-                : undefined;
-
-        modelCallCountRef.value += 1;
+        turn.modelCallCount += 1;
         let response;
         try {
-            response = await llm.complete({
+            response = await turn.llm.complete({
                 messages,
                 tools: toolsEnabled ? tools : undefined,
                 tool_choice: toolsEnabled ? "auto" : "none",
-                stream: useStream,
-                onTextDelta: streamDelta,
+                stream: Boolean(onTextDelta),
+                onTextDelta: turn.streamDelta(),
                 signal: session?.signal,
             });
         } catch (err) {
             if (isStoppedError(err, session)) {
-                if (err.partialText) partialTextRef.value = err.partialText;
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value,
-                });
+                if (err.partialText) turn.partialText = err.partialText;
+                return turn.stopped();
             }
             throw err;
         }
 
-        if (shouldStop(session)) {
-            return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                partialText: partialTextRef.value,
-            });
-        }
+        if (turn.stopRequested) return turn.stopped();
 
         const raw = response.choices?.[0]?.message;
         if (!raw) throw new Error("Empty LLM response");
@@ -331,216 +436,23 @@ async function runAgentTurn(
         const choice = assistantMessageToPlain(raw);
         const toolCalls = choice.tool_calls;
         if (!toolCalls?.length) {
-            if (choice.content?.trim()) {
-                messages.push(choice);
-                checkpointMessages(messages, contextBaseLength, onCheckpoint);
-                if (injectPendingUserMessages(messages, session)) {
-                    continue;
-                }
-                if (isSilentReply(choice.content)) {
-                    return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-                        text: null,
-                        usage: response.usage,
-                        silent: true,
-                    });
-                }
-                return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-                    text: choice.content,
-                    usage: response.usage,
-                });
-            }
-
-            if (shouldStop(session)) {
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value,
-                });
-            }
-
-            const recovered = await completeTextReply(llm, messages, {
-                onTextDelta,
-                onCheckpoint,
-                contextBaseLength,
-                setStatus,
-                maxRetries: maxEmptyReplyRetries,
-                modelCallCount: modelCallCountRef,
-                session,
-                partialTextRef,
-                quietEmpty,
-            });
-            if (shouldStop(session)) {
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value || recovered?.text,
-                });
-            }
-            if (recovered) {
-                if (injectPendingUserMessages(messages, session)) {
-                    continue;
-                }
-                return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-                    text: recovered.silent ? null : recovered.text,
-                    usage: recovered.usage,
-                    silent: recovered.silent || false,
-                });
-            }
-
-            if (quietEmpty) {
-                return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-                    text: null,
-                    silent: true,
-                });
-            }
-
-            return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-                text: null,
-                error: "empty_reply_exhausted",
-            });
-        }
-
-        messages.push(choice);
-        checkpointMessages(messages, contextBaseLength, onCheckpoint);
-
-        if (toolCallCount >= maxToolCalls) {
-            pushSkippedToolResults(messages, toolCalls, 0, {
-                error: "Tool call budget exceeded for this turn.",
-            });
-            checkpointMessages(messages, contextBaseLength, onCheckpoint);
+            const finished = await turn.finishTextOnlyReply(choice, response);
+            if (finished) return finished;
             continue;
         }
 
-        const toolImageObservations = [];
+        messages.push(choice);
+        turn.checkpoint();
 
-        for (let toolIndex = 0; toolIndex < toolCalls.length; toolIndex += 1) {
-            const tc = toolCalls[toolIndex];
-            if (toolCallCount >= maxToolCalls) {
-                pushSkippedToolResults(messages, toolCalls, toolIndex, {
-                    error: "Tool call budget exceeded for this turn.",
-                });
-                checkpointMessages(messages, contextBaseLength, onCheckpoint);
-                break;
-            }
-
-            if (shouldStop(session)) {
-                pushSkippedToolResults(messages, toolCalls, toolIndex);
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value,
-                });
-            }
-
-            setStatus("tools", tc.function.name);
-
-            const parsed = parseToolArgs(tc.function.arguments);
-            if (!parsed.ok) {
-                pushToolResult(messages, tc.id, {
-                    ok: false,
-                    error: `Tool arguments were not valid JSON for ${tc.function.name}; the call was not executed.`,
-                });
-                checkpointMessages(messages, contextBaseLength, onCheckpoint);
-                continue;
-            }
-            toolCallCount += 1;
-
-            const result = await executeTool(tc.function.name, parsed.args, {
-                chatId,
-                sessionKey: resolvedSessionKey,
-                agentId: resolvedAgentId,
-                consultDepth,
-                todoId,
-                messages,
-                model: llm.provider.model,
-                modelMeta: llm.modelMeta,
-                fileSnapshots,
-                signal: session?.signal,
-                onStatusPhase: setStatus,
-            });
-
-            if (shouldStop(session)) {
-                pushToolResult(messages, tc.id, result);
-                pushSkippedToolResults(messages, toolCalls, toolIndex + 1);
-                checkpointMessages(messages, contextBaseLength, onCheckpoint);
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value,
-                });
-            }
-            pushToolResult(messages, tc.id, result);
-            checkpointMessages(messages, contextBaseLength, onCheckpoint);
-            const imageObservation = buildToolImageObservation(result, { visionEnabled: visionSupport });
-            if (imageObservation) toolImageObservations.push(imageObservation);
+        if (turn.toolCallCount >= maxToolCalls) {
+            turn.pushSkippedToolResults(toolCalls, 0, TOOL_BUDGET_ERROR);
+            turn.checkpoint();
+            continue;
         }
 
-        if (toolImageObservations.length) {
-            messages.push(...toolImageObservations);
-            checkpointMessages(messages, contextBaseLength, onCheckpoint);
-        }
+        const stopped = await turn.runToolCalls(toolCalls, { maxToolCalls, toolContext, visionSupport });
+        if (stopped) return stopped;
     }
 
-    if (shouldStop(session)) {
-        return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-            partialText: partialTextRef.value,
-        });
-    }
-
-    const recovered = await completeTextReply(llm, messages, {
-        onTextDelta,
-        onCheckpoint,
-        contextBaseLength,
-        setStatus,
-        maxRetries: maxEmptyReplyRetries,
-        modelCallCount: modelCallCountRef,
-        session,
-        partialTextRef,
-        quietEmpty,
-    });
-    if (shouldStop(session)) {
-        return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-            partialText: partialTextRef.value || recovered?.text,
-        });
-    }
-    if (recovered) {
-        let latest = recovered;
-        for (let extraRound = 0; extraRound < maxRounds; extraRound += 1) {
-            if (!injectPendingUserMessages(messages, session)) break;
-
-            if (shouldStop(session)) {
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value || latest.text,
-                });
-            }
-
-            const extra = await completeTextReply(llm, messages, {
-                onTextDelta,
-                onCheckpoint,
-                contextBaseLength,
-                setStatus,
-                maxRetries: maxEmptyReplyRetries,
-                modelCallCount: modelCallCountRef,
-                session,
-                partialTextRef,
-                quietEmpty,
-            });
-            if (shouldStop(session)) {
-                return finishStoppedTurn(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef, {
-                    partialText: partialTextRef.value || extra?.text,
-                });
-            }
-            if (!extra) break;
-            latest = extra;
-        }
-        return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-            text: latest.silent ? null : latest.text,
-            usage: latest.usage,
-            silent: latest.silent || false,
-        });
-    }
-
-    if (quietEmpty) {
-        return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-            text: null,
-            silent: true,
-        });
-    }
-
-    return buildResult(llm, messages, contextBaseLength, toolCallCount, modelCallCountRef.value, {
-        text: null,
-        error: "tool_rounds_exceeded",
-    });
+    return turn.finishAfterRounds(maxRounds);
 }

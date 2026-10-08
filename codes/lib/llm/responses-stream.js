@@ -17,7 +17,7 @@ function eventCallId(evt) {
     return evt?.call_id || evt?.item?.call_id || null;
 }
 
-export function createResponsesStreamState(onTextDelta) {
+function createResponsesStreamState(onTextDelta) {
     return {
         content: "",
         usage: null,
@@ -131,7 +131,7 @@ function applyCompletedOutput(state, evt) {
     }
 }
 
-export function applyResponsesStreamEvent(state, evt) {
+function applyResponsesStreamEvent(state, evt) {
     if (!evt || typeof evt !== "object") return;
     const type = evt.type || evt.event_type || evt.event;
     if (!type) return;
@@ -215,7 +215,7 @@ export async function consumeResponsesStream(res, signal, onTextDelta) {
         for (const line of lines) {
             const trimmed = line.trim();
             // SSE 스펙상 data: 뒤 공백은 선택. 공백 없는 프레임도 받는다.
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
+            if (!trimmed?.startsWith("data:")) continue;
             const data = trimmed.slice(5).replace(/^ /, "");
             if (data === "[DONE]") continue;
             try {

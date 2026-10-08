@@ -63,14 +63,6 @@ export function startDreamingScheduler() {
     console.log(`tabyBot: dream sweep scheduled (${expr}, ${tz})`);
 }
 
-export function runDreamSweepNow(trigger = "manual") {
-    queueSweep(trigger);
-}
-
-export function isSweepPending() {
-    return sweepPending;
-}
-
 export function stopDreamingScheduler() {
     if (task) {
         task.stop();

@@ -3,8 +3,8 @@ import path from "node:path";
 import { USER_DIR } from "../paths.js";
 import { writeJsonAtomic } from "../atomic-file.js";
 
-export const DREAMS_DIR = path.join(USER_DIR, "dreams");
-export const DREAMS_DIARY_PATH = path.join(DREAMS_DIR, "DREAMS.md");
+const DREAMS_DIR = path.join(USER_DIR, "dreams");
+const DREAMS_DIARY_PATH = path.join(DREAMS_DIR, "DREAMS.md");
 const STATE_PATH = path.join(DREAMS_DIR, "state.json");
 const STATE_VERSION = 1;
 

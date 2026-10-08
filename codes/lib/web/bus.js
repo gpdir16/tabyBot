@@ -33,9 +33,9 @@ export function currentSeq() {
 }
 
 // 직렬화는 한 번만 수행해 모든 구독자가 동일한 문자열을 받는다.
-export function emit(event) {
+export function emit(rawEvent) {
     // 시스템 알림은 기록에 남긴다. 그 순간 접속해 있지 않던 기기도 다음에 열 때 볼 수 있다.
-    if (isNoticeEvent(event)) event = { ...event, noticeId: recordNotice(event).id };
+    const event = isNoticeEvent(rawEvent) ? { ...rawEvent, noticeId: recordNotice(rawEvent).id } : rawEvent;
     const item = { ...event, at: event.at || new Date().toISOString(), loggedAt: Date.now(), seq: nextEventSeq++ };
     eventLog.push(item);
     if (eventLog.length > MAX_EVENT_LOG) eventLog.splice(0, eventLog.length - MAX_EVENT_LOG);
@@ -47,5 +47,5 @@ export function emit(event) {
             // 개별 구독자(SSE 연결) 실패가 다른 구독자에 영향 주지 않도록 무시
         }
     }
-    void maybePush(event).catch(() => {});
+    void maybePush(event).catch((err) => console.error("tabyBot: push delivery failed:", err?.message || err));
 }

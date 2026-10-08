@@ -1,6 +1,6 @@
 /* tabyBot 웹 클라이언트: 전역 툴팁.
    overflow 컨테이너 안에서 의사 요소 툴팁이 잘리지 않도록 fixed 레이어로 표시한다. */
-(function (T) {
+((T) => {
     "use strict";
 
     const TOOLTIP_ID = "globalTooltip";
@@ -15,7 +15,7 @@
     }
 
     function place(target) {
-        if (!target || !target.isConnected) return;
+        if (!target?.isConnected) return;
         ensureTooltip();
         const rect = target.getBoundingClientRect();
         const text = target.getAttribute("data-tip") || "";
@@ -38,7 +38,7 @@
     }
 
     function isTipVisible(el) {
-        if (!el || !el.isConnected || el.disabled) return false;
+        if (!el?.isConnected || el.disabled) return false;
         if (el.classList.contains("hidden")) return false;
         const style = window.getComputedStyle(el);
         if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
@@ -71,8 +71,8 @@
         document.addEventListener("scroll", hide, { passive: true, capture: true });
         window.addEventListener("resize", hide);
         window.addEventListener("blur", hide);
-        if (T.i18n && T.i18n.onChange) T.i18n.onChange(hide);
+        if (T.i18n?.onChange) T.i18n.onChange(hide);
     }
 
     T.tooltip = { init, hide };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

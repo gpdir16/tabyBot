@@ -14,4 +14,5 @@
 
 ## 코드 스타일
 
-항상 Prettier를 이용하여 포멧팅하세요.
+JS·CSS·JSON은 Biome(`npm run lint:fix`), md·yml·html은 Prettier(`npm run format`)로 포맷하고 린트합니다.
+작업을 마치기 전에 `npm run format:check`가 통과해야 합니다. 의도적으로 비워 둔 catch/콜백에는 이유를 주석으로 남깁니다(Biome `noEmptyBlockStatements`).

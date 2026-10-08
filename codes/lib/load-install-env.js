@@ -19,7 +19,7 @@ function applyManagedInstallPaths(home) {
     process.env.TABYBOT_MODE = "local";
 }
 
-export function loadInstallEnv() {
+function loadInstallEnv() {
     if (process.env.__TABYBOT_ENV_LOADED) return;
     process.env.__TABYBOT_ENV_LOADED = "1";
 
