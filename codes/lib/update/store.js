@@ -10,7 +10,7 @@ function defaultState() {
     return { lastNotifiedVersion: null, lastCheckedAt: null, watchStartedAt: null };
 }
 
-export function loadUpdateState() {
+function loadUpdateState() {
     if (!fs.existsSync(STATE_PATH)) return defaultState();
     try {
         const data = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));

@@ -1,36 +1,25 @@
 // 대화 인덱스: 에이전트당 하나의 스레드. 디스크는 user/session/<agent-uuid>/.
 import fs from "node:fs";
 import path from "node:path";
-import { writeJsonAtomic } from "../atomic-file.js";
+import { readJsonFile, writeJsonAtomic } from "../atomic-file.js";
 import { firstAgentId, getAgentByUuid, listAgents } from "../agents-store.js";
 import { isAgentSessionRunning } from "../agent/session.js";
 import {
-    RECOVERY_PROMPT,
     conversationDir,
-    isSilentMarkedText,
     lastActivityAtFromTurns,
     loadChatHistory,
     markChatRead,
     previewSnippetFromTurns,
-    sayTextsFromMessage,
     stripMarkdownForPreview,
 } from "../agent/chat-history.js";
+import { PENDING_USER_PREFIX, isScheduledTurnText, stripAttachedFiles } from "../agent/history/messages.js";
+import { isInternalHintText, isSilentMarkedText, sayTextsFromMessage } from "../agent/history/messages.js";
+
+// ── 대화 인덱스: 에이전트당 하나의 스레드. 디스크는 user/session/<agent-uuid>/. ──
 
 function manifestPath(id) {
     const dir = conversationDir(id);
     return dir ? path.join(dir, "manifest.json") : null;
-}
-
-function readJson(file, fallback = null) {
-    try {
-        return JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
-        return fallback;
-    }
-}
-
-function writeJson(file, data) {
-    writeJsonAtomic(file, data);
 }
 
 export function isValidId(id) {
@@ -59,7 +48,7 @@ function readMeta(id) {
     const mPath = manifestPath(id);
     const dir = conversationDir(id);
     if (!mPath || !dir) return null;
-    const manifest = readJson(mPath);
+    const manifest = readJsonFile(mPath);
     if (!manifest?.activeSessionId) return null;
     const createdAt = statTime(mPath, "birthtimeMs") || statTime(mPath);
     // 목록 정렬은 실제 발화 시각(lastActivityAt)이 정본이다. mtime은
@@ -95,7 +84,7 @@ function readMeta(id) {
     }
     if (manifestDirty) {
         try {
-            writeJson(mPath, manifest);
+            writeJsonAtomic(mPath, manifest);
         } catch {
             /* 목록 응답은 유지 */
         }
@@ -132,100 +121,6 @@ export function listConversations() {
 export function getConversationMeta(id) {
     if (!isValidId(id)) return null;
     return readMeta(id);
-}
-
-// 히스토리의 내부 주입 프롬프트를 화면용으로 정규화한다.
-const PENDING_PREFIX = "The user sent additional message(s) while you were working:";
-const ATTACHED_FILES_MARK = "[User attached files]";
-const INTERNAL_HINTS = [
-    "You have enough tool output. Stop calling tools. Reply to the user in plain text now using results you already have.",
-    "The user pressed Stop. Stop immediately. Do not call more tools. Reply briefly with progress and what remains.",
-    RECOVERY_PROMPT,
-];
-function stripAttachedFilesPrompt(content) {
-    const s = String(content || "");
-    const i = s.indexOf(ATTACHED_FILES_MARK);
-    return i === -1 ? s : s.slice(0, i).trim();
-}
-function publicUserMessage(message) {
-    if (!message?.attachments) return message;
-    return {
-        ...message,
-        attachments: message.attachments.map(({ filePath, ...rest }) => rest),
-    };
-}
-function toDisplayTurns(rawTurns) {
-    const turns = [];
-    // 실행 중 주입된 큐 메시지 텍스트: 같은 발화의 단독 pending 턴이 남아 있으면
-    // 화면에 두 번 보이므로, 이미 래핑 본문으로 표시된 텍스트는 여기서 기억한다.
-    const queuedSeen = new Set();
-    for (const turn of rawTurns || []) {
-        const rawMessages = turn?.messages || [];
-        if (
-            turn?.status === "pending" &&
-            rawMessages.length === 1 &&
-            rawMessages[0]?.role === "user" &&
-            typeof rawMessages[0].content === "string" &&
-            queuedSeen.has(stripAttachedFilesPrompt(rawMessages[0].content).trim())
-        ) {
-            continue;
-        }
-        const messages = [];
-        for (const m of rawMessages) {
-            // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다.
-            // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
-            if (m?.role === "user" && Array.isArray(m.content)) continue;
-            // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
-            if (m?.role === "tool") continue;
-            if (m?.role === "assistant") {
-                // 툴 호출이 딸린 메시지의 본문은 내부 메모: user_say 호출의
-                // text 인자만 사용자용 발화로 꺼내 버블로 남긴다.
-                if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
-                    for (const said of sayTextsFromMessage(m)) {
-                        if (isSilentMarkedText(said)) continue;
-                        messages.push({ role: "assistant", content: said, ...(m.at ? { at: m.at } : {}) });
-                    }
-                    continue;
-                }
-                const text = String(m.content || "").trim();
-                if (!text && !m.attachments?.length) continue;
-                // 침묵 마커는 그 메시지 하나만 숨긴다. 이미 보낸 중간 발화까지 소급 회수하지 않는다.
-                if (isSilentMarkedText(text)) continue;
-                messages.push(m?.attachments ? publicUserMessage(m) : m);
-                continue;
-            }
-            if (m?.role === "user" && typeof m.content === "string" && m.content.includes("[tabybot-scheduled]")) continue;
-            if (m?.role !== "user" || typeof m.content !== "string") {
-                messages.push(m?.attachments ? publicUserMessage(m) : m);
-                continue;
-            }
-            const content = stripAttachedFilesPrompt(m.content);
-            if (INTERNAL_HINTS.includes(content.trim())) continue; // 순수 내부 지시는 숨김
-            if (content.startsWith(PENDING_PREFIX)) {
-                // 실행 중 보낸 메시지들은 일반 사용자 메시지로 분해해 표시
-                for (const part of content.slice(PENDING_PREFIX.length).split("\n\n")) {
-                    const clean = stripAttachedFilesPrompt(part.trim());
-                    if (clean) queuedSeen.add(clean);
-                    if (clean || m.attachments?.length) {
-                        messages.push(
-                            publicUserMessage({
-                                role: "user",
-                                content: clean,
-                                ...(m.at ? { at: m.at } : {}),
-                                ...(m.attachments ? { attachments: m.attachments } : {}),
-                            }),
-                        );
-                    }
-                }
-                continue;
-            }
-            if (!content && !m.attachments?.length) continue;
-            messages.push(publicUserMessage({ ...m, content }));
-        }
-        // 도구 프레임 제거로 빈 turn이 되면 아예 생략
-        if (messages.some((m) => m.role === "user" || m.role === "assistant")) turns.push({ ...turn, messages });
-    }
-    return turns;
 }
 
 export function getConversationDetail(id) {
@@ -281,4 +176,94 @@ export function searchMessages(query, { limit = 30 } = {}) {
     }
     hits.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
     return hits.slice(0, limit);
+}
+
+// ── 저장된 대화 기록(턴)을 화면에 보여 줄 모양으로 바꾼다. ──
+
+// 도구 결과 프레임, 내부 지시문, 침묵 답변, 예약 실행 표식은 숨기고
+// 작업 중에 합쳐 넣은 사용자 메시지는 일반 발화로 풀어 준다.
+
+// 파일 경로 같은 서버 내부 정보를 뺀다.
+function publicMessage(message) {
+    if (!message?.attachments) return message;
+    return {
+        ...message,
+        attachments: message.attachments.map(({ filePath, ...rest }) => rest),
+    };
+}
+
+const withTime = (m) => (m.at ? { at: m.at } : {});
+
+// 큐에 들어갔던 같은 발화의 단독 pending 턴이 남아 있으면 화면에 두 번 보인다.
+function isDuplicateOfQueued(turn, rawMessages, queuedSeen) {
+    return (
+        turn?.status === "pending" &&
+        rawMessages.length === 1 &&
+        rawMessages[0]?.role === "user" &&
+        typeof rawMessages[0].content === "string" &&
+        queuedSeen.has(stripAttachedFiles(rawMessages[0].content).trim())
+    );
+}
+
+// assistant 메시지 → 화면용 메시지 목록(보이지 않으면 빈 배열).
+function displayAssistant(m) {
+    // 툴 호출이 딸린 메시지의 본문은 내부 메모: user_say 호출의 text 인자만 사용자용 발화로 꺼내 버블로 남긴다.
+    if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+        return sayTextsFromMessage(m)
+            .filter((said) => !isSilentMarkedText(said))
+            .map((said) => ({ role: "assistant", content: said, ...withTime(m) }));
+    }
+    const text = String(m.content || "").trim();
+    if (!text && !m.attachments?.length) return [];
+    // 침묵 마커는 그 메시지 하나만 숨긴다. 이미 보낸 중간 발화까지 소급 회수하지 않는다.
+    if (isSilentMarkedText(text)) return [];
+    return [m.attachments ? publicMessage(m) : m];
+}
+
+// 작업 중 보낸 메시지들(머리말 뒤에 빈 줄로 이어 붙은 것)을 일반 사용자 메시지로 분해한다.
+function splitPendingUserMessage(m, content, queuedSeen) {
+    const out = [];
+    for (const part of content.slice(PENDING_USER_PREFIX.length).split("\n\n")) {
+        const clean = stripAttachedFiles(part.trim());
+        if (clean) queuedSeen.add(clean);
+        if (clean || m.attachments?.length) {
+            out.push(publicMessage({ role: "user", content: clean, ...withTime(m), ...(m.attachments ? { attachments: m.attachments } : {}) }));
+        }
+    }
+    return out;
+}
+
+// user 메시지 → 화면용 메시지 목록.
+function displayUser(m, queuedSeen) {
+    if (isScheduledTurnText(m.content)) return [];
+    const content = stripAttachedFiles(m.content);
+    if (isInternalHintText(content.trim())) return []; // 순수 내부 지시는 숨김
+    if (content.startsWith(PENDING_USER_PREFIX)) return splitPendingUserMessage(m, content, queuedSeen);
+    if (!content && !m.attachments?.length) return [];
+    return [publicMessage({ ...m, content })];
+}
+
+function displayMessage(m, queuedSeen) {
+    // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다.
+    // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
+    if (m?.role === "user" && Array.isArray(m.content)) return [];
+    // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
+    if (m?.role === "tool") return [];
+    if (m?.role === "assistant") return displayAssistant(m);
+    if (m?.role === "user" && typeof m.content === "string") return displayUser(m, queuedSeen);
+    return [m?.attachments ? publicMessage(m) : m];
+}
+
+export function toDisplayTurns(rawTurns) {
+    const turns = [];
+    // 실행 중 주입된 큐 메시지 텍스트: 이미 래핑 본문으로 표시된 텍스트는 여기서 기억한다.
+    const queuedSeen = new Set();
+    for (const turn of rawTurns || []) {
+        const rawMessages = turn?.messages || [];
+        if (isDuplicateOfQueued(turn, rawMessages, queuedSeen)) continue;
+        const messages = rawMessages.flatMap((m) => displayMessage(m, queuedSeen));
+        // 도구 프레임 제거로 빈 turn이 되면 아예 생략
+        if (messages.some((m) => m.role === "user" || m.role === "assistant")) turns.push({ ...turn, messages });
+    }
+    return turns;
 }

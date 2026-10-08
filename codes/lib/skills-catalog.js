@@ -11,7 +11,7 @@ function listSkillDirs(root) {
         .map((d) => d.name);
 }
 
-export function readSkillSummary(skillPath) {
+function readSkillSummary(skillPath) {
     const skillFile = path.join(skillPath, "SKILL.md");
     if (!fs.existsSync(skillFile)) return null;
     const text = fs.readFileSync(skillFile, "utf8");

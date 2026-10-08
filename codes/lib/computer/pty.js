@@ -43,7 +43,9 @@ function broadcast(sess, data) {
     for (const conn of [...sess.clients]) {
         try {
             conn.send(data);
-        } catch {}
+        } catch {
+            // 연결이 이미 끊겼으면 보낼 곳이 없으므로 무시한다
+        }
     }
 }
 
@@ -51,7 +53,9 @@ function broadcastJson(sess, obj) {
     for (const conn of [...sess.clients]) {
         try {
             conn.sendJson(obj);
-        } catch {}
+        } catch {
+            // 연결이 이미 끊겼으면 보낼 곳이 없으므로 무시한다
+        }
     }
 }
 
@@ -167,22 +171,26 @@ function writeRaw(sess, data) {
     try {
         proc.stdin.write(data);
         sess.everHadData = true;
-    } catch {}
+    } catch {
+        // 연결이 이미 끊겼으면 보낼 곳이 없으므로 무시한다
+    }
 }
 
 function writeCtrl(sess, obj) {
-    if (sess.ctrl && sess.ctrl.writable) {
+    if (sess.ctrl?.writable) {
         try {
-            sess.ctrl.write(JSON.stringify(obj) + "\n");
+            sess.ctrl.write(`${JSON.stringify(obj)}\n`);
             return true;
-        } catch {}
+        } catch {
+            // 연결이 이미 끊겼으면 보낼 곳이 없으므로 무시한다
+        }
     }
     return false;
 }
 
-function resize(sess, cols, rows) {
-    cols = Math.max(2, Math.min(500, Math.round(cols)));
-    rows = Math.max(1, Math.min(500, Math.round(rows)));
+function resize(sess, requestedCols, requestedRows) {
+    const cols = Math.max(2, Math.min(500, Math.round(requestedCols)));
+    const rows = Math.max(1, Math.min(500, Math.round(requestedRows)));
     sess.cols = cols;
     sess.rows = rows;
     if (sess.dead) return;
@@ -213,7 +221,9 @@ export function attachTerminal(agentId, conn) {
     for (const chunk of sess.backlog) {
         try {
             conn.send(chunk);
-        } catch {}
+        } catch {
+            // 연결이 이미 끊겼으면 보낼 곳이 없으므로 무시한다
+        }
     }
     if (sess.dead && sess.exitCode != null) conn.sendJson({ type: "exit", code: sess.exitCode });
 
@@ -254,18 +264,24 @@ export function killSession(agentId) {
     for (const conn of [...sess.clients]) {
         try {
             conn.sendJson({ type: "exit" });
-        } catch {}
+        } catch {
+            // 연결이 이미 끊겼으면 보낼 곳이 없으므로 무시한다
+        }
     }
     try {
         sess.proc?.kill("SIGHUP");
-    } catch {}
+    } catch {
+        // 이미 닫혔거나 정리된 대상이면 무시한다
+    }
     // 재시작 경합: spawnSession이 sess.proc를 새 셸로 교체한 뒤 타임아웃이 발동하면
     // 새 셸이 죽는다. 반드시 "지금의" proc만 잡아 둔다.
     const oldProc = sess.proc;
     setTimeout(() => {
         try {
             oldProc?.kill("SIGKILL");
-        } catch {}
+        } catch {
+            // 이미 닫혔거나 정리된 대상이면 무시한다
+        }
     }, 1500);
 }
 

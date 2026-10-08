@@ -76,7 +76,7 @@ function proactiveConfig() {
     };
 }
 
-export function proactiveTick(now = new Date()) {
+function proactiveTick(now = new Date()) {
     if (!runCheckin) return { ran: 0, reason: "no_runner" };
     const cfg = proactiveConfig();
     if (!cfg.enabled) return { ran: 0, reason: "disabled" };

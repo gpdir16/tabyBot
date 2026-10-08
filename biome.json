@@ -1,0 +1,60 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+    "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+    "files": {
+        "includes": ["**", "!**/node_modules", "!codes/public/assets/vendor", "!**/*.min.*", "!package-lock.json", "!user", "!**/*.html"]
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 150,
+        "lineEnding": "lf"
+    },
+    "javascript": {
+        "globals": ["marked", "DOMPurify", "hljs", "Terminal", "FitAddon"],
+        "formatter": {
+            "quoteStyle": "double",
+            "semicolons": "always",
+            "trailingCommas": "all",
+            "arrowParentheses": "always"
+        }
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "preset": "recommended",
+            "correctness": {
+                "noUnusedVariables": "error",
+                "noUnusedImports": "error",
+                "noUnusedFunctionParameters": "error",
+                "noUndeclaredVariables": "error"
+            },
+            "complexity": {
+                "useOptionalChain": "error",
+                "useArrowFunction": "error",
+                "noExcessiveCognitiveComplexity": { "level": "warn", "options": { "maxAllowedComplexity": 40 } },
+                "noImportantStyles": "off"
+            },
+            "style": {
+                "useConst": "error",
+                "noUselessElse": "error",
+                "useTemplate": "error",
+                "noParameterAssign": "error",
+                "useNodejsImportProtocol": "error",
+                "useDefaultParameterLast": "error",
+                "noDescendingSpecificity": "off"
+            },
+            "suspicious": {
+                "noEmptyBlockStatements": "error",
+                "noAssignInExpressions": "error",
+                "useIterableCallbackReturn": "error",
+                "noRedundantUseStrict": "off",
+                "noGlobalIsNan": "error",
+                "noPrototypeBuiltins": "error",
+                "useAwait": "warn"
+            }
+        }
+    },
+    "assist": { "enabled": true, "actions": { "source": { "organizeImports": "off" } } }
+}

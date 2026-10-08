@@ -2,21 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { USER_DIR } from "../paths.js";
 import { writeJsonAtomic } from "../atomic-file.js";
+import { parseJwtClaims, sleep } from "./transport.js";
 
 const ISSUER = "https://auth.openai.com";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTH_FILE = path.join(USER_DIR, "codex-auth.json");
-
-function parseJwtClaims(token) {
-    if (typeof token !== "string") return null;
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    try {
-        return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    } catch {
-        return null;
-    }
-}
 
 function extractAccountId(tokens) {
     const fromIdToken = tokens.id_token ? parseJwtClaims(tokens.id_token) : null;
@@ -54,7 +44,7 @@ export function loadCodexTokens() {
     }
 }
 
-export function saveCodexTokens(tokens) {
+function saveCodexTokens(tokens) {
     try {
         fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
         const data = {
@@ -87,7 +77,7 @@ export function clearCodexTokens() {
     }
 }
 
-export async function refreshCodexToken(refreshToken) {
+async function refreshCodexToken(refreshToken) {
     const res = await fetch(`${ISSUER}/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -189,15 +179,4 @@ export async function pollDeviceFlow({ deviceAuthId, userCode, intervalMs, signa
             throw new Error(`Device auth failed: ${res.status} ${body}`);
         }
     }
-}
-
-function sleep(ms, signal) {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, ms);
-        if (signal)
-            signal.addEventListener("abort", () => {
-                clearTimeout(timer);
-                reject(new Error("Login cancelled."));
-            });
-    });
 }

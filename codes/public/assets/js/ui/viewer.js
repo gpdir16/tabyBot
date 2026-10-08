@@ -2,7 +2,7 @@
    첨부 클릭 시 새 탭/바로 다운로드 대신 앱 안 모달로 연다.
    이미지/영상/오디오/PDF는 인라인으로, 텍스트 계열은 fetch로 읽어
    <pre>에 표시한다. 다운로드/새 탭은 뷰어 안의 보조 동작. */
-(function (T) {
+((T) => {
     "use strict";
 
     const t = (k, v) => T.i18n.t(k, v);
@@ -32,7 +32,7 @@
     // /api/files URL이면 inline 렌더를 요청한다. 서버가 허용 타입만 inline으로 보낸다.
     function inlineUrl(url) {
         if (!/^\/api\/files\//.test(url)) return url;
-        return url + (url.includes("?") ? "&" : "?") + "inline=1";
+        return `${url + (url.includes("?") ? "&" : "?")}inline=1`;
     }
 
     function close() {
@@ -77,9 +77,9 @@
             try {
                 const headers = {};
                 const tk = T.api.getToken();
-                if (tk) headers.Authorization = "Bearer " + tk;
+                if (tk) headers.Authorization = `Bearer ${tk}`;
                 const res = await fetch(url, { headers });
-                if (!res.ok) throw new Error("status " + res.status);
+                if (!res.ok) throw new Error(`status ${res.status}`);
                 const len = Number(res.headers.get("content-length") || 0);
                 if (len > TEXT_MAX) throw new Error("too_large");
                 const text = await res.text();
@@ -123,4 +123,4 @@
     });
 
     T.viewer = { open, close, isOpen: () => !!overlay };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

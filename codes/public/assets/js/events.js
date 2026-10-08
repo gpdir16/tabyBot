@@ -3,7 +3,7 @@
    - 토큰 설정: EventSource는 헤더를 보낼 수 없으므로 fetch 스트림으로
      Authorization 헤더를 실어 동일 계약을 구현하고 지수 백오프로 재접속.
    모든 이벤트는 JSON 한 줄(data:)로 파싱되어 state mutator로 디스패치된다. */
-(function (T) {
+((T) => {
     "use strict";
 
     const { state, api } = T;
@@ -24,6 +24,15 @@
     const handledSeqs = new Set();
     let connectionStartedAt = 0;
     let receivedEvent = false;
+
+    // 이미 닫혔거나 정리된 대상이면 무시한다.
+    function quietly(fn) {
+        try {
+            fn();
+        } catch {
+            // 이미 닫혔거나 정리된 대상이면 무시한다
+        }
+    }
 
     function notifyIncoming(conversationId, body, tag, url) {
         if (!T.notifications) return;
@@ -48,157 +57,173 @@
         }
     }
 
-    function handle(msg, replay = false) {
-        if (!msg || typeof msg !== "object" || !msg.type) return;
+    // 재생(replay)해도 안전한 이벤트: 다시 받아도 화면이 어긋나지 않는 "다시 읽어라" 신호들이다.
+    const GAP_SAFE_TYPES = new Set(["todo_due", "todos_changed", "conversations_changed", "notices_changed", "hello"]);
+
+    // hello는 서버 이벤트 번호의 기준점이다. 번호가 거꾸로 가면(서버 재시작) 중복 기록을 비우고,
+    // 끊긴 사이의 이벤트를 폴링으로 되살린다.
+    function trackHello(seq, replay) {
+        const prev = pollCursor;
+        if (!replay && seq < prev) handledSeqs.clear();
+        pollCursor = seq;
+        if (replay) return;
+        if (prev > 0 && seq !== prev) void replayGap(prev);
+        else if (prev === 0) void replayGap(0, false, FRESH_LOAD_GAP_MS);
+    }
+
+    // 이벤트를 처리해야 하는지 가린다(이미 본 것, 연결 이전 것, 재생 불가한 것은 버린다).
+    function admit(msg, replay) {
         const seq = Number(msg.seq) || 0;
-        if (msg.type === "hello") {
-            const prev = pollCursor;
-            if (!replay && seq < prev) handledSeqs.clear();
-            pollCursor = seq;
-            if (!replay && prev > 0 && seq !== prev) void replayGap(prev);
-            else if (!replay && prev === 0) void replayGap(0, false, FRESH_LOAD_GAP_MS);
-        } else if (seq) {
-            if (seq <= pollCursor && !replay) return;
-        }
-        const gapSafe =
-            msg.type === "todo_due" ||
-            msg.type === "todos_changed" ||
-            msg.type === "conversations_changed" ||
-            msg.type === "notices_changed" ||
-            msg.type === "hello";
-        if (replay && !gapSafe) return;
-        if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt && !gapSafe) return;
+        if (msg.type === "hello") trackHello(seq, replay);
+        else if (seq && seq <= pollCursor && !replay) return false;
+
+        const gapSafe = GAP_SAFE_TYPES.has(msg.type);
+        if (replay && !gapSafe) return false;
+        if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt && !gapSafe) return false;
         if (seq && msg.type !== "hello") {
-            if (handledSeqs.has(seq)) return;
+            if (handledSeqs.has(seq)) return false;
             handledSeqs.add(seq);
             if (handledSeqs.size > 4000) handledSeqs.delete(handledSeqs.values().next().value);
         }
         if (seq > pollCursor) pollCursor = seq;
         receivedEvent = true;
-        switch (msg.type) {
-            case "hello":
-                backoff = 1000;
-                state.setConn("connected");
-                // 부트가 방금 같은 데이터를 받았다. 첫 hello에서 통째로 다시 받지 않는다.
-                if (Date.now() < freshUntil) {
-                    freshUntil = 0;
-                    break;
-                }
-                // 재접속 사이에 놓친 턴/목록을 되살린다.
-                // 진행 중 턴을 덮지 않게 현재 스레드 동기화는 refreshCurrent가 가드한다.
-                refreshConversations();
-                T.api
-                    .agents()
-                    .then((r) => state.applyAgents(r))
-                    .catch(() => {});
-                state.fetchTodos().catch(() => {});
-                T.chat.refreshCurrent?.();
-                // 끊긴 사이에 온 시스템 알림(재생되지 않는 이벤트)을 기록에서 되살린다.
-                T.notices?.refresh();
-                break;
-            case "status":
-                state.applyStatus(
-                    msg.conversationId,
-                    msg.phase,
-                    msg.detail || "",
-                    msg.elapsedMs != null ? msg.elapsedMs : null,
-                    Boolean(msg.automated),
-                );
-                break;
-            case "delta":
-                state.applyDelta(msg.conversationId, typeof msg.full === "string" ? msg.full : undefined, msg.text || "", Boolean(msg.automated));
-                break;
-            case "say": {
-                const sayText = String(msg.text || "").trim();
-                state.applySay(msg.conversationId, sayText);
-                if (sayText) notifyIncoming(msg.conversationId, sayText.slice(0, 180), "turn-" + (msg.conversationId || ""));
-                break;
+        return true;
+    }
+
+    // 에이전트 목록을 다시 받아 반영한다. 실패해도 다음 이벤트나 재접속 때 다시 받는다.
+    function reloadAgents() {
+        api.agents()
+            .then((r) => state.applyAgents(r))
+            .catch(() => {
+                /* 실패해도 다음 이벤트나 재접속 때 다시 받는다 */
+            });
+    }
+
+    function errorDetailOf(error) {
+        if (typeof error === "string") return error;
+        return (error && (error.detail || error.code)) || "";
+    }
+
+    // 이벤트 종류별 처리. 모르는 종류는 무시한다(하위 호환).
+    const HANDLERS = {
+        hello() {
+            backoff = 1000;
+            state.setConn("connected");
+            // 부트가 방금 같은 데이터를 받았다. 첫 hello에서 통째로 다시 받지 않는다.
+            if (Date.now() < freshUntil) {
+                freshUntil = 0;
+                return;
             }
-            case "tool": {
-                const call = msg.call || {};
-                state.applyTool(msg.conversationId, call.name, call.argsSummary);
-                break;
-            }
-            case "turn_done": {
-                state.applyTurnDone(
-                    msg.conversationId,
-                    msg.text || "",
-                    msg.stats || null,
-                    msg.error != null ? msg.error : null,
-                    msg.attachments || [],
-                    Boolean(msg.silent),
-                );
-                if (msg.error && msg.error !== "stopped_by_user" && !msg.automated) {
-                    const detail = typeof msg.error === "string" ? msg.error : (msg.error && (msg.error.detail || msg.error.code)) || "";
-                    // 에이전트가 답하지 못했다. 지나가는 표시로는 놓치기 쉬워 경고창으로 알린다.
-                    T.notices.alert({
-                        title: state.botByUuid(msg.conversationId)?.name,
-                        text: T.i18n.t("errorPrefix") + (detail ? ": " + detail : ""),
-                    });
-                }
-                if (!msg.stopped && !msg.silent) {
-                    const body = (msg.text || "").trim() || (msg.error && (msg.error.detail || msg.error.code)) || "";
-                    if (body) notifyIncoming(msg.conversationId, body, "turn-" + (msg.conversationId || ""));
-                }
-                break;
-            }
-            case "user_message":
-                state.applyUserMessage(msg.conversationId, msg.text || "", msg.imageUrl || null, msg.attachments || []);
-                break;
-            case "ask":
-                state.applyAsk(msg.conversationId, {
-                    askId: msg.askId,
-                    question: msg.question,
-                    options: msg.options,
-                    expiresAt: msg.expiresAt,
+            // 재접속 사이에 놓친 턴/목록을 되살린다.
+            // 진행 중 턴을 덮지 않게 현재 스레드 동기화는 refreshCurrent가 가드한다.
+            refreshConversations();
+            reloadAgents();
+            state.fetchTodos().catch(() => {
+                /* 실패해도 다음 이벤트나 재접속 때 다시 받는다 */
+            });
+            T.chat.refreshCurrent?.();
+            // 끊긴 사이에 온 시스템 알림(재생되지 않는 이벤트)을 기록에서 되살린다.
+            T.notices?.refresh();
+        },
+        status(msg) {
+            state.applyStatus(msg.conversationId, msg.phase, msg.detail || "", msg.elapsedMs != null ? msg.elapsedMs : null, Boolean(msg.automated));
+        },
+        delta(msg) {
+            state.applyDelta(msg.conversationId, typeof msg.full === "string" ? msg.full : undefined, msg.text || "", Boolean(msg.automated));
+        },
+        say(msg) {
+            const sayText = String(msg.text || "").trim();
+            state.applySay(msg.conversationId, sayText);
+            if (sayText) notifyIncoming(msg.conversationId, sayText.slice(0, 180), `turn-${msg.conversationId || ""}`);
+        },
+        tool(msg) {
+            const call = msg.call || {};
+            state.applyTool(msg.conversationId, call.name, call.argsSummary);
+        },
+        turn_done(msg) {
+            state.applyTurnDone(
+                msg.conversationId,
+                msg.text || "",
+                msg.stats || null,
+                msg.error != null ? msg.error : null,
+                msg.attachments || [],
+                Boolean(msg.silent),
+            );
+            if (msg.error && msg.error !== "stopped_by_user" && !msg.automated) {
+                // 에이전트가 답하지 못했다. 지나가는 표시로는 놓치기 쉬워 경고창으로 알린다.
+                const detail = errorDetailOf(msg.error);
+                T.notices.alert({
+                    title: state.botByUuid(msg.conversationId)?.name,
+                    text: T.i18n.t("errorPrefix") + (detail ? `: ${detail}` : ""),
                 });
-                notifyIncoming(msg.conversationId, msg.question || "", "ask-" + (msg.askId || ""));
-                break;
-            case "ask_resolved":
-                state.applyAskResolved(msg.conversationId, msg.askId, msg.answer);
-                break;
-            case "notice":
-                // 화면 표시는 알림 모달이 맡는다(서버 기록을 다시 받아 읽지 않은 것을 띄운다).
-                T.notices?.refresh();
-                // 대화 턴이 있는 알림(스케줄 등)의 OS 알림은 turn_done이 담당한다.
-                if (!msg.conversationId) notifyIncoming(null, msg.text || "", "notice");
-                break;
-            case "notices_changed":
-                T.notices?.refresh();
-                break;
-            case "sessions_compress":
-                // 압축 진행 상태를 설정 스냅샷에 반영: 설정 탭의 버튼이 다시 그려진다.
-                state.mergeSettingsLocal({ sessionsCompressing: !!msg.running });
-                break;
-            case "oauth_done":
-                state.emit("oauth_done", { kind: msg.kind, ok: !!msg.ok, detail: msg.detail || "" });
-                break;
-            case "conversations_changed":
-                refreshConversations();
-                T.api
-                    .agents()
-                    .then((r) => state.applyAgents(r))
-                    .catch(() => {});
-                break;
-            case "todos_changed":
-                refreshTodos();
-                break;
-            case "todo_due": {
-                const due = T.todosUI?.describeDue?.(msg) || msg.text || msg.title || "";
-                T.notices?.refresh();
-                notifyIncoming(msg.conversationId, due, "todo-" + (msg.url || ""), msg.url);
-                refreshTodos();
-                break;
             }
-            default:
-                break; // 미지의 이벤트 타입은 무시 (하위 호환)
-        }
+            if (!msg.stopped && !msg.silent) {
+                const body = (msg.text || "").trim() || (msg.error && (msg.error.detail || msg.error.code)) || "";
+                if (body) notifyIncoming(msg.conversationId, body, `turn-${msg.conversationId || ""}`);
+            }
+        },
+        user_message(msg) {
+            state.applyUserMessage(msg.conversationId, msg.text || "", msg.imageUrl || null, msg.attachments || []);
+        },
+        ask(msg) {
+            state.applyAsk(msg.conversationId, {
+                askId: msg.askId,
+                question: msg.question,
+                options: msg.options,
+                expiresAt: msg.expiresAt,
+            });
+            notifyIncoming(msg.conversationId, msg.question || "", `ask-${msg.askId || ""}`);
+        },
+        ask_resolved(msg) {
+            state.applyAskResolved(msg.conversationId, msg.askId, msg.answer);
+        },
+        notice(msg) {
+            // 화면 표시는 알림 모달이 맡는다(서버 기록을 다시 받아 읽지 않은 것을 띄운다).
+            T.notices?.refresh();
+            // 대화 턴이 있는 알림(스케줄 등)의 OS 알림은 turn_done이 담당한다.
+            if (!msg.conversationId) notifyIncoming(null, msg.text || "", "notice");
+        },
+        notices_changed() {
+            T.notices?.refresh();
+        },
+        sessions_compress(msg) {
+            // 압축 진행 상태를 설정 스냅샷에 반영: 설정 탭의 버튼이 다시 그려진다.
+            state.mergeSettingsLocal({ sessionsCompressing: !!msg.running });
+        },
+        oauth_done(msg) {
+            state.emit("oauth_done", { kind: msg.kind, ok: !!msg.ok, detail: msg.detail || "" });
+        },
+        conversations_changed() {
+            refreshConversations();
+            reloadAgents();
+        },
+        todos_changed() {
+            refreshTodos();
+        },
+        todo_due(msg) {
+            const due = T.todosUI?.describeDue?.(msg) || msg.text || msg.title || "";
+            T.notices?.refresh();
+            notifyIncoming(msg.conversationId, due, `todo-${msg.url || ""}`, msg.url);
+            refreshTodos();
+        },
+    };
+
+    function handle(msg, replay = false) {
+        if (!msg || typeof msg !== "object" || !msg.type) return;
+        if (!admit(msg, replay)) return;
+        HANDLERS[msg.type]?.(msg);
     }
 
     let todosTimer = null;
     function refreshTodos() {
         clearTimeout(todosTimer);
-        todosTimer = setTimeout(() => state.fetchTodos().catch(() => {}), 120);
+        todosTimer = setTimeout(
+            () =>
+                state.fetchTodos().catch(() => {
+                    /* 실패해도 다음 이벤트나 재접속 때 다시 받는다 */
+                }),
+            120,
+        );
     }
 
     // 목록 재조회(연속 이벤트 디바운스)
@@ -208,7 +233,7 @@
             if (state.state.offline) return;
             try {
                 const r = await api.conversations();
-                state.replaceConversations((r && r.conversations) || []);
+                state.replaceConversations(r?.conversations || []);
             } catch (_) {
                 /* 다음 이벤트에서 재시도 */
             }
@@ -223,15 +248,11 @@
         polling = true;
         usingFetch = false;
         if (es) {
-            try {
-                es.close();
-            } catch (_) {}
+            quietly(() => es.close());
             es = null;
         }
         if (ctrl) {
-            try {
-                ctrl.abort();
-            } catch (_) {}
+            quietly(() => ctrl.abort());
             ctrl = null;
         }
         state.setConn("connecting");
@@ -304,17 +325,35 @@
                 lastSeen = Date.now(); // 재시작 연쇄 방지
                 state.setConn("disconnected");
                 if (usingFetch) {
-                    try {
-                        ctrl?.abort();
-                    } catch (_) {}
+                    quietly(() => ctrl?.abort());
                 } else {
-                    try {
-                        es?.close();
-                    } catch (_) {}
+                    quietly(() => es?.close());
                     setTimeout(connect, 200);
                 }
             }
         }, 5_000);
+    }
+
+    // `data: {json}` 한 줄을 이벤트로 처리한다. 깨진 프레임은 무시한다.
+    function handleSseLine(line) {
+        if (!line.startsWith("data:")) return;
+        const payload = line.slice(5).trim();
+        if (!payload) return;
+        try {
+            handle(JSON.parse(payload));
+        } catch (_) {
+            /* 잘못된 프레임 무시 */
+        }
+    }
+
+    // 버퍼에서 완성된 줄을 꺼내 onLine에 넘기고, 아직 덜 온 나머지를 돌려준다.
+    function drainSseLines(buf, onLine) {
+        let rest = buf;
+        for (let nl = rest.indexOf("\n"); nl > -1; nl = rest.indexOf("\n")) {
+            onLine(rest.slice(0, nl).replace(/\r$/, ""));
+            rest = rest.slice(nl + 1);
+        }
+        return rest;
     }
 
     async function startFetch(gen) {
@@ -327,10 +366,10 @@
             try {
                 const headers = { Accept: "text/event-stream" };
                 const tk = api.getToken();
-                if (tk) headers.Authorization = "Bearer " + tk;
+                if (tk) headers.Authorization = `Bearer ${tk}`;
                 const res = await fetch("/api/events", { headers, signal: ctrl.signal });
                 if (res.status === 401) T.app?.handleUnauthorized?.();
-                if (!res.ok || !res.body) throw new Error("sse status " + res.status);
+                if (!res.ok || !res.body) throw new Error(`sse status ${res.status}`);
 
                 state.setConn("connected");
                 lastSeen = Date.now();
@@ -342,21 +381,7 @@
                     if (done) break;
                     lastSeen = Date.now();
                     buf += dec.decode(value, { stream: true });
-                    let nl;
-                    while ((nl = buf.indexOf("\n")) > -1) {
-                        const line = buf.slice(0, nl).replace(/\r$/, "");
-                        buf = buf.slice(nl + 1);
-                        if (line.startsWith("data:")) {
-                            const payload = line.slice(5).trim();
-                            if (payload) {
-                                try {
-                                    handle(JSON.parse(payload));
-                                } catch (_) {
-                                    /* 무시 */
-                                }
-                            }
-                        }
-                    }
+                    buf = drainSseLines(buf, handleSseLine);
                 }
                 // 서버가 스트림을 닫았다. 아래에서 백오프 후 재접속한다.
             } catch (_) {
@@ -398,15 +423,11 @@
         watchdog = null;
         usingFetch = false;
         if (es) {
-            try {
-                es.close();
-            } catch (_) {}
+            quietly(() => es.close());
             es = null;
         }
         if (ctrl) {
-            try {
-                ctrl.abort();
-            } catch (_) {}
+            quietly(() => ctrl.abort());
             ctrl = null;
         }
         clearTimeout(timer);
@@ -427,4 +448,4 @@
     window.addEventListener("beforeunload", stopInternal);
 
     T.events = { connect, refreshConversations };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

@@ -49,7 +49,9 @@ function sessionKeyFor(item, agent) {
 function notifyChanged() {
     try {
         emitEvent?.({ type: "todos_changed" });
-    } catch {}
+    } catch (err) {
+        console.error("tabyBot: todos_changed emit failed:", err?.message || err);
+    }
 }
 
 async function tick() {

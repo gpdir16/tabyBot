@@ -14,7 +14,7 @@ export function skillsDirPath() {
     return path.join(USER_DIR, "skills");
 }
 
-export function todosConfigPath() {
+function todosConfigPath() {
     return path.join(USER_DIR, "todos.json");
 }
 
@@ -43,15 +43,11 @@ export function sendFileDescription() {
     return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`. Optional caption is shown with the attachment.`;
 }
 
-export function todosPathHint(agentId) {
-    return path.join(USER_DIR, "agents", agentId || "<agent-id>", "todos.json");
-}
-
 export function mcpConfigEditHint(serverName) {
     return `MCP server not connected: ${serverName}. Edit \`${mcpConfigPath()}\`; it loads on the next message.`;
 }
 
-export function buildSkillContentVars() {
+function buildSkillContentVars() {
     return {
         USER_DIR,
         CODES_DIR,
@@ -75,7 +71,7 @@ function skillContentVars() {
 const LEGACY_SKILL_PATHS = [
     ["/app/user/memory.md", (v) => v.MEMORY_PATH],
     ["/app/user/mcp.json", (v) => v.MCP_CONFIG_PATH],
-    ["/app/user/scheduling.json", (v) => todosConfigPath()],
+    ["/app/user/scheduling.json", () => todosConfigPath()],
     ["/app/user/skills", (v) => v.SKILLS_DIR],
     ["/app/codes/skills", (v) => path.join(v.CODES_DIR, "skills")],
     ["/app/user", (v) => v.USER_DIR],
@@ -86,7 +82,7 @@ export function renderSkillContent(text) {
     if (typeof text !== "string" || !text) return text;
     const vars = skillContentVars();
     let out = text.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (match, key) => {
-        if (!Object.prototype.hasOwnProperty.call(vars, key)) return match;
+        if (!Object.hasOwn(vars, key)) return match;
         return String(vars[key]);
     });
     for (const [legacy, resolve] of LEGACY_SKILL_PATHS) {

@@ -13,7 +13,7 @@
    - 앞으로: 목록에서 오른쪽 가장자리를 잡고 왼쪽으로 밀면 방금 보던 화면이 따라 들어온다.
 
    데스크톱에는 화면을 밀어 넘기는 개념이 없어 아무것도 하지 않는다. */
-(function (T) {
+((T) => {
     "use strict";
 
     const mainEl = document.getElementById("main");
@@ -120,9 +120,7 @@
         if (cur.mode === "forward") {
             // 들어올 화면을 미리 준비한다: 위치는 인라인 변형이 쥐고 있어 화면은 아직 오른쪽 밖에 있다.
             setPanels(cur.w, 0);
-            try {
-                history.pushState(null, "", forwardPath);
-            } catch (_) {}
+            T.util.pushUrl(forwardPath);
             T.sidebar?.showChat?.();
             T.app?.renderRoute?.();
         }
@@ -348,4 +346,4 @@
     }
 
     T.gestures = { init, openInner, closeInner };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const MANAGED_HOME_MARKER = `${path.sep}.tabybot`;
-export const MANAGED_CODES_SUFFIX = `${MANAGED_HOME_MARKER}${path.sep}app${path.sep}codes`;
+const MANAGED_HOME_MARKER = `${path.sep}.tabybot`;
+const MANAGED_CODES_SUFFIX = `${MANAGED_HOME_MARKER}${path.sep}app${path.sep}codes`;
 
 function homeFromManagedCodesPath(resolvedPath) {
     const markerIdx = resolvedPath.indexOf(MANAGED_CODES_SUFFIX);
@@ -13,7 +13,7 @@ function homeFromManagedCodesPath(resolvedPath) {
 
 const APP_CODES_SUFFIX = `${path.sep}app${path.sep}codes`;
 
-export function homeFromAppCodesLayout(targetPath) {
+function homeFromAppCodesLayout(targetPath) {
     if (!targetPath) return null;
     const resolved = path.resolve(String(targetPath));
     if (resolved.endsWith(APP_CODES_SUFFIX)) {
@@ -65,7 +65,7 @@ export function isDockerContainer() {
     return dockerContainerCache;
 }
 
-export function hasManagedInstallMarker(home) {
+function hasManagedInstallMarker(home) {
     const resolved = path.resolve(home);
     try {
         const envFile = path.join(resolved, ".env");
@@ -83,7 +83,7 @@ export function hasManagedInstallMarker(home) {
     }
 }
 
-export function defaultInstallHome() {
+function defaultInstallHome() {
     return path.join(process.env.HOME || os.homedir() || "/tmp", ".tabybot");
 }
 

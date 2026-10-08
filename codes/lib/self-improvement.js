@@ -78,6 +78,32 @@ const SI_FIELDS = {
     },
 };
 
+// 한 필드의 값을 스키마(spec)대로 검증해 out에 쓴다. 실패하면 오류 코드, 성공하면 null.
+function applyPatchField(out, key, spec, value) {
+    if (spec === "bool") {
+        out[key] = Boolean(value);
+        return null;
+    }
+    if (spec === "cron") {
+        const v = String(value ?? "").trim();
+        if (v && !cron.validate(v)) return "invalid_cron";
+        out[key] = v;
+        return null;
+    }
+    if (spec === "tz") {
+        const v = String(value ?? "").trim();
+        if (v && !isValidTimeZone(v)) return "invalid_timezone";
+        out[key] = v;
+        return null;
+    }
+    const [kind, lo, hi] = spec;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "invalid_self_improvement";
+    const rounded = kind === "int" ? Math.round(n) : n;
+    out[key] = Math.min(hi, Math.max(lo, rounded));
+    return null;
+}
+
 // target(config.selfImprovement)에 패치를 검증·적용한다. 실패 시 에러 코드 문자열.
 export function applySelfImprovementPatch(target, patch) {
     if (typeof patch !== "object" || patch === null) return "invalid_self_improvement";
@@ -85,27 +111,11 @@ export function applySelfImprovementPatch(target, patch) {
         const src = patch[section];
         if (src === undefined) continue;
         if (typeof src !== "object" || src === null) return "invalid_self_improvement";
-        const out = (target[section] = target[section] || {});
+        target[section] = target[section] || {};
         for (const [key, spec] of Object.entries(fields)) {
-            const value = src[key];
-            if (value === undefined) continue;
-            if (spec === "bool") {
-                out[key] = Boolean(value);
-            } else if (spec === "cron") {
-                const v = String(value ?? "").trim();
-                if (v && !cron.validate(v)) return "invalid_cron";
-                out[key] = v;
-            } else if (spec === "tz") {
-                const v = String(value ?? "").trim();
-                if (v && !isValidTimeZone(v)) return "invalid_timezone";
-                out[key] = v;
-            } else {
-                const [kind, lo, hi] = spec;
-                const n = Number(value);
-                if (!Number.isFinite(n)) return "invalid_self_improvement";
-                const rounded = kind === "int" ? Math.round(n) : n;
-                out[key] = Math.min(hi, Math.max(lo, rounded));
-            }
+            if (src[key] === undefined) continue;
+            const error = applyPatchField(target[section], key, spec, src[key]);
+            if (error) return error;
         }
     }
     return null;

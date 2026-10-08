@@ -30,7 +30,7 @@ import { formatPastSessionsForPrompt, turnToMessages, cloneStoredMessage } from 
 const SYSTEM_PATH = path.join(CODES_DIR, "lib", "prompts", "system.txt");
 
 let encoding;
-function getTokenizer(model) {
+function getTokenizer() {
     try {
         if (!encoding) encoding = getEncoding("o200k_base");
         return encoding;
@@ -39,8 +39,8 @@ function getTokenizer(model) {
     }
 }
 
-export function countTokens(text, model = "gpt-4o-mini") {
-    const enc = getTokenizer(model);
+export function countTokens(text) {
+    const enc = getTokenizer();
     const safe = sanitizeTextForLlm(typeof text === "string" ? text : (JSON.stringify(text) ?? ""));
     if (enc) {
         try {
@@ -52,15 +52,15 @@ export function countTokens(text, model = "gpt-4o-mini") {
     return Math.ceil(safe.length / 4);
 }
 
-export function countMessagesTokens(messages, model) {
+export function countMessagesTokens(messages) {
     let total = 0;
     for (const m of messages) {
         if (Array.isArray(m.content)) {
             total += estimateContentTokens(m.content);
         } else {
-            total += countTokens(typeof m.content === "string" ? m.content : JSON.stringify(m.content), model);
+            total += countTokens(typeof m.content === "string" ? m.content : JSON.stringify(m.content));
         }
-        if (m.tool_calls) total += countTokens(JSON.stringify(m.tool_calls), model);
+        if (m.tool_calls) total += countTokens(JSON.stringify(m.tool_calls));
     }
     return total;
 }
@@ -102,7 +102,7 @@ function peerAgentsText(agentId) {
     return formatPeerAgentsForPrompt(agentId || firstAgent()?.id) || "- (none)";
 }
 
-export function buildSystemMessageContent(lang, { truncateMemory = false, maxMemoryChars = 120000, runtimeInfo = {} } = {}) {
+function buildSystemMessageContent(lang, { truncateMemory = false, maxMemoryChars = 120000, runtimeInfo = {} } = {}) {
     const template = loadSystemPromptTemplate();
     const rt = runtimeInfo || {};
     const pastSessions = formatPastSessionsForPrompt(rt.sessionKey);

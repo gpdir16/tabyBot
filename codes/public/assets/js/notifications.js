@@ -2,7 +2,7 @@
    - 탭이 숨겨져 있으면 Notification API로 즉시 표시
    - 브라우저가 닫혀 있으면 서비스 워커 웹 푸시로 전달
    - 설치 프롬프트(beforeinstallprompt)는 설정 시트에서 노출 */
-(function (T) {
+((T) => {
     "use strict";
 
     const KEY = "tabybot.notify.enabled";
@@ -20,7 +20,9 @@
     function persist(on) {
         try {
             localStorage.setItem(KEY, on ? "1" : "0");
-        } catch (_) {}
+        } catch {
+            // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 저장하지 않고 넘어간다
+        }
     }
 
     function urlBase64ToUint8Array(b64) {
@@ -46,7 +48,7 @@
         if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
         try {
             const cfg = await T.api.pushConfig();
-            if (!cfg || !cfg.publicKey) return;
+            if (!cfg?.publicKey) return;
             let sub = await swReg.pushManager.getSubscription();
             if (sub?.options?.applicationServerKey) {
                 const cur = new Uint8Array(sub.options.applicationServerKey);
@@ -55,10 +57,14 @@
                 if (!same) {
                     try {
                         await T.api.pushUnsubscribe(sub.toJSON());
-                    } catch (_) {}
+                    } catch {
+                        // 구독 해제 실패는 무시한다. 다음 구독 때 서버가 정리한다
+                    }
                     try {
                         await sub.unsubscribe();
-                    } catch (_) {}
+                    } catch {
+                        // 이미 닫혔거나 정리된 대상이면 무시한다
+                    }
                     sub = null;
                 }
             }
@@ -75,15 +81,19 @@
     }
 
     async function disablePush() {
-        if (!swReg || !swReg.pushManager) return;
+        if (!swReg?.pushManager) return;
         try {
             const sub = await swReg.pushManager.getSubscription();
             if (!sub) return;
             try {
                 await T.api.pushUnsubscribe(sub.toJSON());
-            } catch (_) {}
+            } catch {
+                // 구독 해제 실패는 무시한다. 다음 구독 때 서버가 정리한다
+            }
             await sub.unsubscribe();
-        } catch (_) {}
+        } catch {
+            // 이미 닫혔거나 정리된 대상이면 무시한다
+        }
     }
 
     async function setOn(on) {
@@ -100,7 +110,10 @@
         }
         persist(false);
         await disablePush();
-        if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+        if (navigator.clearAppBadge)
+            navigator.clearAppBadge().catch(() => {
+                /* 배지 API를 쓸 수 없는 환경이면 무시한다 */
+            });
         return false;
     }
 
@@ -124,7 +137,10 @@
                 if (url) location.href = url;
             };
         }
-        if (navigator.setAppBadge) navigator.setAppBadge(1).catch(() => {});
+        if (navigator.setAppBadge)
+            navigator.setAppBadge(1).catch(() => {
+                /* 배지 API를 쓸 수 없는 환경이면 무시한다 */
+            });
     }
 
     function isStandalone() {
@@ -146,7 +162,9 @@
         try {
             const tk = localStorage.getItem("tabybot.web.token") || "";
             if (swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
-        } catch (_) {}
+        } catch {
+            // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 저장하지 않고 넘어간다
+        }
     }
 
     function init() {
@@ -165,11 +183,13 @@
                 return;
             }
             const url = ev.data?.type === "sw-navigate" ? String(ev.data.url || "") : "";
-            if (!url || !url.startsWith("/") || url.startsWith("//")) return;
+            if (!url?.startsWith("/") || url.startsWith("//")) return;
             try {
                 if (location.pathname + location.search !== url) history.pushState(null, "", url);
                 T.app?.renderRoute?.();
-            } catch (_) {}
+            } catch {
+                // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
+            }
         });
         window.addEventListener("beforeinstallprompt", (e) => {
             e.preventDefault();
@@ -181,7 +201,10 @@
             T.state.emit("pwa", { installable: false });
         });
         document.addEventListener("visibilitychange", () => {
-            if (!document.hidden && navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+            if (!document.hidden && navigator.clearAppBadge)
+                navigator.clearAppBadge().catch(() => {
+                    /* 배지 API를 쓸 수 없는 환경이면 무시한다 */
+                });
         });
     }
 
@@ -194,4 +217,4 @@
         canInstall: () => Boolean(deferredInstall) && !isStandalone(),
         promptInstall,
     };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

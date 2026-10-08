@@ -55,8 +55,8 @@ function buildWithHistory(userMessage, history, opts = {}) {
     return buildInitialMessages(userMessage, { history, ...opts });
 }
 
-function tokenCount(messages, model) {
-    return countMessagesTokens(messages, model);
+function tokenCount(messages) {
+    return countMessagesTokens(messages);
 }
 
 function contentToText(content) {
@@ -101,16 +101,16 @@ function turnToTranscript(turn) {
     return turnToMessages(turn).map(messageToTranscriptLine).filter(Boolean).join("\n\n");
 }
 
-function turnTokens(turn, model) {
-    return countMessagesTokens(turnToMessages(turn), model);
+function turnTokens(turn) {
+    return countMessagesTokens(turnToMessages(turn));
 }
 
-function itemTokens(item, model) {
-    if (item.kind === "user") return countTokens(item.text, model);
-    return turnTokens(item.turn, model);
+function itemTokens(item) {
+    if (item.kind === "user") return countTokens(item.text);
+    return turnTokens(item.turn);
 }
 
-function splitHistoryForCompression(turns, userMessage, model, recentBudget) {
+function splitHistoryForCompression(turns, userMessage, recentBudget) {
     const items = turns.map((turn) => ({ kind: "turn", turn }));
     // 수동 압축은 진행 중인 유저 메시지가 없으므로 null을 허용한다.
     if (userMessage != null) items.push({ kind: "user", text: userMessage });
@@ -120,7 +120,7 @@ function splitHistoryForCompression(turns, userMessage, model, recentBudget) {
     let splitAt = 0;
 
     for (let i = items.length - 1; i >= 0; i--) {
-        const tok = itemTokens(items[i], model);
+        const tok = itemTokens(items[i]);
         if (used + tok > recentBudget && recentItems.length > 0) {
             splitAt = i + 1;
             break;
@@ -210,7 +210,7 @@ function repairToolPairIntegrity(messages) {
     }
 
     // Drop orphan tool results (no surviving assistant tool_call for them).
-    let repaired = messages.filter((m) => !(m.role === "tool" && m.tool_call_id && !survivingCallIds.has(m.tool_call_id)));
+    const repaired = messages.filter((m) => !(m.role === "tool" && m.tool_call_id && !survivingCallIds.has(m.tool_call_id)));
 
     // Insert stub tool results for orphan tool_calls (assistant asked, no answer).
     const patched = [];
@@ -237,13 +237,12 @@ async function applyIntelligentCompression(
     llm,
     userMessage,
     fullHistory,
-    model,
     modelMeta,
     attachments = [],
     { signal, runtimeInfo = {}, chatId = null, archiveReason = "context_compression" } = {},
 ) {
     const recentBudget = getKeepRecentTokenBudget(modelMeta);
-    const { oldItems, recentItems } = splitHistoryForCompression(fullHistory, userMessage, model, recentBudget);
+    const { oldItems, recentItems } = splitHistoryForCompression(fullHistory, userMessage, recentBudget);
 
     if (!oldItems.length) {
         return null;
@@ -279,13 +278,12 @@ export async function ensureWithinContextLimit(
     { chatId, onStatusPhase, attachments = [], session = null, runtimeInfo = {}, history = null } = {},
 ) {
     const fullHistory = history ?? (chatId ? loadChatHistory(chatId) : []);
-    const model = llm.provider.model;
     const trigger = getCompressTriggerTokens(modelMeta);
     const hardLimit = getContextLimit(modelMeta);
 
     const buildOpts = { attachments, modelMeta, runtimeInfo };
     let messages = buildWithHistory(userMessage, fullHistory, buildOpts);
-    let tokens = tokenCount(messages, model);
+    let tokens = tokenCount(messages);
 
     if (tokens <= trigger) {
         return { messages, didCompress: false };
@@ -296,7 +294,7 @@ export async function ensureWithinContextLimit(
         maxMemoryChars: 60000,
         ...buildOpts,
     });
-    tokens = tokenCount(messages, model);
+    tokens = tokenCount(messages);
 
     if (tokens <= trigger) {
         return { messages, didCompress: false };
@@ -308,14 +306,14 @@ export async function ensureWithinContextLimit(
             return { messages, didCompress: false };
         }
         onStatusPhase?.("compressing");
-        compressed = await applyIntelligentCompression(llm, userMessage, fullHistory, model, modelMeta, attachments, {
+        compressed = await applyIntelligentCompression(llm, userMessage, fullHistory, modelMeta, attachments, {
             signal: session?.signal,
             runtimeInfo,
             chatId,
         });
         if (compressed) {
             messages = compressed;
-            tokens = tokenCount(messages, model);
+            tokens = tokenCount(messages);
         }
     } catch (err) {
         if (session?.isAborted?.() || err?.name === "AbortError") {
@@ -352,7 +350,7 @@ function sessionNeedsCompression(chatId) {
 async function compressSessionHistory(llm, chatId) {
     // 실행 중이거나 복구 대기(pending/interrupted) 턴이 있는 세션은 건드리지 않는다.
     if (!sessionNeedsCompression(chatId)) return false;
-    const compressed = await applyIntelligentCompression(llm, null, loadChatHistory(chatId), llm.provider.model, llm.modelMeta, [], {
+    const compressed = await applyIntelligentCompression(llm, null, loadChatHistory(chatId), llm.modelMeta, [], {
         chatId,
         archiveReason: "manual_compression",
     });

@@ -1,7 +1,7 @@
 /* tabyBot 웹 클라이언트: 확인 대화상자.
    삭제처럼 되돌리기 어려운 동작 앞에서 "정말 할까요?"를 묻는다. 시스템 알림(ui/notices.js)과
    같은 경고창 모양을 쓰고, 결과는 Promise<boolean>으로 돌려준다(취소·Esc·바깥 누름은 false). */
-(function (T) {
+((T) => {
     "use strict";
 
     const t = (k, v) => T.i18n.t(k, v);
@@ -25,7 +25,7 @@
             const buttons = [
                 T.h("button", { class: "nt-btn", type: "button", text: t("cancel"), onclick: () => finish(false) }),
                 T.h("button", {
-                    class: "nt-btn strong" + (opt.danger ? " danger" : ""),
+                    class: `nt-btn strong${opt.danger ? " danger" : ""}`,
                     type: "button",
                     text: opt.confirmLabel || t("noticeOk"),
                     onclick: () => finish(true),
@@ -71,4 +71,4 @@
     }
 
     T.confirm = confirm;
-})((window.Taby = window.Taby || {}));
+})(window.Taby);

@@ -49,7 +49,7 @@ function aliasNumber(raw, aliases) {
     const key = String(raw || "")
         .trim()
         .toLowerCase();
-    if (Object.prototype.hasOwnProperty.call(aliases, key)) return aliases[key];
+    if (Object.hasOwn(aliases, key)) return aliases[key];
     const n = Number(key);
     return Number.isInteger(n) ? n : null;
 }
@@ -153,7 +153,45 @@ function zonedParts(date, timeZone) {
     };
 }
 
-export function nextCronDate(expr, timeZone, from = new Date()) {
+// 현지 달력의 그날(wy-wm-wday)이 크론의 월·일·요일 조건에 맞는가.
+// 일과 요일이 둘 다 지정되면 둘 중 하나만 맞아도 된다(표준 크론 규칙).
+function cronDayMatches(parsed, wy, wm, wday, timeZone) {
+    if (!parsed.month.has(wm)) return false;
+    const noonMs = wallClockUtcMs(wy, wm, wday, 12, 0, timeZone);
+    const dow = zonedParts(new Date(noonMs), timeZone).dow;
+    const domHit = parsed.dom.has(wday);
+    const dowHit = parsed.dow.has(dow);
+    if (parsed.domStar && parsed.dowStar) return true;
+    if (parsed.domStar) return dowHit;
+    if (parsed.dowStar) return domHit;
+    return domHit || dowHit;
+}
+
+// 그날의 시·분 조합 중 fromMs 이후에서 가장 이른 실제 시각(ms). 없으면 null.
+// 서머타임으로 같은 현지 시각이 두 번 있거나 없을 수 있어 한 시간 앞뒤 후보도 현지 시각으로 되짚어 확인한다.
+function earliestCronTimeOnDay(hours, minutes, [wy, wm, wday], timeZone, fromMs) {
+    let bestMs = null;
+    let bestNaive = null;
+    for (const h of hours) {
+        for (const mi of minutes) {
+            const naive = Date.UTC(wy, wm - 1, wday, h, mi);
+            if (bestMs != null && naive > bestNaive + 3_600_000) break;
+            const base = wallClockUtcMs(wy, wm, wday, h, mi, timeZone);
+            for (const ms of [base - 3_600_000, base, base + 3_600_000]) {
+                const back = zonedParts(new Date(ms), timeZone);
+                if (back.year !== wy || back.month !== wm || back.day !== wday || back.hour !== h || back.minute !== mi) continue;
+                if (ms > fromMs && (bestMs == null || ms < bestMs)) {
+                    bestMs = ms;
+                    bestNaive = naive;
+                }
+            }
+        }
+        if (bestMs != null && Date.UTC(wy, wm - 1, wday, h, 59) > bestNaive + 3_600_000) break;
+    }
+    return bestMs;
+}
+
+function nextCronDate(expr, timeZone, from = new Date()) {
     const parsed = typeof expr === "string" ? parseCron(expr) : expr;
     if (!parsed || !isValidTimeZone(timeZone)) return null;
     const minutes = [...parsed.minute].sort((a, b) => a - b);
@@ -162,35 +200,10 @@ export function nextCronDate(expr, timeZone, from = new Date()) {
     const start = zonedParts(from, timeZone);
     for (let day = 0; day <= 3000; day++) {
         const wall = new Date(Date.UTC(start.year, start.month - 1, start.day + day));
-        const wy = wall.getUTCFullYear();
-        const wm = wall.getUTCMonth() + 1;
-        const wday = wall.getUTCDate();
-        if (!parsed.month.has(wm)) continue;
-        const noonMs = wallClockUtcMs(wy, wm, wday, 12, 0, timeZone);
-        const dow = zonedParts(new Date(noonMs), timeZone).dow;
-        const domHit = parsed.dom.has(wday);
-        const dowHit = parsed.dow.has(dow);
-        const ok = parsed.domStar && parsed.dowStar ? true : parsed.domStar ? dowHit : parsed.dowStar ? domHit : domHit || dowHit;
-        if (!ok) continue;
-        let bestMs = null;
-        let bestNaive = null;
-        for (const h of hours) {
-            for (const mi of minutes) {
-                const naive = Date.UTC(wy, wm - 1, wday, h, mi);
-                if (bestMs != null && naive > bestNaive + 3_600_000) break;
-                const base = wallClockUtcMs(wy, wm, wday, h, mi, timeZone);
-                for (const ms of [base - 3_600_000, base, base + 3_600_000]) {
-                    const back = zonedParts(new Date(ms), timeZone);
-                    if (back.year !== wy || back.month !== wm || back.day !== wday || back.hour !== h || back.minute !== mi) continue;
-                    if (ms > fromMs && (bestMs == null || ms < bestMs)) {
-                        bestMs = ms;
-                        bestNaive = naive;
-                    }
-                }
-            }
-            if (bestMs != null && Date.UTC(wy, wm - 1, wday, h, 59) > bestNaive + 3_600_000) break;
-        }
-        if (bestMs != null) return new Date(bestMs);
+        const date = [wall.getUTCFullYear(), wall.getUTCMonth() + 1, wall.getUTCDate()];
+        if (!cronDayMatches(parsed, ...date, timeZone)) continue;
+        const ms = earliestCronTimeOnDay(hours, minutes, date, timeZone, fromMs);
+        if (ms != null) return new Date(ms);
     }
     return null;
 }

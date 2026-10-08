@@ -4,7 +4,7 @@ import { SESSION_DIR, USER_DIR } from "../paths.js";
 import { agentMemoryPath, listAgents } from "../agents-store.js";
 import { extractSessionTextLines } from "../agent/chat-history.js";
 import { createLlmClient } from "../llm/client.js";
-import { writeFileAtomic } from "../atomic-file.js";
+import { readJsonFile, writeFileAtomic } from "../atomic-file.js";
 import { getDreamingConfig } from "../self-improvement.js";
 import { appendDreamDiary, dreamBackupDir, loadDreamingState, saveDreamingState } from "./state.js";
 
@@ -16,14 +16,6 @@ const MEMORY_INPUT_CAP = 40000;
 const AGENT_MEMORY_INPUT_CAP = 20000;
 const MAX_SESSION_FILES = 200;
 
-function readJson(filePath) {
-    try {
-        return JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch {
-        return null;
-    }
-}
-
 function readText(filePath, cap) {
     try {
         const text = fs.readFileSync(filePath, "utf8");
@@ -34,14 +26,14 @@ function readText(filePath, cap) {
 }
 
 // Light phase: state.ingested의 {mtime, lines, done} 포인터 이후 새 줄만 수집한다.
-export function collectCandidates(state) {
+function collectCandidates(state) {
     const candidates = [];
     let scannedFiles = 0;
     let totalChars = 0;
 
     for (const agent of listAgents()) {
         const root = path.join(SESSION_DIR, agent.uuid);
-        const manifest = readJson(path.join(root, "manifest.json"));
+        const manifest = readJsonFile(path.join(root, "manifest.json"));
         if (!manifest?.sessions?.length) continue;
 
         // 캡에 걸릴 때를 대비해 최신 세션부터 본다.
@@ -58,7 +50,7 @@ export function collectCandidates(state) {
             const prev = state.ingested[key];
             if (prev && prev.mtime === mtime && prev.done) continue;
 
-            const data = readJson(filePath);
+            const data = readJsonFile(filePath);
             const lines = extractSessionTextLines(data?.turns);
             const base = prev?.lines || 0;
             const fresh = lines.slice(base);
@@ -131,7 +123,7 @@ function formatCandidates(candidates) {
     return candidates.map((c, i) => `#${i + 1} [${c.agentName}/${c.session} ${c.at || ""}] ${c.role}: ${c.text}`).join("\n\n");
 }
 
-export function parseDecision(text) {
+function parseDecision(text) {
     const trimmed = String(text || "").trim();
     const start = trimmed.indexOf("{");
     const end = trimmed.lastIndexOf("}");
@@ -147,18 +139,17 @@ export function parseDecision(text) {
 function countOccurrences(haystack, needle) {
     if (!needle) return 0;
     let count = 0;
-    let idx = 0;
-    while ((idx = haystack.indexOf(needle, idx)) !== -1) {
+    let idx = haystack.indexOf(needle);
+    while (idx !== -1) {
         count += 1;
-        idx += needle.length;
+        idx = haystack.indexOf(needle, idx + needle.length);
     }
     return count;
 }
 
 function sectionBounds(content, section) {
     const re = /^##\s+(.+?)\s*$/gm;
-    let match;
-    while ((match = re.exec(content))) {
+    for (const match of content.matchAll(re)) {
         const name = match[1].trim().toLowerCase();
         const bodyStart = match.index + match[0].length;
         const next = /^##\s/m.exec(content.slice(bodyStart));
@@ -245,7 +236,7 @@ function backupOnce(backupDir, filePath, label, done) {
     done.add(filePath);
 }
 
-export function applyOps(ops, { maxOps, backupDir, resolveTarget = targetFileFor } = {}) {
+function applyOps(ops, { maxOps, backupDir, resolveTarget = targetFileFor } = {}) {
     const agentsById = new Map(listAgents().map((a) => [a.id, a]));
     const results = [];
     const contents = new Map();
@@ -301,7 +292,7 @@ const ROUTINE_PROMOTE_CAP = 2;
 
 // 관찰된 루틴 신호를 스윕 간에 누적한다. LLM은 신호만 보내고,
 // 날짜 수 세기와 승격은 코드가 한다. 뇌는 판단, 손은 적용.
-export function accumulateRoutines(routines, state, { backupDir, diary = [] } = {}) {
+function accumulateRoutines(routines, state, { backupDir, diary = [] } = {}) {
     state.routineWatch = state.routineWatch || {};
     const now = Date.now();
     const agents = new Set(listAgents().map((a) => a.id));
@@ -321,7 +312,8 @@ export function accumulateRoutines(routines, state, { backupDir, diary = [] } = 
         if (!agents.has(target) || !key || !day || !text) continue;
 
         const watchKey = `${target}/${key}`;
-        const entry = (state.routineWatch[watchKey] ||= { days: [], text, lastSeen: 0 });
+        state.routineWatch[watchKey] ??= { days: [], text, lastSeen: 0 };
+        const entry = state.routineWatch[watchKey];
         if (!Array.isArray(entry.days)) entry.days = [];
         entry.text = text;
         entry.lastSeen = now;

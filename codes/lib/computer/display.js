@@ -6,8 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "../atomic-file.js";
 
-export const SESSIONS_DIR = "/tmp/tabybot-xvfb";
-export const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
+const SESSIONS_DIR = "/tmp/tabybot-xvfb";
+const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
 export const DEFAULT_GEOMETRY = "1280x800x24";
 export const DISPLAY = 99;
 
@@ -29,11 +29,11 @@ export function ensureDirs() {
     fs.mkdirSync(SHOTS_DIR, { recursive: true });
 }
 
-export function sessionPath() {
+function sessionPath() {
     return path.join(SESSIONS_DIR, "session.json");
 }
 
-export function isPidAlive(pid) {
+function isPidAlive(pid) {
     const n = Number(pid);
     if (!Number.isInteger(n) || n <= 0) return false;
     try {
@@ -41,7 +41,9 @@ export function isPidAlive(pid) {
         const stat = fs.readFileSync(`/proc/${n}/stat`, "utf8");
         const state = stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3);
         if (state === "Z" || state === "X") return false;
-    } catch {}
+    } catch {
+        // /proc을 읽을 수 없는 환경이면 좀비 판별을 건너뛰고 kill(0) 결과만 본다
+    }
     try {
         process.kill(n, 0);
         return true;
@@ -50,10 +52,12 @@ export function isPidAlive(pid) {
     }
 }
 
-export function unlinkQuietly(file) {
+function unlinkQuietly(file) {
     try {
         fs.unlinkSync(file);
-    } catch {}
+    } catch {
+        // 이미 닫혔거나 정리된 대상이면 무시한다
+    }
 }
 
 function displayLockPath(display) {
@@ -64,13 +68,15 @@ function displaySocketPath(display) {
     return `/tmp/.X11-unix/X${display}`;
 }
 
-export function cleanupStaleDisplay(display) {
+function cleanupStaleDisplay(display) {
     const lockFile = displayLockPath(display);
     if (!fs.existsSync(lockFile)) return;
     let lockPid = null;
     try {
         lockPid = parseInt(fs.readFileSync(lockFile, "utf8").trim(), 10);
-    } catch {}
+    } catch {
+        // 락 파일을 읽지 못하면 pid 없이 오래된 락으로 취급한다
+    }
     if (lockPid && isPidAlive(lockPid)) return;
     unlinkQuietly(lockFile);
     unlinkQuietly(displaySocketPath(display));
@@ -100,11 +106,11 @@ export function loadSession() {
     }
 }
 
-export function saveSession(sess) {
+function saveSession(sess) {
     writeJsonAtomic(sessionPath(), sess);
 }
 
-export function finiteNumber(value) {
+function finiteNumber(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
 }
@@ -114,7 +120,7 @@ function coord(value) {
     return n == null ? null : Math.round(n);
 }
 
-export function boundedInt(value, fallback, { min = 0, max = 10000 } = {}) {
+function boundedInt(value, fallback, { min = 0, max = 10000 } = {}) {
     const n = finiteNumber(value);
     if (n == null) return fallback;
     return Math.min(max, Math.max(min, Math.round(n)));
@@ -150,8 +156,12 @@ async function startXvfb(display, geometry) {
             stdio: ["ignore", logFd, logFd],
         });
         proc.unref();
-        proc.on("error", () => {});
-        proc.on("exit", () => {});
+        proc.on("error", () => {
+            /* 자식 프로세스 오류는 로그 파일로 남으므로 여기서는 무시한다 */
+        });
+        proc.on("exit", () => {
+            /* 자식 프로세스 오류는 로그 파일로 남으므로 여기서는 무시한다 */
+        });
         fs.closeSync(logFd);
     } catch {
         return null;
@@ -168,28 +178,34 @@ async function startXvfb(display, geometry) {
     return pid;
 }
 
-export function killPid(pid) {
+function killPid(pid) {
     if (!pid) return;
     try {
         process.kill(pid, "SIGTERM");
-    } catch {}
+    } catch {
+        // 이미 닫혔거나 정리된 대상이면 무시한다
+    }
     setTimeout(() => {
         try {
             process.kill(pid, "SIGKILL");
-        } catch {}
+        } catch {
+            // 이미 닫혔거나 정리된 대상이면 무시한다
+        }
     }, 2000);
 }
 
 // :99부터 순서대로 빈 디스플레이를 찾는다. 외부 X 서버(예: camofox 자체 Xvfb)가
 // 락을 쥐고 있으면 다음 번호로 넘어간다.
-export async function newSession(geometry) {
+async function newSession(geometry) {
     for (let display = DISPLAY; display < DISPLAY + 5; display++) {
         const lockFile = displayLockPath(display);
         if (fs.existsSync(lockFile)) {
             let lockPid = null;
             try {
                 lockPid = parseInt(fs.readFileSync(lockFile, "utf8").trim(), 10);
-            } catch {}
+            } catch {
+                // 락 파일을 읽지 못하면 pid 없이 오래된 락으로 취급한다
+            }
             if (lockPid && isPidAlive(lockPid)) continue;
             unlinkQuietly(lockFile);
             unlinkQuietly(displaySocketPath(display));
@@ -218,11 +234,6 @@ export async function ensureSession(geometry) {
     return starting;
 }
 
-export async function hasXvfbBin() {
-    const r = await run("command -v Xvfb xdotool import", { timeout: 5_000 });
-    return r.ok && r.stdout.includes("Xvfb");
-}
-
 export async function screenshot(sess) {
     const file = path.join(SHOTS_DIR, `${Date.now()}.png`);
     const r = await run(`DISPLAY=:${sess.display} import -window root -silent "${file}"`, { timeout: 15_000 });
@@ -230,24 +241,6 @@ export async function screenshot(sess) {
     const stat = fs.statSync(file);
     const { w, h } = geometryDims(sess.geometry);
     return { ok: true, action: "screenshot", shotPath: file, __image: file, imageBytes: stat.size, viewport: { width: w, height: h } };
-}
-
-// 화면 스트림용 JPEG 프레임. 버퍼로 반환하고 임시 파일은 지운다.
-export async function screenshotJpeg(sess, quality = 75) {
-    ensureDirs();
-    const file = path.join(SHOTS_DIR, `frame-${process.pid}-${Date.now()}.jpg`);
-    const r = await run(`DISPLAY=:${sess.display} import -window root -silent -quality ${boundedInt(quality, 75, { min: 10, max: 95 })} "${file}"`, {
-        timeout: 15_000,
-    });
-    if (!r.ok) return { error: `frame capture failed: ${r.stderr || r.stdout}` };
-    let buf;
-    try {
-        buf = fs.readFileSync(file);
-    } catch {
-        return { error: "frame read failed" };
-    }
-    unlinkQuietly(file);
-    return { ok: true, jpeg: buf };
 }
 
 // 스트림 경로용: 프레임을 stdout으로 직접 받아 임시 파일 I/O를 없앤다.
@@ -272,7 +265,7 @@ export async function screenshotJpegBuf(sess, quality = 75) {
 }
 
 // 셸을 거치지 않고 직접 실행: 입력 이벤트는 초당 수십 건이라 spawn 비용을 줄인다.
-export function xdotoolArgs(display, args) {
+function xdotoolArgs(display, args) {
     return new Promise((resolve) => {
         execFile("xdotool", args, { env: { ...process.env, DISPLAY: `:${display}` }, timeout: 15_000 }, (err, _stdout, stderr) => {
             resolve({ ok: !err, stderr: (stderr || "").toString() });
@@ -308,8 +301,12 @@ export async function launchApp(sess, appCmd) {
     const pid = proc?.pid;
     if (!pid) return { ok: false, action: "launch", app: appCmd, error: "Failed to launch app" };
     proc.unref();
-    proc.on("error", () => {});
-    proc.on("exit", () => {});
+    proc.on("error", () => {
+        /* 자식 프로세스 오류는 로그 파일로 남으므로 여기서는 무시한다 */
+    });
+    proc.on("exit", () => {
+        /* 자식 프로세스 오류는 로그 파일로 남으므로 여기서는 무시한다 */
+    });
     sess.apps = sess.apps || [];
     sess.apps.push({ pid, cmd: appCmd });
     saveSession(sess);
@@ -393,64 +390,82 @@ export async function doAction(sess, args) {
     }
 }
 
+// 포인터 이동·클릭 입력(click, move, mousedown, mouseup)을 xdotool 인자로 바꿔 보낸다.
+async function sendPointerInput({ display }, input) {
+    const type = input.type;
+    const x = coord(input.x);
+    const y = coord(input.y);
+    if (x == null || y == null) return { error: "bad coords" };
+    const btn = [1, 2, 3].includes(Number(input.button)) ? Number(input.button) : 1;
+    const at = [String(x), String(y)];
+    let args;
+    if (type === "click") args = ["mousemove", ...at, "click", ...(input.double ? ["--repeat", "2"] : []), String(btn)];
+    else if (type === "move") args = ["mousemove", ...at];
+    else args = ["mousemove", ...at, type, String(btn)];
+    const r = await xdotoolArgs(display, args);
+    return { ok: r.ok, stderr: r.stderr || "" };
+}
+
+const SCROLL_BUTTONS = { up: "4", left: "6", right: "7" }; // 그 밖에는 아래(5)
+
+async function sendScrollInput({ display }, input) {
+    const x = coord(input.x);
+    const y = coord(input.y);
+    if (x == null || y == null) return { error: "bad coords" };
+    const amount = boundedInt(input.amount, 3, { min: 1, max: 20 });
+    const button = SCROLL_BUTTONS[input.direction] || "5";
+    const args = [];
+    for (let i = 0; i < amount; i++) args.push("mousemove", String(x), String(y), "click", button);
+    const r = await xdotoolArgs(display, args);
+    return { ok: r.ok };
+}
+
+async function sendKeyInput({ display }, input) {
+    const mods = [];
+    if (input.ctrl) mods.push("ctrl");
+    if (input.alt) mods.push("alt");
+    if (input.shift) mods.push("shift");
+    if (input.meta) mods.push("super");
+    const key = String(input.key || "");
+    if (!validKey(key)) return { error: "bad key" };
+    const r = await xdotoolArgs(display, ["key", [...mods, key].join("+")]);
+    return { ok: r.ok };
+}
+
+// keydown/keyup: 누르고 있기·떼기만 따로 보낸다(수정자 키를 누른 채 다른 입력을 할 때).
+async function sendKeyEdgeInput({ display }, input) {
+    const key = String(input.key || "");
+    if (!validKey(key)) return { error: "bad key" };
+    const r = await xdotoolArgs(display, [input.type === "keydown" ? "keydown" : "keyup", key]);
+    return { ok: r.ok };
+}
+
+async function sendTextInput({ display }, input) {
+    const text = String(input.text || "");
+    if (!text) return { error: "empty text" };
+    if (text.length > 4096) return { error: "text too long" };
+    const r = await xdotoolArgs(display, ["type", "--delay", "12", "--", text]);
+    return { ok: r.ok };
+}
+
+const INPUT_HANDLERS = new Map([
+    ["click", sendPointerInput],
+    ["move", sendPointerInput],
+    ["mousedown", sendPointerInput],
+    ["mouseup", sendPointerInput],
+    ["scroll", sendScrollInput],
+    ["key", sendKeyInput],
+    ["keydown", sendKeyEdgeInput],
+    ["keyup", sendKeyEdgeInput],
+    ["type", sendTextInput],
+    ["drag", (sess, input) => doAction(sess, { action: "drag", x1: input.x1, y1: input.y1, x2: input.x2, y2: input.y2 })],
+]);
+
 // 웹 포인터/키보드 입력을 xdotool로 보낸다. doAction과 달리 자동 스크린샷은 하지 않는다.
 // 셸을 거치지 않는 execFile 경로라 따옴표 이스케이프 걱정 없이 인자를 넘긴다.
 export async function sendInput(sess, input) {
-    const { display } = sess;
-    const t = input?.type;
-    if (t === "click" || t === "move" || t === "mousedown" || t === "mouseup") {
-        const x = coord(input.x);
-        const y = coord(input.y);
-        if (x == null || y == null) return { error: "bad coords" };
-        const btn = [1, 2, 3].includes(Number(input.button)) ? Number(input.button) : 1;
-        const args =
-            t === "click"
-                ? ["mousemove", String(x), String(y), "click", ...(input.double ? ["--repeat", "2"] : []), String(btn)]
-                : t === "move"
-                  ? ["mousemove", String(x), String(y)]
-                  : ["mousemove", String(x), String(y), t, String(btn)];
-        const r = await xdotoolArgs(display, args);
-        return { ok: r.ok, stderr: r.stderr || "" };
-    }
-    if (t === "scroll") {
-        const x = coord(input.x);
-        const y = coord(input.y);
-        if (x == null || y == null) return { error: "bad coords" };
-        const amt = boundedInt(input.amount, 3, { min: 1, max: 20 });
-        const button = input.direction === "up" ? "4" : input.direction === "left" ? "6" : input.direction === "right" ? "7" : "5";
-        const args = [];
-        for (let i = 0; i < amt; i++) args.push("mousemove", String(x), String(y), "click", button);
-        const r = await xdotoolArgs(display, args);
-        return { ok: r.ok };
-    }
-    if (t === "key") {
-        const mods = [];
-        if (input.ctrl) mods.push("ctrl");
-        if (input.alt) mods.push("alt");
-        if (input.shift) mods.push("shift");
-        if (input.meta) mods.push("super");
-        const key = String(input.key || "");
-        if (!validKey(key)) return { error: "bad key" };
-        const r = await xdotoolArgs(display, ["key", [...mods, key].join("+")]);
-        return { ok: r.ok };
-    }
-    if (t === "keydown" || t === "keyup") {
-        const key = String(input.key || "");
-        if (!validKey(key)) return { error: "bad key" };
-        const r = await xdotoolArgs(display, [t === "keydown" ? "keydown" : "keyup", key]);
-        return { ok: r.ok };
-    }
-    if (t === "type") {
-        const text = String(input.text || "");
-        if (!text) return { error: "empty text" };
-        if (text.length > 4096) return { error: "text too long" };
-        const r = await xdotoolArgs(display, ["type", "--delay", "12", "--", text]);
-        return { ok: r.ok };
-    }
-    if (t === "drag") {
-        return doAction(sess, { action: "drag", x1: input.x1, y1: input.y1, x2: input.x2, y2: input.y2 });
-    }
-    return { error: "unknown input type" };
+    const handler = INPUT_HANDLERS.get(input?.type);
+    return handler ? handler(sess, input) : { error: "unknown input type" };
 }
 
 export async function closeSession() {

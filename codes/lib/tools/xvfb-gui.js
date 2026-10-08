@@ -55,7 +55,7 @@ export const xvfbGuiToolDefinitions = [
     },
 ];
 
-export async function executeXvfbGuiTool(name, args, ctx = {}) {
+export async function executeXvfbGuiTool(name, rawArgs) {
     if (name !== "xvfb_gui") return { error: `Unknown tool: ${name}` };
     if (!isDockerRuntime()) {
         return { error: "xvfb_gui is only available inside the Docker container (Xvfb is Linux-only). On macOS this tool is disabled." };
@@ -67,7 +67,7 @@ export async function executeXvfbGuiTool(name, args, ctx = {}) {
     }
 
     display.ensureDirs();
-    args = args || {};
+    const args = rawArgs || {};
     const action = args.action;
 
     if (action === "close") {

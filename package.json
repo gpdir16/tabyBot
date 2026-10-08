@@ -4,8 +4,10 @@
     "type": "module",
     "scripts": {
         "start": "node codes/index.js",
-        "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "lint": "biome check .",
+        "lint:fix": "biome check --write .",
+        "format": "biome format --write . && prettier --write \"**/*.{md,yml,yaml,html}\"",
+        "format:check": "biome check . && prettier --check \"**/*.{md,yml,yaml,html}\""
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.1",
@@ -15,6 +17,7 @@
         "web-push": "^3.6.7"
     },
     "devDependencies": {
+        "@biomejs/biome": "2.5.15",
         "prettier": "^3.8.3"
     }
 }

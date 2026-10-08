@@ -1,10 +1,9 @@
 // 단일 계정 인증: user/auth.json에 계정(scrypt 해시)과 세션을 영속화한다.
 // 세션 토큰은 sha256으로 해시해 저장한다. 파일이 유출돼도 원본 토큰은 모른다.
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { USER_DIR } from "../paths.js";
-import { writeJsonAtomic } from "../atomic-file.js";
+import { readJsonFile, writeJsonAtomic } from "../atomic-file.js";
 
 const AUTH_FILE = path.join(USER_DIR, "auth.json");
 
@@ -33,10 +32,7 @@ const attempts = new Map();
 
 function load() {
     if (store) return store;
-    let data = null;
-    try {
-        data = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8"));
-    } catch {}
+    const data = readJsonFile(AUTH_FILE, null, { label: "auth file" });
     store = {
         account: data?.account && typeof data.account === "object" ? data.account : null,
         sessions: Array.isArray(data?.sessions) ? data.sessions.filter((s) => s && typeof s.id === "string") : [],

@@ -8,9 +8,9 @@ function resolveFilePath(rawPath) {
     return resolveAgentPath(rawPath);
 }
 
-function getMaxFileReadTokens(messages, modelMeta, model) {
+function getMaxFileReadTokens(messages, modelMeta) {
     const window = getContextWindow(modelMeta);
-    const used = countMessagesTokens(messages || [], model);
+    const used = countMessagesTokens(messages || []);
     const remaining = Math.max(0, window - used);
     const half = Math.floor(remaining * 0.5);
     return Math.max(0, half - 1);
@@ -48,7 +48,7 @@ function sliceByLineRange(lines, startLine, endLine) {
     return { start, end, slice: lines.slice(start - 1, end) };
 }
 
-function truncateToTokenBudget(text, maxTokens, model) {
+function truncateToTokenBudget(text, maxTokens) {
     if (maxTokens <= 0) {
         return { text: "", tokens: 0, truncated: true };
     }
@@ -58,13 +58,13 @@ function truncateToTokenBudget(text, maxTokens, model) {
     while (lo < hi) {
         const mid = Math.ceil((lo + hi) / 2);
         const chunk = lines.slice(0, mid).join("\n");
-        if (countTokens(chunk, model) <= maxTokens) lo = mid;
+        if (countTokens(chunk) <= maxTokens) lo = mid;
         else hi = mid - 1;
     }
     const kept = lines.slice(0, lo).join("\n");
     return {
         text: kept,
-        tokens: countTokens(kept, model),
+        tokens: countTokens(kept),
         truncated: lo < lines.length,
     };
 }
@@ -139,8 +139,7 @@ export async function executeFileRead(args, ctx) {
         };
     }
 
-    const model = ctx.model || "gpt-4o-mini";
-    const maxTokens = getMaxFileReadTokens(ctx.messages, ctx.modelMeta, model);
+    const maxTokens = getMaxFileReadTokens(ctx.messages, ctx.modelMeta);
     if (maxTokens <= 0) {
         return {
             error: "No context budget left for file_read (must stay under 50% of remaining window)",
@@ -193,7 +192,7 @@ export async function executeFileRead(args, ctx) {
     const { start, end, slice } = sliceByLineRange(lines, requestedStart, requestedEnd);
     const joined = formatLineNumbered(slice, start);
 
-    const { text, tokens, truncated } = truncateToTokenBudget(joined, maxTokens, model);
+    const { text, tokens, truncated } = truncateToTokenBudget(joined, maxTokens);
     const returnedLineCount = text ? text.split("\n").length : 0;
 
     const notes = [];

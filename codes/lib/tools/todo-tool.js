@@ -5,8 +5,6 @@ import { isValidId } from "../web/conversations.js";
 import { defaultTimeZone } from "../scheduling/time.js";
 import { emit } from "../web/bus.js";
 
-export const SCHEDULED_TURN_MARKER = "[tabybot-scheduled]";
-
 function emitChanged() {
     emit({ type: "todos_changed" });
 }
@@ -183,137 +181,142 @@ function ownItem(id, agentId) {
     return { item };
 }
 
+// 일정 관련 인자(cron/every/at/timezone)를 그대로 골라낸다.
+const scheduleArgs = (args) => ({ cron: args?.cron, every: args?.every, at: args?.at, timezone: args?.timezone });
+
+// 자기 리스트의 항목을 찾는다. 못 찾거나 유저 항목이면 { error }.
+function ownItemOrError(id, agentId) {
+    const { item, err } = ownItem(id, agentId);
+    if (err === "user_list_item") return { error: "user todos need todo_suggest" };
+    if (!item) return { error: "not_found" };
+    return { item };
+}
+
+// todo_update에서 conversationId: 비우면 연결 해제(""), 유효하지 않은 값은 무시(undefined).
+function conversationIdForUpdate(args) {
+    if (args?.conversationId == null) return undefined;
+    const value = String(args.conversationId).trim();
+    if (!value) return "";
+    return isValidId(value) ? value : undefined;
+}
+
+// 항목을 바꾼 도구 결과: 오류가 없으면 변경 이벤트를 내보낸다.
+function emitIfOk(result) {
+    if (!result.error) emitChanged();
+    return result;
+}
+
+const TODO_TOOL_HANDLERS = {
+    todo_list(_args, _ctx, agentId) {
+        const { items, suggestions, recovered } = listTodos();
+        return {
+            todos: items.filter((row) => (row.list || "user") === "user"),
+            automations: items.filter((row) => (row.list || "user") === agentId),
+            suggestions,
+            recovered,
+        };
+    },
+
+    todo_add(args, ctx, agentId) {
+        const given = [args?.cron, args?.every, args?.at].filter((v) => v != null && String(v).trim() !== "").length;
+        if (given !== 1) return { error: "Provide exactly one of cron, every, or at." };
+        const result = addTodo({
+            title: args?.title ?? args?.name,
+            prompt: args?.prompt,
+            ...scheduleArgs(args),
+            list: agentId,
+            conversationId: defaultConversationId(args, ctx),
+            enabled: args?.enabled,
+            fireImmediately: args?.fireImmediately,
+            createdBy: "agent",
+        });
+        if (result.error) return result;
+        emitChanged();
+        return { ok: true, item: result.item };
+    },
+
+    todo_update(args, _ctx, agentId) {
+        const owned = ownItemOrError(args?.id, agentId);
+        if (owned.error) return owned;
+        const result = updateTodo(
+            owned.item.id,
+            {
+                title: args?.title != null ? args.title : undefined,
+                prompt: args?.prompt,
+                ...scheduleArgs(args),
+                conversationId: conversationIdForUpdate(args),
+                fireImmediately: args?.fireImmediately,
+                enabled: args?.enabled,
+            },
+            { editedBy: "agent" },
+        );
+        if (result.error) return result;
+        emitChanged();
+        return { ok: true, item: result.item };
+    },
+
+    todo_delete(args, _ctx, agentId) {
+        const owned = ownItemOrError(args?.id, agentId);
+        if (owned.error) return owned;
+        const result = removeTodo(owned.item.id);
+        emitChanged();
+        return result;
+    },
+
+    todo_run(args, _ctx, agentId) {
+        const owned = ownItemOrError(args?.id, agentId);
+        if (owned.error) return owned;
+        const { item } = owned;
+        if (item.status !== "open") return { error: "not_open" };
+        const agent = getAgent(item.assigneeId || item.list);
+        if (!agent) return { error: "agent_not_found" };
+        return queueTodoNow(agent, item);
+    },
+
+    todo_suggest(args, _ctx, agentId) {
+        const kind = String(args?.kind || "add");
+        const clearSchedule = args?.clearSchedule === true;
+        const result = addSuggestion({
+            kind,
+            targetId: args?.id,
+            agentId,
+            title: args?.title,
+            reason: args?.reason,
+            prompt: args?.prompt,
+            ...scheduleArgs(args),
+            patch:
+                kind === "edit"
+                    ? {
+                          title: args?.title,
+                          prompt: args?.prompt,
+                          ...scheduleArgs(args),
+                          clearWhen: clearSchedule,
+                          kind: clearSchedule ? "none" : undefined,
+                      }
+                    : null,
+        });
+        if (!result.error) emitChanged();
+        return result.error ? result : { ok: true, suggested: true, suggestion: result.suggestion };
+    },
+
+    todo_offer(args, _ctx, agentId) {
+        return emitIfOk(offerHandoff(args?.id, { agentId, reason: args?.reason, prompt: args?.prompt }));
+    },
+
+    todo_withdraw(args, _ctx, agentId) {
+        return emitIfOk(withdrawHandoff(args?.id, agentId));
+    },
+
+    todo_complete(args) {
+        if (!getTodo(args?.id)) return { error: "not_found" };
+        return emitIfOk(completeTodo(args.id));
+    },
+};
+
 export async function executeTodoTool(name, args, ctx = {}) {
     const agentId = ctx.agentId;
     if (!agentId) return { error: "no agent in this turn" };
-
-    switch (name) {
-        case "todo_list": {
-            const { items, suggestions, recovered } = listTodos();
-            return {
-                todos: items.filter((row) => (row.list || "user") === "user"),
-                automations: items.filter((row) => (row.list || "user") === agentId),
-                suggestions,
-                recovered,
-            };
-        }
-        case "todo_add": {
-            const given = [args?.cron, args?.every, args?.at].filter((v) => v != null && String(v).trim() !== "").length;
-            if (given !== 1) return { error: "Provide exactly one of cron, every, or at." };
-            const result = addTodo({
-                title: args?.title ?? args?.name,
-                prompt: args?.prompt,
-                cron: args?.cron,
-                every: args?.every,
-                at: args?.at,
-                timezone: args?.timezone,
-                list: agentId,
-                conversationId: defaultConversationId(args, ctx),
-                enabled: args?.enabled,
-                fireImmediately: args?.fireImmediately,
-                createdBy: "agent",
-            });
-            if (result.error) return result;
-            emitChanged();
-            return { ok: true, item: result.item };
-        }
-        case "todo_update": {
-            const { item, err } = ownItem(args?.id, agentId);
-            if (err === "user_list_item") return { error: "user todos need todo_suggest" };
-            if (!item) return { error: "not_found" };
-            const result = updateTodo(
-                item.id,
-                {
-                    title: args?.title != null ? args.title : undefined,
-                    prompt: args?.prompt,
-                    cron: args?.cron,
-                    every: args?.every,
-                    at: args?.at,
-                    timezone: args?.timezone,
-                    conversationId: (() => {
-                        if (args?.conversationId == null) return undefined;
-                        const v = String(args.conversationId).trim();
-                        if (!v) return "";
-                        return isValidId(v) ? v : undefined;
-                    })(),
-                    fireImmediately: args?.fireImmediately,
-                    enabled: args?.enabled,
-                },
-                { editedBy: "agent" },
-            );
-            if (result.error) return result;
-            emitChanged();
-            return { ok: true, item: result.item };
-        }
-        case "todo_delete": {
-            const { item, err } = ownItem(args?.id, agentId);
-            if (err === "user_list_item") return { error: "user todos need todo_suggest" };
-            if (!item) return { error: "not_found" };
-            const result = removeTodo(item.id);
-            emitChanged();
-            return result;
-        }
-        case "todo_run": {
-            const { item, err } = ownItem(args?.id, agentId);
-            if (err === "user_list_item") return { error: "user todos need todo_suggest" };
-            if (!item) return { error: "not_found" };
-            if (item.status !== "open") return { error: "not_open" };
-            const agent = getAgent(item.assigneeId || item.list);
-            if (!agent) return { error: "agent_not_found" };
-            return queueTodoNow(agent, item);
-        }
-        case "todo_suggest": {
-            const kind = String(args?.kind || "add");
-            const result = addSuggestion({
-                kind,
-                targetId: args?.id,
-                agentId,
-                title: args?.title,
-                reason: args?.reason,
-                prompt: args?.prompt,
-                cron: args?.cron,
-                every: args?.every,
-                at: args?.at,
-                timezone: args?.timezone,
-                patch:
-                    kind === "edit"
-                        ? {
-                              title: args?.title,
-                              prompt: args?.prompt,
-                              cron: args?.cron,
-                              every: args?.every,
-                              at: args?.at,
-                              timezone: args?.timezone,
-                              clearWhen: args?.clearSchedule === true,
-                              kind: args?.clearSchedule === true ? "none" : undefined,
-                          }
-                        : null,
-            });
-            if (!result.error) emitChanged();
-            return result.error ? result : { ok: true, suggested: true, suggestion: result.suggestion };
-        }
-        case "todo_offer": {
-            const result = offerHandoff(args?.id, {
-                agentId,
-                reason: args?.reason,
-                prompt: args?.prompt,
-            });
-            if (!result.error) emitChanged();
-            return result;
-        }
-        case "todo_withdraw": {
-            const result = withdrawHandoff(args?.id, agentId);
-            if (!result.error) emitChanged();
-            return result;
-        }
-        case "todo_complete": {
-            const existing = getTodo(args?.id);
-            if (!existing) return { error: "not_found" };
-            const result = completeTodo(args.id);
-            if (!result.error) emitChanged();
-            return result;
-        }
-        default:
-            return { error: `Unknown todo tool: ${name}` };
-    }
+    const handler = Object.hasOwn(TODO_TOOL_HANDLERS, name) ? TODO_TOOL_HANDLERS[name] : null;
+    if (!handler) return { error: `Unknown todo tool: ${name}` };
+    return handler(args, ctx, agentId);
 }

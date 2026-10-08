@@ -1,7 +1,7 @@
 /* tabyBot 웹 클라이언트: 컴포저.
    pill 컨테이너(자동성장), 파일 첨부(선택/드래그앤드롭/paste),
    업로드 칩 미리보기, Enter 전송 / Shift+Enter 줄바꿈(IME 조합 보호). */
-(function (T) {
+((T) => {
     "use strict";
 
     const { state } = T;
@@ -17,7 +17,7 @@
 
     const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
-    // 모바일 구분은 화면 크기(≤860px)로 한다. sidebar.js와 동일 기준. 좁은 화면엔 Shift가 없으므로 Enter 전송 대신 기본 줄바꿈 유지
+    // 모바일 구분은 화면 크기(≤860px)로 한다. ui/sidebar/와 동일 기준. 좁은 화면엔 Shift가 없으므로 Enter 전송 대신 기본 줄바꿈 유지
     const touchMq = window.matchMedia?.("(max-width: 860px)");
 
     // attachments: [{ id: string|null, name, mime, size, objUrl, uploading }]
@@ -40,7 +40,7 @@
             return;
         }
         input.style.height = "auto";
-        input.style.height = Math.min(input.scrollHeight, 200) + "px";
+        input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
         box.classList.toggle("multiline", input.scrollHeight > 40 || attachments.length > 0 || !!handoffTo);
     }
 
@@ -51,25 +51,6 @@
     }
 
     /* ── 첨부 칩 ────────────────────────────────────────────── */
-    function formatSize(bytes) {
-        const size = Number(bytes);
-        if (!Number.isFinite(size) || size < 0) return "";
-        if (size < 1024) return `${size} B`;
-        if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-        return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-    }
-
-    function fileType(mime, name) {
-        const ext = String(name || "")
-            .split(".")
-            .pop();
-        if (ext && ext !== name && ext.length <= 8) return ext.toUpperCase();
-        const sub = String(mime || "")
-            .split("/")
-            .pop();
-        if (sub && sub !== "octet-stream") return sub.toUpperCase();
-        return "FILE";
-    }
 
     function renderChips() {
         chipsEl.textContent = "";
@@ -106,7 +87,7 @@
                       T.h("strong", { class: "chip-file-name", text: a.name || t("file") }),
                       T.h("span", {
                           class: "chip-file-meta",
-                          text: `${fileType(a.mime, a.name)}${formatSize(a.size) ? ` · ${formatSize(a.size)}` : ""}`,
+                          text: `${T.util.fileType(a.mime, a.name)}${T.util.formatSize(a.size) ? ` · ${T.util.formatSize(a.size)}` : ""}`,
                       }),
                   ]);
             preview.addEventListener("click", () => {
@@ -116,7 +97,9 @@
                 }
                 try {
                     window.open(a.objUrl, "_blank");
-                } catch (_) {}
+                } catch {
+                    // 팝업이 막혀도 동작에는 영향이 없다
+                }
             });
             if (preview.tagName === "IMG") preview.src = a.objUrl;
             chip.append(preview);
@@ -146,7 +129,9 @@
         if (i > -1) attachments.splice(i, 1);
         try {
             URL.revokeObjectURL(a.objUrl);
-        } catch (_) {}
+        } catch {
+            // 이미 해제된 URL이면 무시한다
+        }
         renderChips();
     }
 
@@ -315,7 +300,7 @@
             if (!ok) {
                 if (T.todosUI?.isOpen?.()) {
                     const cur = input.value.trim();
-                    restore(cur && cur !== text ? cur + "\n" + text : text, []);
+                    restore(cur && cur !== text ? `${cur}\n${text}` : text, []);
                     input.focus();
                 } else {
                     drafts.set("__todos__", { text, attachments: [] });
@@ -346,7 +331,9 @@
             for (const a of sent) {
                 try {
                     URL.revokeObjectURL(a.objUrl);
-                } catch (_) {}
+                } catch {
+                    // 이미 해제된 URL이면 무시한다
+                }
             }
             if (state.state.currentId) drafts.delete(state.state.currentId);
         }
@@ -412,7 +399,7 @@
         });
 
         // 드래그앤드롭
-        ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
+        for (const ev of ["dragenter", "dragover", "dragleave", "drop"]) {
             box.addEventListener(ev, (e) => {
                 e.preventDefault();
                 if (ev === "dragenter") {
@@ -431,13 +418,13 @@
                     if (e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]);
                 }
                 if (!dragDepth) box.classList.remove("dragover");
-            }),
-        );
+            });
+        }
 
         // 붙여넣기 파일
         input.addEventListener("paste", (e) => {
-            const files = e.clipboardData && e.clipboardData.files;
-            if (files && files.length) {
+            const files = e.clipboardData?.files;
+            if (files?.length) {
                 e.preventDefault();
                 addFiles([...files]);
             }
@@ -477,4 +464,4 @@
     }
 
     T.composer = { init, setValue, syncMode };
-})((window.Taby = window.Taby || {}));
+})(window.Taby);
