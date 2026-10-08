@@ -31,12 +31,12 @@
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "agents"];
+    const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "secrets", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s나 /s/…가 아니면 null.
     function routeFromPath() {
         if (/^\/s\/?$/.test(location.pathname || "")) return { tab: "root", agentId: null };
-        const m = /^\/s\/(general|folders|notices|provider|model|account|selfimprovement|skills|mcp|agents)(?:\/([^/]+))?$/.exec(
+        const m = /^\/s\/(general|folders|notices|provider|model|account|selfimprovement|skills|mcp|secrets|agents)(?:\/([^/]+))?$/.exec(
             location.pathname || "",
         );
         if (!m) return null;
@@ -87,6 +87,7 @@
         C.editingAgent = agent;
         C.skillEditing = null;
         C.mcpEditing = null;
+        C.secretEditing = null;
         // open({tab:"folders", folderId}). 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
         // open({tab:"folders", folderNew, folderAgent}). "폴더에 추가…" 안의 "새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
         C.folderEditing = null;
@@ -150,8 +151,12 @@
         C.mcpCache = null;
         C.mcpLoading = false;
         C.mcpFailed = false;
+        C.secretsCache = null;
+        C.secretsLoading = false;
+        C.secretsFailed = false;
         C.skillEditing = null;
         C.mcpEditing = null;
+        C.secretEditing = null;
         C.folderEditing = null;
         clearTimeout(C.viewTimer);
         C.viewBusy = false;

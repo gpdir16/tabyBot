@@ -4,7 +4,8 @@ import * as conversationsStore from "../conversations.js";
 import { EmptyUploadError, MAX_UPLOAD_BYTES, UploadTooLargeError, getFile, publicAttachment, saveUploadStream, storedAttachment } from "../files.js";
 import { emit, eventsSince } from "../bus.js";
 import { dispatchMessage, stopConversation } from "../turns.js";
-import { resolvePendingAskByAskId } from "../../agent/user-ask.js";
+import { listPendingAsks, resolvePendingAskByAskId } from "../../agent/user-ask.js";
+import { SecretError } from "../../secrets/store.js";
 import { clearNotices, listNotices, markNoticesRead } from "../notices.js";
 import { listRunningSessionKeys } from "../../agent/session.js";
 import fs from "node:fs";
@@ -84,12 +85,22 @@ function registerConversationsRoutes(router) {
         if (!q.trim()) return ctx.json200({ results: [] });
         ctx.json200({ results: conversationsStore.searchMessages(q) });
     });
+    router.add("GET", "/api/asks", (ctx) => {
+        ctx.json200({ asks: listPendingAsks() });
+    });
     router.add("POST", "/api/asks/:askId/answer", async (ctx) => {
         const body = await ctx.json();
-        const answer = resolvePendingAskByAskId(ctx.params.askId, {
-            choiceIndex: Number.isInteger(body.choiceIndex) ? body.choiceIndex : null,
-            text: String(body.text ?? ""),
-        });
+        let answer;
+        try {
+            answer = resolvePendingAskByAskId(ctx.params.askId, {
+                choiceIndex: Number.isInteger(body.choiceIndex) ? body.choiceIndex : null,
+                text: String(body.text ?? ""),
+            });
+        } catch (err) {
+            // 시크릿 질문에서 값이 금고 규칙(길이 등)에 맞지 않을 때
+            if (err instanceof SecretError) return ctx.json400(err.code);
+            throw err;
+        }
         if (answer === null) return ctx.json404();
         ctx.json200({ ok: true, answer });
     });

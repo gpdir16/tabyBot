@@ -155,6 +155,11 @@
         updateMcpServer: (name, b) => request(`/api/mcp/${enc(name)}`, { method: "PUT", json: b }),
         deleteMcpServer: (name) => request(`/api/mcp/${enc(name)}`, { method: "DELETE" }),
 
+        secrets: () => request("/api/secrets"),
+        createSecret: (b) => request("/api/secrets", { method: "POST", json: b }),
+        updateSecret: (id, b) => request(`/api/secrets/${enc(id)}`, { method: "PUT", json: b }),
+        deleteSecret: (id) => request(`/api/secrets/${enc(id)}`, { method: "DELETE" }),
+
         createFolder: (b) => request("/api/folders", { method: "POST", json: b }),
         updateFolder: (id, b) => request(`/api/folders/${enc(id)}`, { method: "PATCH", json: b }),
         deleteFolder: (id) => request(`/api/folders/${enc(id)}`, { method: "DELETE" }),
@@ -176,6 +181,7 @@
         readNotices: (ids) => request("/api/notices/read", { method: "POST", json: Array.isArray(ids) ? { ids } : {} }),
         clearNotices: () => request("/api/notices", { method: "DELETE" }),
 
+        pendingAsks: () => request("/api/asks"),
         answerAsk: (askId, body) => request(`/api/asks/${enc(askId)}/answer`, { method: "POST", json: body }),
 
         computerStatus: () => request("/api/computer/status"),

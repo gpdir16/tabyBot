@@ -78,11 +78,14 @@
 
     function applyAsk(id, a) {
         const c = ensureLive(id);
+        // 새로고침 뒤 서버 목록으로 되살릴 때 이미 있는 카드는 건드리지 않는다.
+        if (c.live.asks.some((x) => x.askId === a.askId)) return;
         c.live.asks.push({
             askId: a.askId,
             question: a.question || "",
             options: Array.isArray(a.options) ? a.options : [],
             expiresAt: a.expiresAt || null,
+            secret: a.secret || null, // 시크릿 입력 요청이면 이름. 값은 상태에 남기지 않는다
             answer: null, // 사용자가 선택한 답변({choiceIndex}|{text})
             resolved: false,
         });

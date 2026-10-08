@@ -186,7 +186,10 @@
             }
             const input = T.h("input", {
                 class: "ask-input",
-                placeholder: t("askInputPlaceholder"),
+                type: ask.secret ? "password" : "text",
+                autocomplete: ask.secret ? "new-password" : "off",
+                spellcheck: ask.secret ? "false" : null,
+                placeholder: ask.secret ? t("secretAskPlaceholder") : t("askInputPlaceholder"),
                 onkeydown(e) {
                     e.stopPropagation();
                     if (e.key === "Enter") sendText();
@@ -205,6 +208,7 @@
                 [T.icon("send")],
             );
             card.append(T.h("div", { class: "ask-row" }, [input, sendBtn]));
+            if (ask.secret) card.append(T.h("div", { class: "ask-hint", text: t("secretAskHint") }));
             // Enter에서 input blur로 인한 이벤트 유실 방지: 카드에 입력 보관
             card._input = input;
         } else {
@@ -220,18 +224,26 @@
         async function answer(body) {
             if (done()) return;
             const prev = ask.answer;
-            ask.answer = body; // 낙관적 반영
+            // 시크릿 값은 요청 본문에만 싣고 화면 상태에는 마스크만 남긴다.
+            ask.answer = ask.secret ? { text: "••••••••" } : body; // 낙관적 반영
             C.requestSync();
             try {
                 await T.api.answerAsk(ask.askId, body);
             } catch (err) {
                 ask.answer = prev; // 롤백
                 C.requestSync();
-                T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
+                // 시크릿 값이 금고 규칙에 안 맞으면 사유를 알려 다시 입력하게 한다.
+                const secretKey = {
+                    value_too_long: "secretValueTooLong",
+                    invalid_value: "secretInvalidValue",
+                }[err?.payload?.error || ""];
+                T.toast.show("error", secretKey ? t(secretKey) : T.api.errorText(err, t("errorPrefix")));
             }
         }
         function sendText() {
-            const v = card._input?.value.trim() || "";
+            // 시크릿은 공백도 값의 일부일 수 있어 다듬지 않는다.
+            const raw = card._input?.value || "";
+            const v = ask.secret ? raw : raw.trim();
             if (v) answer({ text: v });
         }
 

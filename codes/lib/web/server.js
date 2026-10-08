@@ -12,6 +12,7 @@ import { registerComputerRoutes, initComputerWs, handleComputerUpgrade } from ".
 import { registerAccountRoutes } from "./routes/account.js";
 import { registerChatRoutes } from "./routes/chat.js";
 import { registerLibraryRoutes } from "./routes/library.js";
+import { registerSecretsRoutes } from "./routes/secrets.js";
 import { registerAgentsRoutes } from "./routes/agents.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerTodosRoutes } from "./routes/todos.js";
@@ -37,6 +38,7 @@ export function startWebServer() {
     registerAccountRoutes(router);
     registerChatRoutes(router);
     registerLibraryRoutes(router);
+    registerSecretsRoutes(router);
     registerSettingsRoutes(router);
     registerAgentsRoutes(router);
     registerTodosRoutes(router);

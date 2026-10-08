@@ -28,18 +28,20 @@
             { id: "selfimprovement", label: "selfImprovement", icon: "sparkles", color: "#ff9f0a" },
             { id: "skills", label: "skills", icon: "book", color: "#40c8e0" },
             { id: "mcp", label: "mcpTab", icon: "plug", color: "#636366" },
+            { id: "secrets", label: "secretsTab", icon: "lock", color: "#ff375f" },
         ],
     ];
 
     // 편집 폼이 열려 있는가(상세에서 한 단계 더 들어간 화면).
     function formOpen() {
-        return !!(C.folderEditing || C.skillEditing || C.mcpEditing);
+        return !!(C.folderEditing || C.skillEditing || C.mcpEditing || C.secretEditing);
     }
 
     function closeForm() {
         C.folderEditing = null;
         C.skillEditing = null;
         C.mcpEditing = null;
+        C.secretEditing = null;
         build();
     }
 
@@ -48,6 +50,7 @@
             return C.folderEditing.mode === "new" ? t("folderNew") : C.folderList().find((f) => f.id === C.folderEditing.id)?.name || t("folders");
         if (C.skillEditing) return C.skillEditing.mode === "new" ? t("addSkill") : C.skillEditing.name;
         if (C.mcpEditing) return C.mcpEditing.mode === "new" ? t("addMcpServer") : C.mcpEditing.name;
+        if (C.secretEditing) return C.secretEditing.mode === "new" ? t("addSecret") : C.secretEditing.name;
         return "";
     }
 
@@ -175,6 +178,7 @@
         else if (tab === "selfimprovement") C.buildSelfImprovement(body);
         else if (tab === "skills") C.buildSkills(body);
         else if (tab === "mcp") C.buildMcp(body);
+        else if (tab === "secrets") C.buildSecrets(body);
         else if (tab === "agents") C.buildAgents(body);
         groupRows(body);
 
@@ -280,10 +284,10 @@
             const top = buildView();
             if (top.dataset.level === "2") {
                 // 폼을 잠깐 닫은 것으로 치고 그 밑의 상세 화면을 그린다.
-                const saved = [C.folderEditing, C.skillEditing, C.mcpEditing];
-                C.folderEditing = C.skillEditing = C.mcpEditing = null;
+                const saved = [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing];
+                C.folderEditing = C.skillEditing = C.mcpEditing = C.secretEditing = null;
                 views.push(buildView());
-                [C.folderEditing, C.skillEditing, C.mcpEditing] = saved;
+                [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing] = saved;
             }
             views.push(top);
         }
@@ -348,10 +352,10 @@
             let under;
             if (fromForm) {
                 // 폼을 잠깐 닫은 것으로 치고 상세 화면을 그린다.
-                const saved = [C.folderEditing, C.skillEditing, C.mcpEditing];
-                C.folderEditing = C.skillEditing = C.mcpEditing = null;
+                const saved = [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing];
+                C.folderEditing = C.skillEditing = C.mcpEditing = C.secretEditing = null;
                 under = buildView();
-                [C.folderEditing, C.skillEditing, C.mcpEditing] = saved;
+                [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing] = saved;
             } else {
                 under = buildView("root", null);
             }
@@ -373,7 +377,7 @@
             C.rebuildPending = false;
             if (fromForm) {
                 // 깔아 둔 상세 화면이 그대로 지금 화면이 된다.
-                C.folderEditing = C.skillEditing = C.mcpEditing = null;
+                C.folderEditing = C.skillEditing = C.mcpEditing = C.secretEditing = null;
                 return;
             }
             C.openTab = "root";

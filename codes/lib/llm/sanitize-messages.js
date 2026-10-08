@@ -1,3 +1,5 @@
+import { redactText } from "../secrets/vault.js";
+
 const ANGLE_SPECIAL_TOKEN = /<\|[^|\n]{1,128}\|>/g;
 
 const LLAMA_CHAT_MARKERS = /\[INST\]|\[\/INST\]|<<SYS>>|<\/SYS>>/g;
@@ -5,7 +7,8 @@ const LLAMA_CHAT_MARKERS = /\[INST\]|\[\/INST\]|<<SYS>>|<\/SYS>>/g;
 export function sanitizeTextForLlm(text) {
     if (typeof text !== "string" || text.length === 0) return text;
 
-    let out = text.replace(ANGLE_SPECIAL_TOKEN, (match) => {
+    // 금고의 값이 대화 기록·메모리·사용자 메시지로 섞여 들어와도 모델에는 자리표시자만 보낸다.
+    let out = redactText(text).replace(ANGLE_SPECIAL_TOKEN, (match) => {
         const inner = match.slice(2, -2);
         return `⟨${inner}⟩`;
     });
