@@ -3,6 +3,7 @@ import { writeFileAtomic } from "../atomic-file.js";
 import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
 import { resolveAgentPath } from "../paths.js";
 import { filePathParamDescription, filePatchDescription, fileReadDescription } from "../path-labels.js";
+import { isSecretStorePath } from "../secrets/store.js";
 
 function resolveFilePath(rawPath) {
     return resolveAgentPath(rawPath);
@@ -129,6 +130,7 @@ function recordFileSnapshot(ctx, resolvedPath, content) {
 export async function executeFileRead(args, ctx) {
     const resolved = resolveFilePath(args?.path);
     if (!resolved) return { error: "path is required" };
+    if (isSecretStorePath(resolved)) return { error: "The secret vault files are off limits. Use {{secret:NAME}} placeholders instead." };
     if (!fs.existsSync(resolved)) return { error: "file not found", path: resolved };
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return { error: "not a file", path: resolved };
@@ -264,6 +266,7 @@ function applyHunk(fileLines, hunk, offset = 0) {
 export async function executeFilePatch(args, ctx = {}) {
     const resolved = resolveFilePath(args?.path);
     if (!resolved) return { error: "path is required" };
+    if (isSecretStorePath(resolved)) return { error: "The secret vault files are off limits. Use {{secret:NAME}} placeholders instead." };
     if (!fs.existsSync(resolved)) return { error: "file not found", path: resolved };
 
     const stat = fs.statSync(resolved);

@@ -50,6 +50,27 @@
             return null;
         }
     }
+    // 키보드가 열렸을 때 화면 아래 가장자리에 실제로 보이는 요소의 배경색을 읽어 body 배경(--kb-bg)으로 쓴다.
+    // 입력창 종류와 테마에 상관없이 키보드 위쪽 면과 같은 색으로 이어진다.
+    function syncKeyboardBackground() {
+        const root = document.documentElement;
+        if (!document.body.classList.contains("kb-open")) {
+            root.style.removeProperty("--kb-bg");
+            return;
+        }
+        const vv = window.visualViewport;
+        const y = Math.min(window.innerHeight - 1, Math.max(0, Math.round((vv?.offsetTop || 0) + (vv?.height || window.innerHeight) - 2)));
+        for (let el = document.elementFromPoint(window.innerWidth / 2, y); el && el !== root; el = el.parentElement) {
+            const color = getComputedStyle(el).backgroundColor;
+            // 투명은 "transparent"이거나 알파가 0인 rgba다. rgb(0, 0, 0)(불투명 검정)은 투명이 아니다.
+            if (color && color !== "transparent" && !/^rgba\(.*,\s*0\)$/.test(color)) {
+                root.style.setProperty("--kb-bg", color);
+                return;
+            }
+        }
+        root.style.removeProperty("--kb-bg");
+    }
+
     function syncViewportHeight() {
         if (window.scrollY) window.scrollTo(0, 0);
         const vv = window.visualViewport;
@@ -72,6 +93,7 @@
             document.body.classList.remove("kb-open");
         }
         vvLastHeight = height;
+        syncKeyboardBackground();
         if (changed) {
             for (const { el, fromBottom } of anchors) {
                 el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom;
@@ -126,7 +148,12 @@
         window.visualViewport?.addEventListener("resize", syncViewportHeight, { passive: true });
         window.visualViewport?.addEventListener("scroll", syncViewportHeight, { passive: true });
         window.addEventListener("scroll", syncViewportHeight, { passive: true });
-        document.addEventListener("focusin", () => requestAnimationFrame(revealFocusedInput));
+        document.addEventListener("focusin", () =>
+            requestAnimationFrame(() => {
+                revealFocusedInput();
+                syncKeyboardBackground();
+            }),
+        );
     }
 
     // 컴포저(하단 유리 바) 높이를 CSS 변수로 동기화한다.

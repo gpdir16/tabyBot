@@ -104,11 +104,26 @@
         return (error && (error.detail || error.code)) || "";
     }
 
+    // 답을 기다리는 질문 카드는 이벤트로만 오면 새로고침·재접속 때 사라진다(서버는 계속 기다리는데 답할 곳이 없어진다).
+    // 접속할 때마다 서버의 대기 목록으로 되살린다. 이미 있는 카드는 applyAsk가 걸러 낸다.
+    function restorePendingAsks() {
+        api.pendingAsks()
+            .then((r) => {
+                for (const a of r?.asks || []) {
+                    if (!a.expiresAt || Date.parse(a.expiresAt) > Date.now()) state.applyAsk(a.conversationId, a);
+                }
+            })
+            .catch(() => {
+                /* 실패해도 다음 접속 때 다시 받는다 */
+            });
+    }
+
     // 이벤트 종류별 처리. 모르는 종류는 무시한다(하위 호환).
     const HANDLERS = {
         hello() {
             backoff = 1000;
             state.setConn("connected");
+            restorePendingAsks();
             // 부트가 방금 같은 데이터를 받았다. 첫 hello에서 통째로 다시 받지 않는다.
             if (Date.now() < freshUntil) {
                 freshUntil = 0;
@@ -171,6 +186,7 @@
                 question: msg.question,
                 options: msg.options,
                 expiresAt: msg.expiresAt,
+                secret: msg.secret,
             });
             notifyIncoming(msg.conversationId, msg.question || "", `ask-${msg.askId || ""}`);
         },

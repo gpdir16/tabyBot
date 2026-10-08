@@ -19,6 +19,7 @@ import { formatTodosForPrompt } from "../todos/store.js";
 import { estimateContentTokens } from "../llm/vision.js";
 import { collectFilesFromHistory, formatAttachedFilesPrompt, hydrateUserContent } from "../web/attachments.js";
 import { formatSkillsListForPrompt } from "../skills-catalog.js";
+import { formatSecretsForPrompt } from "../secrets/vault.js";
 import {
     buildDateTimePromptVars,
     buildEnvironmentPromptVars,
@@ -112,6 +113,7 @@ function buildSystemMessageContent(lang, { truncateMemory = false, maxMemoryChar
         ...buildEnvironmentPromptVars(),
         FILESYSTEM_BLOCK: buildFilesystemPromptBlock(),
         SKILLS_LIST: formatSkillsListForPrompt(),
+        SECRETS_LIST: formatSecretsForPrompt(),
         RUNTIME_INFO: buildRuntimeInfoLine(rt),
         MEMORY: loadMemoryForPrompt({ truncateMemory, maxMemoryChars }),
         AGENT_MEMORY_PATH: agentMemoryFilePath(rt.agentId || firstAgent()?.id),

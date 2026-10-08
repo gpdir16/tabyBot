@@ -6,6 +6,8 @@ import { todoToolDefinitions, executeTodoTool } from "../tools/todo-tool.js";
 import { stopTodoScheduler } from "../todos/scheduler.js";
 import { sendFileToolDefinitions, executeSendFileTool } from "../tools/send-file-tool.js";
 import { userAskToolDefinitions, executeUserAskTool } from "../tools/user-ask-tool.js";
+import { secretToolDefinitions, executeSecretRequest } from "../tools/secret-tool.js";
+import { prepareToolSecrets, redactDeep, redactText } from "../secrets/vault.js";
 import { userSayToolDefinitions, executeUserSayTool } from "../tools/user-say-tool.js";
 import { vizToolDefinitions, executeVizTool } from "../tools/visualization.js";
 import { xvfbGuiToolDefinitions, executeXvfbGuiTool } from "../tools/xvfb-gui.js";
@@ -43,6 +45,7 @@ export async function getAllToolDefinitions() {
         ...terminalToolDefinitions,
         ...sendFileToolDefinitions,
         ...userAskToolDefinitions,
+        ...secretToolDefinitions,
         ...userSayToolDefinitions,
         ...sessionSearchToolDefinitions,
         ...(listAgents().length ? consultAgentToolDefinitions : []),
@@ -52,7 +55,19 @@ export async function getAllToolDefinitions() {
     ];
 }
 
+// 모델이 쓴 {{secret:NAME}}을 실행 직전에만 값으로 바꾸고, 결과에 섞인 값은 자리표시자로 되돌린다.
 export async function executeTool(name, args, ctx = {}) {
+    try {
+        const prepared = prepareToolSecrets(name, args);
+        if (prepared.error) return { error: prepared.error };
+        const result = await runTool(name, prepared.args, prepared.env ? { ...ctx, secretEnv: prepared.env } : ctx);
+        return redactDeep(result);
+    } catch (err) {
+        return { error: redactText(err?.message || String(err)) };
+    }
+}
+
+async function runTool(name, args, ctx) {
     try {
         if (name === "file_read") return await executeFileRead(args, ctx);
         if (name === "file_patch") return await executeFilePatch(args, ctx);
@@ -64,6 +79,7 @@ export async function executeTool(name, args, ctx = {}) {
         }
         if (name === "send_file") return await executeSendFileTool(name, args, ctx);
         if (name === "user_ask") return await executeUserAskTool(name, args, ctx);
+        if (name === "secret_request") return await executeSecretRequest(name, args, ctx);
         if (name === "user_say") return await executeUserSayTool(args, ctx);
         if (name === "consult_agent") return await executeConsultAgent(name, args, ctx);
         if (name === "session_search") return await executeSessionSearchTool(name, args);
@@ -72,7 +88,7 @@ export async function executeTool(name, args, ctx = {}) {
         if (name === "xvfb_gui") return await executeXvfbGuiTool(name, args, ctx);
         return { error: `Unknown tool: ${name}` };
     } catch (err) {
-        return { error: err?.message || String(err) };
+        return { error: redactText(err?.message || String(err)) };
     }
 }
 

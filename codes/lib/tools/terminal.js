@@ -4,6 +4,7 @@ import { camofoxUser, camofoxEnv } from "../computer/camofox-user.js";
 import { USER_DIR, resolveAgentPath } from "../paths.js";
 import { isDockerRuntime } from "../runtime.js";
 import { terminalCwdParamDescription, terminalRunDescription } from "../path-labels.js";
+import { commandTouchesSecretStore } from "../secrets/store.js";
 
 function resolveCwd(cwd) {
     const resolved = resolveAgentPath(cwd);
@@ -207,7 +208,7 @@ function executeBackgroundTool(name, args, { maxChars } = {}) {
     return { error: `Unknown terminal tool: ${name}` };
 }
 
-export async function executeTerminalTool(name, args, { signal, agentId } = {}) {
+export async function executeTerminalTool(name, args, { signal, agentId, secretEnv } = {}) {
     if (!["terminal_run", "bg_status", "bg_list", "bg_kill"].includes(name)) {
         return { error: `Unknown terminal tool: ${name}` };
     }
@@ -225,9 +226,11 @@ export async function executeTerminalTool(name, args, { signal, agentId } = {}) 
 
     const command = args?.command?.trim();
     if (!command) return { error: "command is required" };
+    if (commandTouchesSecretStore(command)) return { error: "The secret vault files are off limits. Use {{secret:NAME}} placeholders instead." };
 
     const cwd = resolveCwd(args?.cwd);
-    const env = camofoxEnv({ ...process.env, HOME: isDockerRuntime() ? USER_DIR : process.env.HOME || USER_DIR });
+    // secretEnv: {{secret:NAME}}이 치환된 환경 변수. 이 명령에만 넘기고 출력은 레지스트리가 마스킹한다.
+    const env = camofoxEnv({ ...process.env, ...secretEnv, HOME: isDockerRuntime() ? USER_DIR : process.env.HOME || USER_DIR });
     // --user 생략한 camofox 호출이 웹 컴퓨터 뷰와 같은 봇 프로필을 쓰게 한다.
     if (agentId) env.CAMOFOX_CLI_USER = camofoxUser(agentId);
 

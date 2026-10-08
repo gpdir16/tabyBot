@@ -286,7 +286,7 @@ kbd {
     justify-content: center;
     width: 30px;
     height: 30px;
-    border-radius: var(--radius-s);
+    border-radius: var(--radius-pill);
     color: var(--text-secondary);
     transition:
         background var(--dur-1) var(--ease),
@@ -1185,6 +1185,10 @@ kbd {
     border-color: var(--accent);
     box-shadow: var(--focus-ring);
 }
+.ask-hint {
+    font-size: var(--fs-s);
+    color: var(--text-secondary);
+}
 .ask-send {
     display: inline-flex;
     align-items: center;
@@ -1243,7 +1247,6 @@ kbd {
     max-width: 760px;
     margin: 0 auto;
     background: var(--surface-2);
-    border: 1px solid var(--border);
     border-radius: var(--radius-pill);
     padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
     transition:
@@ -1418,6 +1421,7 @@ kbd {
     color: var(--text);
     padding: 5px 0;
     max-height: 200px;
+    align-content: center;
 }
 #composerInput::placeholder {
     color: var(--text-tertiary);
@@ -4603,15 +4607,6 @@ body.sb-collapsed .btn-menu {
     padding: 9px var(--sp-3);
     touch-action: manipulation;
 }
-.ask-input,
-.ask-send {
-    min-height: 44px;
-    height: 44px;
-}
-.ask-send {
-    width: 44px;
-}
-
 /* 설정(iOS): 목록 화면과 상세 화면 중 하나만 보인다. 상세는 목록 위로 오른쪽에서 밀려 들어온다 */
 .sp-view[data-view="root"] .sp-body,
 .sp-view[data-view="detail"] .sp-nav {
@@ -4734,11 +4729,6 @@ body.sb-collapsed .btn-menu {
 .set-group > .ext-row {
     min-height: 44px;
     padding: 0 var(--sp-4);
-}
-/* 이름 아래에 설명이 붙는 두 줄짜리 행은 위아래 숨 쉴 틈을 준다 */
-.set-group > .set-row:has(.set-desc),
-.set-group > .ext-row {
-    padding-block: var(--sp-2);
 }
 .set-group > * + *::before {
     left: 16px;
@@ -5425,10 +5415,9 @@ select {
     padding: var(--sp-1) 10px var(--sp-5);
 }
 #composer {
-    min-height: 48px;
-    padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-2);
+    padding: var(--sp-1) var(--sp-1) var(--sp-1);
     border-radius: 30px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 0 24px rgba(0, 0, 0, 1);
 }
 .composer-row {
     min-height: 44px;
@@ -5448,9 +5437,6 @@ select {
 }
 .chips {
     padding-bottom: var(--sp-2);
-}
-.btn {
-    min-height: 44px;
 }
 .key-row .btn-icon,
 .chip .chip-x {
@@ -5803,8 +5789,9 @@ select {
         display: none;
     }
 
-    body.kb-open:has(#composerInput:focus) {
-        background: var(--surface-2);
+    /* 키보드 위쪽 면과 같은 색(app.js의 syncKeyboardBackground가 --kb-bg로 넘긴다) */
+    body.kb-open {
+        background: var(--kb-bg, var(--bg));
     }
 
     /* 키보드가 열려 있을 때는 여백을 없애고 입력 바를 화면 끝에 딱 붙인다 */
@@ -5816,6 +5803,7 @@ select {
         border-left: 1px solid var(--border);
         border-right: 1px solid var(--border);
         border-bottom: 0;
+        padding-bottom: 0;
     }
     body.kb-open #composer:focus-within {
         border-color: var(--border);
@@ -6609,9 +6597,6 @@ body.viewer-open {
     .msg-row.assistant .bubble .md {
         font-size: var(--fs-t);
     }
-    #composer {
-        min-height: 44px;
-    }
     #composerInput {
         font-size: 15.5px;
     }
@@ -6629,7 +6614,7 @@ body.viewer-open {
     }
     .set-group > .set-row,
     .set-group > .ext-row {
-        min-height: 40px;
+        min-height: 44px;
     }
     .set-label,
     .provider-name,
