@@ -280,7 +280,7 @@
                         T.h("span", { class: "key-dot" }),
                         T.h("span", { text: loggedIn ? t("oauthLoggedIn") : t("oauthNotLoggedIn") }),
                     ]),
-                    inSettings ? null : T.h("button", { class: `btn${loggedIn ? " ghost" : " primary"}`, text: loginLabel, onclick: login }),
+                    ...(inSettings ? [] : [T.h("button", { class: `btn${loggedIn ? " ghost" : " primary"}`, text: loginLabel, onclick: login })]),
                 );
                 // 계정 행은 이미 묶음에 담겨 있다. 같은 묶음의 다음 행으로 붙인다.
                 if (inSettings) row.after(C.actionRow(loginLabel, login));
