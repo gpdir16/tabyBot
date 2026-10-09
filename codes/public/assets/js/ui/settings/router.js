@@ -93,8 +93,7 @@
         C.folderEditing = null;
         if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", agentId: o.folderAgent || null };
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
-        C.advOpen = null;
-        C.modelAdvOpen = false;
+        C.modelSub = null;
         C.keyEditing = false;
         C.credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;
@@ -171,9 +170,10 @@
     }
 
     /* 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다. */
-    function navigate(tab, agentId) {
+    async function navigate(tab, agentId) {
         // 이미 열려 있는 항목을 다시 눌렀다(데스크톱은 목록 열이 늘 보인다). 다시 그리면 열어 둔 편집 폼이 닫힌다.
         if (tab === C.openTab && (agentId || null) === (C.editingAgent || null)) return;
+        if (!(await C.confirmLeave())) return;
         try {
             if (C.openTab === "root") {
                 // 목록에서 상세로: 항목을 쌓아 두면 뒤로 가기가 목록으로 돌아온다.
@@ -203,6 +203,42 @@
     /* 페이지를 내린다. 히스토리/모바일 전환은 라우터가 담당한다. */
     function hide() {
         close({ updateUrl: false });
+    }
+
+    /* ── 저장하지 않은 입력을 둔 채 설정 밖으로 나가려 할 때 ──
+       설정 안에서 떠나는 길(뒤로 버튼·목록의 다른 항목·뒤로 제스처)은 각자 confirmLeave를 거친다.
+       여기서는 그 밖의 두 길, 브라우저의 뒤로 가기와 사이드바를 맡는다. */
+    let popRestoring = false; // 되돌려 놓으려고 스스로 일으킨 탐색(그 popstate는 흘려보낸다)
+
+    // 브라우저의 뒤로 가기(app.js의 popstate): 주소를 되돌려 놓고 버릴지 묻는다. 붙잡았으면 true.
+    function holdPop() {
+        if (popRestoring) {
+            popRestoring = false;
+            return true;
+        }
+        if (!C.openTab || page.hidden || !C.dirtyView()) return false;
+        popRestoring = true;
+        history.forward();
+        // 앞으로 갈 항목이 없으면 popstate가 오지 않는다. 다음 탐색까지 삼키지 않게 표시를 걷는다.
+        setTimeout(() => {
+            popRestoring = false;
+        }, 500);
+        void C.confirmLeave().then((ok) => {
+            if (ok) history.back();
+        });
+        return true;
+    }
+
+    // 사이드바의 행(에이전트·할 일·설정)을 눌러 다른 화면으로 가려 할 때: 먼저 묻고, 버리겠다고 하면 그 누름을 다시 보낸다.
+    function guardSidebar(e) {
+        if (!C.openTab || page.hidden || !C.dirtyView()) return;
+        const target = e.target.closest?.(".bot-row, .sb-row, #btnAddBot");
+        if (!target) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void C.confirmLeave().then((ok) => {
+            if (ok) target.click();
+        });
     }
 
     /* ── 낙관적 PUT ─────────────────────────────────────────── */
@@ -289,6 +325,7 @@
             page.replaceChildren();
             C.build();
         });
+        document.getElementById("sidebar").addEventListener("click", guardSidebar, true);
     }
 
     T.settingsUI = {
@@ -298,6 +335,7 @@
         hide,
         isOpen: () => !!C.openTab && !page.hidden,
         routeFromPath,
+        holdPop,
         // 아래 항목은 나중에 로드되는 모듈이 채우므로 쓰는 시점에 읽는다.
         get gesture() {
             return C.gesture;

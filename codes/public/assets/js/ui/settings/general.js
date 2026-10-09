@@ -119,16 +119,9 @@
 
         if (T.notifications?.canInstall()) {
             sec.append(
-                T.h("div", { class: "set-row" }, [
-                    T.h("div", { class: "set-label", text: t("installApp") }),
-                    T.h("button", {
-                        class: "btn ghost",
-                        text: t("install"),
-                        onclick() {
-                            T.notifications.promptInstall().then(() => C.build());
-                        },
-                    }),
-                ]),
+                C.actionRow(t("installApp"), () => {
+                    T.notifications.promptInstall().then(() => C.build());
+                }),
             );
         }
 
@@ -180,10 +173,9 @@
             sec.append(T.h("div", { class: "set-desc", text: t("noticesEmpty") }));
         } else {
             sec.append(T.h("div", { class: "nt-list nt-history" }, list.map(T.notices.buildRow)));
-            const clearBtn = T.h("button", {
-                class: "btn ghost",
-                text: t("noticesClear"),
-                async onclick() {
+            const clear = C.actionRow(
+                t("noticesClear"),
+                async () => {
                     const ok = await T.confirm({
                         title: t("noticesClearConfirmTitle"),
                         text: t("confirmDeleteText"),
@@ -191,14 +183,15 @@
                         danger: true,
                     });
                     if (!ok) return;
-                    clearBtn.disabled = true;
+                    clear.row.disabled = true;
                     T.notices.clearAll().catch((err) => {
-                        clearBtn.disabled = false;
+                        clear.row.disabled = false;
                         T.toast.show("error", T.api.errorText(err, t("saveFailed")));
                     });
                 },
-            });
-            sec.append(T.h("div", { class: "ext-add" }, [clearBtn]));
+                { danger: true, own: true },
+            );
+            sec.append(clear);
         }
         body.append(sec);
     }

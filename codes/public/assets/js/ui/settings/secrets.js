@@ -44,54 +44,37 @@
         return key ? `${t("saveFailed")}: ${t(key)}` : T.api.errorText(err, t("saveFailed"));
     }
 
+    // 확인을 받고 지운다. 지운 시크릿의 편집 화면이 열려 있었으면 같이 닫는다.
+    async function deleteSecret(sec) {
+        if (!(await C.confirmDelete(sec.name))) return;
+        try {
+            const r = await T.api.deleteSecret(sec.id);
+            C.secretsCache = r && Array.isArray(r.secrets) ? r.secrets : [];
+            if (C.secretEditing?.id === sec.id) C.secretEditing = null;
+            C.build();
+        } catch (err) {
+            T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+        }
+    }
+
     function secretRow(sec) {
-        const delBtn = T.h("button", {
-            class: "btn ghost",
-            text: t("delete"),
-            async onclick() {
-                if (!(await C.confirmDelete(sec.name))) return;
-                delBtn.disabled = true;
-                T.api
-                    .deleteSecret(sec.id)
-                    .then((r) => {
-                        C.secretsCache = r && Array.isArray(r.secrets) ? r.secrets : [];
-                        C.build();
-                    })
-                    .catch((err) => {
-                        delBtn.disabled = false;
-                        T.toast.show("error", T.api.errorText(err, t("saveFailed")));
-                    });
-            },
+        return C.itemRow({
+            name: sec.name,
+            badge: "••••••",
+            badgeClass: "ok",
+            onclick: () =>
+                C.openForm(() => {
+                    C.secretEditing = { mode: "edit", id: sec.id, name: sec.name };
+                }),
+            menu: () => [{ label: t("delete"), danger: true, defer: true, onSelect: () => deleteSecret(sec) }],
         });
-        const editBtn = T.h("button", {
-            class: "btn ghost",
-            text: t("edit"),
-            onclick() {
-                C.secretEditing = { mode: "edit", id: sec.id, name: sec.name };
-                C.build();
-            },
-        });
-        return T.h("div", { class: "ext-row" }, [
-            T.h("div", { class: "ext-main" }, [
-                T.h("div", { class: "ext-name" }, [
-                    T.h("span", { class: "ext-nm", text: sec.name }),
-                    T.h("span", { class: "ext-badge ok", text: "••••••" }),
-                ]),
-            ]),
-            T.h("div", { class: "ext-actions" }, [editBtn, delBtn]),
-        ]);
     }
 
     function secretForm() {
         const editing = C.secretEditing;
         const isNew = editing.mode === "new";
         const sec = isNew ? null : (C.secretsCache || []).find((x) => x.id === editing.id) || { id: editing.id, name: editing.name };
-        const close = () => {
-            C.secretEditing = null;
-            C.build();
-        };
-        const form = T.h("div", { class: "agent-editor ext-form" });
-        form.append(C.formHead(isNew ? t("addSecret") : sec.name));
+        const form = T.h("div", { class: "agent-editor" });
 
         const nameInput = T.h("input", {
             class: "input",
@@ -109,37 +92,30 @@
         const valueInput = valueRow.querySelector("input");
         form.append(C.fieldOf(t("secretValue"), valueRow, isNew ? t("secretValueDesc") : t("secretValueKeepDesc")));
 
-        const actions = T.h("div", { class: "editor-actions" });
-        const saveBtn = T.h("button", {
-            class: "btn primary",
-            text: t("save"),
-            async onclick() {
-                const name = nameInput.value.trim();
-                const value = valueInput.value;
-                if (!name) {
-                    nameInput.focus();
-                    return;
-                }
-                if (isNew && !value) {
-                    valueInput.focus();
-                    return;
-                }
-                saveBtn.disabled = true;
-                // 새 값을 입력하지 않았으면 value를 보내지 않아 기존 값이 유지된다.
-                const body = { name, ...(value ? { value } : {}) };
-                try {
-                    const r = isNew ? await T.api.createSecret(body) : await T.api.updateSecret(editing.id, body);
-                    C.secretsCache = r && Array.isArray(r.secrets) ? r.secrets : [];
-                    C.secretEditing = null;
-                    C.build();
-                } catch (err) {
-                    saveBtn.disabled = false;
-                    T.toast.show("error", saveErrorText(err));
-                }
-            },
+        C.headAction(t("save"), async () => {
+            const name = nameInput.value.trim();
+            const value = valueInput.value;
+            if (!name) {
+                nameInput.focus();
+                return;
+            }
+            if (isNew && !value) {
+                valueInput.focus();
+                return;
+            }
+            // 새 값을 입력하지 않았으면 value를 보내지 않아 기존 값이 유지된다.
+            const body = { name, ...(value ? { value } : {}) };
+            try {
+                const r = isNew ? await T.api.createSecret(body) : await T.api.updateSecret(editing.id, body);
+                C.secretsCache = r && Array.isArray(r.secrets) ? r.secrets : [];
+                C.secretEditing = null;
+                C.build();
+            } catch (err) {
+                T.toast.show("error", saveErrorText(err));
+            }
         });
-        actions.append(saveBtn, T.h("button", { class: "btn ghost", text: t("cancel"), onclick: close }));
-        form.append(actions);
+        if (!isNew) form.append(C.actionRow(t("delete"), () => deleteSecret(sec), { danger: true, own: true }));
+        C.trackForm(form);
         return form;
     }
 
@@ -154,19 +130,14 @@
             else if (!C.secretsCache.length) sec.append(T.h("div", { class: "set-desc", text: t("secretsEmpty") }));
             else for (const s of C.secretsCache) sec.append(secretRow(s));
             sec.append(
-                T.h("div", { class: "ext-add" }, [
-                    T.h(
-                        "button",
-                        {
-                            class: "btn ghost",
-                            onclick() {
-                                C.secretEditing = { mode: "new" };
-                                C.build();
-                            },
-                        },
-                        [T.icon("plus"), document.createTextNode(t("addSecret"))],
-                    ),
-                ]),
+                C.actionRow(
+                    t("addSecret"),
+                    () =>
+                        C.openForm(() => {
+                            C.secretEditing = { mode: "new" };
+                        }),
+                    { icon: "plus" },
+                ),
             );
         }
         body.append(sec);

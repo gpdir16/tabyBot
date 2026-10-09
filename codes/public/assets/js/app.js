@@ -507,8 +507,13 @@
     }
 
     // 뒤/앞 탐색: 경로로 화면 복원
-    window.addEventListener("popstate", () => {
+    window.addEventListener("popstate", (e) => {
         if (!booted) return;
+        // 설정에 저장하지 않은 입력이 있으면 주소를 되돌려 놓고 버릴지 묻는다. 뒤따르는 popstate 처리(사이드바)도 멈춘다.
+        if (T.settingsUI.holdPop()) {
+            e.stopImmediatePropagation();
+            return;
+        }
         renderRoute();
     });
 

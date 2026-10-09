@@ -55,12 +55,7 @@
             if (isOauthProvider(meta)) {
                 sec.append(oauthSection(provider.id));
             } else {
-                sec.append(
-                    T.h("div", { class: "set-row" }, [
-                        T.h("div", { class: "set-label", text: t("apiKey") }),
-                        T.h("div", { class: "set-control" }, [apiKeyRow(provider, meta)]),
-                    ]),
-                );
+                sec.append(...apiKeyRows(provider, meta));
             }
             sec.append(T.h("hr", { class: "divider" }));
         }
@@ -128,19 +123,24 @@
             box.append(T.h("div", { class: "empty-note", text: C.modelsLoading ? t("loadingModels") : t("autoModelNoRouting") }));
             return box;
         }
-        const list = T.h("div", { class: "models-list" });
         for (const model of routingModels) {
-            const input = T.h("input", { type: "checkbox", "aria-label": model.label || model.id });
-            input.checked = selected.has(model.id);
-            input.addEventListener("change", () => {
-                const next = new Set(selected);
-                if (input.checked) next.add(model.id);
-                else next.delete(model.id);
-                C.put({ provider: { autoModelCandidates: [...next] } }).then(() => C.build());
-            });
-            list.append(T.h("label", { class: "set-row" }, [T.h("span", { text: model.label || model.id }), input]));
+            const label = model.label || model.id;
+            box.append(
+                C.labeledRow(
+                    label,
+                    C.switchEl(
+                        selected.has(model.id),
+                        (on) => {
+                            const next = new Set(selected);
+                            if (on) next.add(model.id);
+                            else next.delete(model.id);
+                            C.put({ provider: { autoModelCandidates: [...next] } }).then(() => C.build());
+                        },
+                        label,
+                    ),
+                ),
+            );
         }
-        box.append(list);
         return box;
     }
 
@@ -200,6 +200,8 @@
 
     function oauthSection(kind, rerender) {
         const refresh = rerender || C.build;
+        // 설정에서는 로그인이 계정 행 아래의 동작 행이다. 온보딩(rerender를 넘긴다)은 제 배치대로 같은 줄의 버튼을 쓴다.
+        const inSettings = !rerender;
         const box = T.h("div", { class: "set-section" });
 
         if (C.oauthPending && C.oauthPending.kind === kind) {
@@ -260,32 +262,28 @@
             .authStatus()
             .then((st) => {
                 const loggedIn = Boolean(st?.[kind]);
+                const loginLabel = loggedIn ? t("oauthRelogin") : t("oauthLogin");
+                const login = () => {
+                    T.api
+                        .startOauth(kind)
+                        .then((flow) => {
+                            if (!flow?.userCode || !flow.deviceUrl) throw new Error(t("oauthFailed"));
+                            C.oauthPending = { kind, userCode: flow.userCode, deviceUrl: flow.deviceUrl };
+                            refresh();
+                        })
+                        .catch((err) => {
+                            T.toast.show("error", T.api.errorText(err, t("oauthFailed")));
+                        });
+                };
                 account.replaceChildren(
                     T.h("div", { class: `key-state${loggedIn ? "" : " off"}` }, [
                         T.h("span", { class: "key-dot" }),
                         T.h("span", { text: loggedIn ? t("oauthLoggedIn") : t("oauthNotLoggedIn") }),
                     ]),
-                    T.h(
-                        "button",
-                        {
-                            class: `btn${loggedIn ? " ghost" : " primary"}`,
-                            text: loggedIn ? t("oauthRelogin") : t("oauthLogin"),
-                            onclick() {
-                                T.api
-                                    .startOauth(kind)
-                                    .then((flow) => {
-                                        if (!flow?.userCode || !flow.deviceUrl) throw new Error(t("oauthFailed"));
-                                        C.oauthPending = { kind, userCode: flow.userCode, deviceUrl: flow.deviceUrl };
-                                        refresh();
-                                    })
-                                    .catch((err) => {
-                                        T.toast.show("error", T.api.errorText(err, t("oauthFailed")));
-                                    });
-                            },
-                        },
-                        [],
-                    ),
+                    inSettings ? null : T.h("button", { class: `btn${loggedIn ? " ghost" : " primary"}`, text: loginLabel, onclick: login }),
                 );
+                // 계정 행은 이미 묶음에 담겨 있다. 같은 묶음의 다음 행으로 붙인다.
+                if (inSettings) row.after(C.actionRow(loginLabel, login));
             })
             .catch(() => {
                 account.replaceChildren(T.h("div", { class: "set-desc", text: t("offlineNote") }));
@@ -320,57 +318,50 @@
         return input;
     }
 
-    function apiKeyRow(provider, meta) {
-        const wrap = T.h("div", { class: "key-wrap" });
-
+    // API 키 묶음에 들어갈 행들과, 그 아래에 붙는 "키 발급" 링크.
+    function apiKeyRows(provider, meta) {
+        const rows = [];
         if (provider.apiKeySet && !C.keyEditing) {
-            // 저장된 키가 있으면 마스킹 상태로 보여주고, "교체"를 눌렀을 때만 입력칸을 연다.
-            wrap.append(
-                T.h("div", { class: "key-saved-row" }, [
-                    T.h("div", { class: "key-state" }, [T.icon("check", "icon-sm"), t("apiKeySaved")]),
-                    T.h("button", {
-                        class: "btn ghost",
-                        text: t("apiKeyReplace"),
-                        onclick() {
-                            C.keyEditing = true;
-                            C.build();
-                        },
-                    }),
-                ]),
+            // 저장된 키가 있으면 값은 보여 주지 않는다. 행을 눌렀을 때만 입력칸을 연다.
+            rows.push(
+                C.navRow(t("apiKey"), t("apiKeySaved"), () => {
+                    C.keyEditing = true;
+                    C.build();
+                }),
             );
         } else {
-            const row = C.secretInput({
-                placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
-                aria: t("apiKey"),
-                onCommit(input) {
-                    const v = input.trim();
-                    if (!v) return;
-                    C.put({ provider: { apiKey: v } }).then((ok) => {
-                        if (ok) {
-                            C.keyEditing = false;
-                            resetModels();
-                            C.build();
-                        }
-                    });
-                },
-            });
-            if (provider.apiKeySet) {
-                // 교체 취소: 입력칸과 같은 줄에 둔다.
-                row.append(
-                    T.h("button", {
-                        class: "btn ghost",
-                        text: t("cancel"),
-                        onclick() {
-                            C.keyEditing = false;
-                            C.build();
+            rows.push(
+                C.labeledRow(
+                    t("apiKey"),
+                    C.secretInput({
+                        placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
+                        aria: t("apiKey"),
+                        onCommit(input) {
+                            const v = input.trim();
+                            if (!v) return;
+                            C.put({ provider: { apiKey: v } }).then((ok) => {
+                                if (ok) {
+                                    C.keyEditing = false;
+                                    resetModels();
+                                    C.build();
+                                }
+                            });
                         },
+                    }),
+                ),
+            );
+            if (provider.apiKeySet) {
+                // 교체를 그만두고 저장된 키를 그대로 쓴다.
+                rows.push(
+                    C.actionRow(t("cancel"), () => {
+                        C.keyEditing = false;
+                        C.build();
                     }),
                 );
             }
-            wrap.append(row);
         }
         if (meta.keysUrl) {
-            wrap.append(
+            rows.push(
                 T.h("a", {
                     class: "key-hint",
                     href: meta.keysUrl,
@@ -380,7 +371,7 @@
                 }),
             );
         }
-        return wrap;
+        return rows;
     }
 
     function modelsKey(provider) {
@@ -469,21 +460,26 @@
                             },
                         },
                         [
-                            T.h("span", { class: "radio-dot" }),
+                            // 이름 아래 한 줄에 id와 컨텍스트 크기를 적는다. 비전 지원 모델은 그 줄 끝에 눈 아이콘이 붙는다.
                             T.h("div", { class: "model-main" }, [
                                 T.h("div", { class: "model-label", text: m.label || m.id }),
-                                T.h("div", { class: "model-id", text: m.id }),
+                                T.h("div", { class: "model-sub" }, [
+                                    T.h("span", {
+                                        class: "model-id",
+                                        text:
+                                            Number.isFinite(Number(m.contextWindow)) && Number(m.contextWindow) > 0
+                                                ? `${m.id} · ${Number(m.contextWindow).toLocaleString()}`
+                                                : m.id,
+                                    }),
+                                    m.supportsVision === true
+                                        ? T.h("span", { class: "model-vision", "data-tip": t("visionSupported"), "aria-label": t("vision") }, [
+                                              T.icon("eye"),
+                                          ])
+                                        : null,
+                                ]),
                             ]),
-                            // 비전 지원 모델만 배지를 표시: 없으면 텍스트 전용
-                            m.supportsVision === true
-                                ? T.h("span", { class: "model-vision", "data-tip": t("visionSupported") }, [
-                                      T.icon("eye"),
-                                      T.h("span", { text: t("vision") }),
-                                  ])
-                                : T.h("span", { class: "model-vision off", "data-tip": t("visionUnsupported") }, [T.icon("eye-off")]),
-                            Number.isFinite(Number(m.contextWindow)) && Number(m.contextWindow) > 0
-                                ? T.h("span", { class: "model-ctx", text: Number(m.contextWindow).toLocaleString() })
-                                : null,
+                            // 고른 모델 오른쪽에 체크가 붙는다(프로바이더 목록과 같다).
+                            selected ? T.icon("check", "sel-check") : null,
                         ],
                     ),
                 );
@@ -517,9 +513,10 @@
         ]);
     }
 
-    C.modelAdvOpen = false; // 모델 탭의 고급 설정 펼침
+    C.modelSub = null; // 모델 탭에서 한 단계 더 들어간 화면: "pick"(모델 고르기) | "adv"(고급 설정) | null
 
-    /* ── 모델 페이지 ────────────────────────────────────────── */
+    /* ── 모델 페이지 ──────────────────────────────────────────
+       첫 화면에는 지금 모델과 추론 깊이만 있다. 모델 목록과 고급 설정은 행을 누르면 들어가는 다음 화면이다. */
     function buildModel(body) {
         const s = state.state.settings;
         if (!s) {
@@ -527,35 +524,34 @@
             return;
         }
         const sec = T.h("div", { class: "set-section" });
+        body.append(sec);
         const provider = s.provider || {};
         const key = modelsKey(provider);
-        if (provider.id === "github-copilot") {
-            sec.append(autoSessionSettings(provider), T.h("hr", { class: "divider" }));
-        }
         const ready = C.modelsCache && C.modelsCache.key === key;
         if (!ready && !C.modelsLoading && C.modelsFailedKey !== key) void loadModels(provider);
 
-        if (ready) {
-            sec.append(modelsPanel(provider));
-            if (!C.modelsCache.models.length) sec.append(manualModelInput(provider));
-        } else if (C.modelsFailedKey === key) {
-            sec.append(manualModelInput(provider));
-            sec.append(
-                T.h("button", {
-                    class: "btn ghost",
-                    text: t("retry"),
-                    onclick() {
-                        C.modelsFailedKey = null;
-                        C.build();
-                    },
-                }),
-            );
-        } else {
-            sec.append(T.h("div", { class: "empty-note", text: t("loadingModels") }));
+        if (C.modelSub === "pick") {
+            buildModelPick(sec, provider, ready, key);
+            return;
+        }
+        if (C.modelSub === "adv") {
+            buildModelAdvanced(sec, s);
+            return;
         }
 
+        if (provider.id === "github-copilot") {
+            sec.append(autoSessionSettings(provider), T.h("hr", { class: "divider" }));
+        }
+        const sub = (which) => () =>
+            C.openForm(() => {
+                C.modelSub = which;
+            });
+        const current = (ready && C.modelsCache.models.find((m) => m.id === provider.model)?.label) || provider.model || "";
+        const modelRow = C.navRow(t("model"), current, sub("pick"));
+        // 자동 모드에서는 모델을 직접 고르지 않는다.
+        modelRow.disabled = provider.autoMode === true;
+        sec.append(modelRow);
         if (Array.isArray(s.thinkingLevels) && s.thinkingLevels.length) {
-            sec.append(T.h("hr", { class: "divider" }));
             sec.append(
                 T.h("div", { class: "set-row" }, [
                     T.h("div", { class: "set-label", text: t("thinkingLevel") }),
@@ -568,33 +564,35 @@
                 ]),
             );
         }
+        sec.append(T.h("hr", { class: "divider" }), C.navRow(t("advanced"), "", sub("adv")));
+    }
 
-        sec.append(T.h("hr", { class: "divider" }));
+    // 모델 고르기 화면: 검색과 전체 목록. 목록을 받지 못했으면 직접 입력한다.
+    function buildModelPick(sec, provider, ready, key) {
+        if (ready) {
+            sec.append(modelsPanel(provider));
+            if (!C.modelsCache.models.length) sec.append(manualModelInput(provider));
+        } else if (C.modelsFailedKey === key) {
+            sec.append(manualModelInput(provider));
+            sec.append(
+                C.actionRow(t("retry"), () => {
+                    C.modelsFailedKey = null;
+                    C.build();
+                }),
+            );
+        } else {
+            sec.append(T.h("div", { class: "empty-note", text: t("loadingModels") }));
+        }
+    }
 
-        // 고급: 컨텍스트 한도와 모델 전환 시 오염 방지 옵션
-        const mAdvPanel = T.h("div", { class: "adv-panel" });
-        mAdvPanel.hidden = !C.modelAdvOpen;
-        const mAdvBtn = T.h(
-            "button",
-            {
-                type: "button",
-                class: "adv-toggle",
-                "aria-expanded": String(C.modelAdvOpen),
-                onclick() {
-                    C.modelAdvOpen = !C.modelAdvOpen;
-                    mAdvBtn.setAttribute("aria-expanded", String(C.modelAdvOpen));
-                    mAdvPanel.hidden = !C.modelAdvOpen;
-                },
-            },
-            [T.icon("chevron", "icon-sm"), T.h("span", { text: t("advanced") })],
-        );
-
+    // 고급 설정 화면: 컨텍스트 한도와 모델 전환 시 오염 방지 옵션
+    function buildModelAdvanced(sec, s) {
         // 컨텍스트 채움 한도: 이 비율부터 오래된 대화를 요약으로 압축한다.
         // 옵션에는 현재 모델 윈도우 기준 실제 압축 시작 토큰 수를 함께 표시한다.
         const ctxPct = Number(s.contextTriggerPercent) || 75;
         const ctxWindow = Number(s.contextWindow) || 128000;
         const ctxLabel = (n) => `${n}% (~${Math.round((ctxWindow * Number(n)) / 100).toLocaleString()})`;
-        mAdvPanel.append(
+        sec.append(
             T.h("div", { class: "set-row" }, [
                 T.h("div", { class: "set-label", text: t("ctxFillLimit") }),
                 C.settingSelect(
@@ -615,7 +613,7 @@
         );
 
         // 모델이 바뀌면 모든 봇의 세션 압축 여부를 물어본다(실행은 사용자 확인 후).
-        mAdvPanel.append(
+        sec.append(
             T.h("div", { class: "set-row" }, [
                 T.h("div", { class: "set-label", text: t("compressOnModelChange") }),
                 C.switchEl(s.compressOnModelChange, (v) => C.put({ compressOnModelChange: v }), t("compressOnModelChange")),
@@ -627,45 +625,30 @@
         // 기록 재작성 + LLM 호출이 드는 작업이므로 확인 대화상자를 거친다.
         // 진행 상태(sessionsCompressing)는 서버가 SSE로 알려 새로고침해도 유지된다.
         const compressing = Boolean(s.sessionsCompressing);
-        const compressAllBtn = T.h("button", {
-            class: "btn ghost",
-            text: compressing ? t("compressing") : t("compressAllNow"),
-            disabled: compressing,
-            async onclick() {
-                if (compressing) return;
-                const ok = await T.confirm({
-                    title: t("compressAllConfirmTitle"),
-                    text: t("compressAllNowDesc"),
-                    confirmLabel: t("compressAllConfirmButton"),
+        const compressRow = C.actionRow(compressing ? t("compressing") : t("compressAllNow"), async () => {
+            const ok = await T.confirm({
+                title: t("compressAllConfirmTitle"),
+                text: t("compressAllNowDesc"),
+                confirmLabel: t("compressAllConfirmButton"),
+            });
+            if (!ok) return;
+            compressRow.disabled = true;
+            compressRow.querySelector(".act-label").textContent = t("compressing");
+            T.api
+                .compressAllSessions()
+                .then((r) => {
+                    const n = Number(r?.compressed) || 0;
+                    const f = Number(r?.failed) || 0;
+                    if (f) T.toast.show("warn", t("compressAllPartial", { n, f }));
+                    else if (!n) T.toast.show("info", t("compressAllNone"));
+                    else T.toast.show("info", t("compressAllDone", { n }));
+                })
+                .catch((err) => {
+                    T.toast.show("error", T.api.errorText(err, t("compressAllFailed")));
                 });
-                if (!ok) return;
-                compressAllBtn.disabled = true;
-                compressAllBtn.textContent = t("compressing");
-                T.api
-                    .compressAllSessions()
-                    .then((r) => {
-                        const n = Number(r?.compressed) || 0;
-                        const f = Number(r?.failed) || 0;
-                        if (f) T.toast.show("warn", t("compressAllPartial", { n, f }));
-                        else if (!n) T.toast.show("info", t("compressAllNone"));
-                        else T.toast.show("info", t("compressAllDone", { n }));
-                    })
-                    .catch((err) => {
-                        T.toast.show("error", T.api.errorText(err, t("compressAllFailed")));
-                    });
-            },
         });
-        mAdvPanel.append(
-            T.h("div", { class: "set-row" }, [
-                T.h("div", { class: "set-label", text: t("compressAllNow") }),
-                T.h("div", { class: "set-control" }, [compressAllBtn]),
-            ]),
-            T.h("div", { class: "set-desc", text: t("compressAllNowDesc") }),
-        );
-
-        sec.append(mAdvBtn, mAdvPanel);
-
-        body.append(sec);
+        compressRow.disabled = compressing;
+        sec.append(compressRow, T.h("div", { class: "set-desc", text: t("compressAllNowDesc") }));
     }
 
     C.buildProvider = buildProvider;
