@@ -56,14 +56,14 @@
             "button",
             {
                 type: "button",
-                class: "set-row td-nav-row",
+                class: "set-row nav-row",
                 onclick() {
                     C.pullFields();
                     detailView = view;
                     C.build();
                 },
             },
-            [T.h("span", { class: "set-label", text: label }), T.h("span", { class: "td-nav-val", text: value }), T.icon("chevron", "td-nav-chev")],
+            [T.h("span", { class: "set-label", text: label }), T.h("span", { class: "nav-val", text: value }), T.icon("chevron", "nav-chev")],
         );
     }
 

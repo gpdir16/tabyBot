@@ -32,16 +32,55 @@
         ],
     ];
 
-    // 편집 폼이 열려 있는가(상세에서 한 단계 더 들어간 화면).
+    // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
+    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub"];
+
     function formOpen() {
-        return !!(C.folderEditing || C.skillEditing || C.mcpEditing || C.secretEditing);
+        return FORM_KEYS.some((k) => C[k]);
+    }
+
+    function clearForms() {
+        for (const k of FORM_KEYS) C[k] = null;
     }
 
     function closeForm() {
-        C.folderEditing = null;
-        C.skillEditing = null;
-        C.mcpEditing = null;
-        C.secretEditing = null;
+        clearForms();
+        build();
+    }
+
+    // 폼을 잠깐 닫은 것으로 치고 그 밑의 상세 화면을 그린다.
+    function viewUnderForm() {
+        const saved = FORM_KEYS.map((k) => C[k]);
+        clearForms();
+        const view = buildView();
+        FORM_KEYS.forEach((k, i) => {
+            C[k] = saved[i];
+        });
+        return view;
+    }
+
+    /* ── 저장하지 않고 떠나기 ────────────────────────────────
+       편집 화면은 입력이 처음과 달라졌는지 알려 준다(components.js의 trackForm). 달라진 채로 떠나려 하면 버릴지 묻는다. */
+    function liveViews() {
+        return [...page.querySelectorAll(".sp-view:not(.sp-leaving):not(.col-out)")];
+    }
+
+    function dirtyView() {
+        return liveViews().some((v) => v.spDirty?.());
+    }
+
+    // 떠나도 되면 true. 버리겠다고 하면 그 입력은 더 묻지 않는다.
+    async function confirmLeave() {
+        if (!dirtyView()) return true;
+        const ok = await T.confirm({ title: t("unsavedTitle"), text: t("unsavedText"), confirmLabel: t("unsavedDiscard"), danger: true });
+        if (ok) for (const v of liveViews()) v.spDirty = null;
+        return ok;
+    }
+
+    // 다른 편집 화면을 연다(목록의 행·추가 행). 열려 있던 폼에 저장하지 않은 입력이 있으면 먼저 묻는다.
+    async function openForm(set) {
+        if (!(await confirmLeave())) return;
+        await set();
         build();
     }
 
@@ -51,6 +90,8 @@
         if (C.skillEditing) return C.skillEditing.mode === "new" ? t("addSkill") : C.skillEditing.name;
         if (C.mcpEditing) return C.mcpEditing.mode === "new" ? t("addMcpServer") : C.mcpEditing.name;
         if (C.secretEditing) return C.secretEditing.mode === "new" ? t("addSecret") : C.secretEditing.name;
+        if (C.credsEditing) return t(C.credsEditing === "password" ? "authPassword" : "authUsername");
+        if (C.modelSub) return t(C.modelSub === "adv" ? "advanced" : "model");
         return "";
     }
 
@@ -119,6 +160,41 @@
         ]);
     }
 
+    // 탭 id → 본문을 그리는 함수의 이름. 함수들은 나중에 로드되는 모듈이 채우므로 쓰는 시점에 읽는다.
+    const BUILDERS = {
+        general: "buildGeneral",
+        folders: "buildFolders",
+        notices: "buildNotices",
+        provider: "buildProvider",
+        model: "buildModel",
+        account: "buildAccount",
+        selfimprovement: "buildSelfImprovement",
+        skills: "buildSkills",
+        mcp: "buildMcp",
+        secrets: "buildSecrets",
+        agents: "buildAgents",
+    };
+
+    // 탭의 본문을 그리고, 탭이 채워 넣은 것(components.js의 viewSlot)을 화면에 건다:
+    // 저장 버튼은 탐색 바 오른쪽에 놓고, 입력이 달라졌는지 알려 주는 함수는 돌려준다(없으면 null).
+    function fillBody(tab, head, body) {
+        C.viewSlot = {};
+        C[BUILDERS[tab]]?.(body);
+        groupRows(body);
+        const { action, dirty } = C.viewSlot;
+        C.viewSlot = {};
+        if (action) {
+            head.append(action);
+            // 저장할 것이 생기기 전에는 꺼 둔다. 저장하는 동안에는 버튼이 스스로 꺼져 있다(components.js의 headAction).
+            action.sync = () => {
+                if (!action.busy) action.disabled = !!dirty && !dirty();
+            };
+            for (const type of ["input", "change", "click"]) body.addEventListener(type, action.sync);
+            action.sync();
+        }
+        return dirty || null;
+    }
+
     // mark: 목록에서 강조할 항목({ tab, agentId }). 데스크톱의 목록 열이 옆에 열린 상세를 가리킬 때 쓴다.
     function buildView(tab = C.openTab, agentId = C.editingAgent, mark = null) {
         const title = T.h("div", { class: "sp-title", text: tabTitle(tab, agentId) });
@@ -149,8 +225,9 @@
                 {
                     class: "btn-icon sp-back",
                     "aria-label": t("back"),
-                    onclick(e) {
+                    async onclick(e) {
                         const level = e.currentTarget.closest(".sp-view")?.dataset.level;
+                        if (!(await confirmLeave())) return;
                         if (level === "2") {
                             closeForm();
                             return;
@@ -169,25 +246,14 @@
         ]);
 
         const body = T.h("div", { class: "sp-body" });
-        if (tab === "general") C.buildGeneral(body);
-        else if (tab === "folders") C.buildFolders(body);
-        else if (tab === "notices") C.buildNotices(body);
-        else if (tab === "provider") C.buildProvider(body);
-        else if (tab === "model") C.buildModel(body);
-        else if (tab === "account") C.buildAccount(body);
-        else if (tab === "selfimprovement") C.buildSelfImprovement(body);
-        else if (tab === "skills") C.buildSkills(body);
-        else if (tab === "mcp") C.buildMcp(body);
-        else if (tab === "secrets") C.buildSecrets(body);
-        else if (tab === "agents") C.buildAgents(body);
-        groupRows(body);
+        const dirty = fillBody(tab, head, body);
 
         // 깊이: 목록 0, 상세 1, 편집 폼 2. 깊이가 달라지면 화면이 밀려 들어오고 나간다.
         // (폼 여부는 본문을 그린 뒤에 본다. 지워진 대상의 폼은 그리는 중에 닫힌다.)
         const form = tab !== "root" && formOpen();
         if (form) title.textContent = formTitle();
         const level = tab === "root" ? 0 : form ? 2 : 1;
-        return T.h(
+        const view = T.h(
             "div",
             {
                 class: "sp-view",
@@ -195,11 +261,13 @@
             },
             [head, T.h("div", { class: "sp-main" }, [buildNav(mark ? mark.tab : tab, mark ? mark.agentId : agentId), body])],
         );
+        view.spDirty = dirty;
+        return view;
     }
 
     // 이어진 설정 행들을 둥근 묶음(.set-group) 하나로 감싼다. 탭마다 행을 그냥 늘어놓아도 묶음 목록이 된다.
     function groupRows(root) {
-        for (const box of [root, ...root.querySelectorAll(".set-section, .agent-editor, .adv-panel")]) {
+        for (const box of [root, ...root.querySelectorAll(".set-section, .agent-editor")]) {
             let run = null;
             for (const el of [...box.children]) {
                 if (el.matches(".set-row, .ext-row")) {
@@ -282,13 +350,7 @@
         if (C.openTab !== "root") {
             // 폼이 열려 있으면 폼을 먼저 그린다(지워진 대상의 폼은 그리는 중에 닫힌다).
             const top = buildView();
-            if (top.dataset.level === "2") {
-                // 폼을 잠깐 닫은 것으로 치고 그 밑의 상세 화면을 그린다.
-                const saved = [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing];
-                C.folderEditing = C.skillEditing = C.mcpEditing = C.secretEditing = null;
-                views.push(buildView());
-                [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing] = saved;
-            }
+            if (top.dataset.level === "2") views.push(viewUnderForm());
             views.push(top);
         }
         // 같은 열을 다시 그릴 때는 스크롤 위치를 지킨다.
@@ -349,16 +411,7 @@
             for (const v of views) if (v !== top) v.remove();
             top.classList.remove("sp-in-right", "sp-in-left");
             const fromForm = top.dataset.level === "2";
-            let under;
-            if (fromForm) {
-                // 폼을 잠깐 닫은 것으로 치고 상세 화면을 그린다.
-                const saved = [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing];
-                C.folderEditing = C.skillEditing = C.mcpEditing = C.secretEditing = null;
-                under = buildView();
-                [C.folderEditing, C.skillEditing, C.mcpEditing, C.secretEditing] = saved;
-            } else {
-                under = buildView("root", null);
-            }
+            const under = fromForm ? viewUnderForm() : buildView("root", null);
             page.prepend(under);
             if (fromForm) under.querySelector(".sp-body").scrollTop = leftScroll.get(under.dataset.key) || 0;
             else under.querySelector(".sp-nav").scrollTop = C.rootScroll;
@@ -371,13 +424,25 @@
                 settleView();
                 return;
             }
+            if (top.spDirty?.()) {
+                // 저장하지 않은 입력이 있다. 밀어낸 화면을 제자리에 두고 버릴지 묻는다.
+                under.remove();
+                C.viewBusy = false;
+                C.rebuildPending = false;
+                void confirmLeave().then((ok) => {
+                    if (!ok) return;
+                    if (fromForm) closeForm();
+                    else C.popToRoot();
+                });
+                return;
+            }
             // 이미 손가락을 따라 다 넘어왔으므로 애니메이션 없이 상태만 바꾼다.
             top.remove();
             C.viewBusy = false;
             C.rebuildPending = false;
             if (fromForm) {
                 // 깔아 둔 상세 화면이 그대로 지금 화면이 된다.
-                C.folderEditing = C.skillEditing = C.mcpEditing = C.secretEditing = null;
+                clearForms();
                 return;
             }
             C.openTab = "root";
@@ -386,15 +451,19 @@
         },
     };
 
-    // 입력 중 재렌더 방지: 시트 내부에 포커스가 있으면 스킵
+    // 입력 중 재렌더 방지: 시트 내부에 포커스가 있거나 저장하지 않은 입력이 있으면 스킵
     function rebuildIfIdle() {
         if (C.openTab == null) return;
+        if (dirtyView()) return;
         const ae = document.activeElement;
         if (ae && page.contains(ae) && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT")) return;
         build();
     }
 
     C.build = build;
+    C.dirtyView = dirtyView;
+    C.confirmLeave = confirmLeave;
+    C.openForm = openForm;
     C.gesture = gesture;
     C.rebuildIfIdle = rebuildIfIdle;
 })(window.Taby);

@@ -32,7 +32,7 @@
     // 이 화면들이 떠 있는 동안에는 뒤 화면을 움직이지 않는다.
     const BLOCKERS = ".ctx-layer, .nt-modal, .fv-overlay, .onb-page:not([hidden]), .onb-modal";
     // 가로 드래그를 스스로 쓰는 곳: 여기서 시작한 드래그는 화면 전환으로 보지 않는다(가장자리 제스처는 예외).
-    const OWN_DRAG = "input, textarea, select, [contenteditable], .computer-page, .xterm";
+    const OWN_DRAG = "input, textarea, select, [contenteditable], .computer-page, .xterm, .drag-handle";
 
     /* ── 공통 ───────────────────────────────────────────────── */
     function isMobile() {

@@ -7,8 +7,6 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
 
-    C.advOpen = null; // 에이전트 편집기의 고급 설정 펼침. null이면 페르소나 유무로 초기화
-
     function buildAgents(body) {
         if (C.editingAgent === "__new__") {
             body.append(agentEditor(null));
@@ -99,33 +97,12 @@
         return { row: C.labeledRow(t("agentColor"), swatches), value: () => choice };
     }
 
-    // 고급 설정(페르소나)을 접고 펼치는 영역. 페르소나는 선택 사항이다.
+    // 페르소나 칸: 머리말이 붙은 입력란 하나. 선택 사항이다.
     function buildPersonaSection(agent) {
-        if (C.advOpen === null) C.advOpen = Boolean(agent?.persona?.trim());
         const persona = T.h("textarea", { class: "textarea", placeholder: t("personaPlaceholder"), "aria-label": t("persona") });
         persona.value = agent ? agent.persona || "" : "";
         persona.addEventListener("keydown", (e) => e.stopPropagation());
-        const panel = T.h("div", { class: "adv-panel" }, [
-            C.fieldLabel(t("persona")),
-            persona,
-            T.h("div", { class: "set-desc", text: t("personaDesc") }),
-        ]);
-        panel.hidden = !C.advOpen;
-        const toggle = T.h(
-            "button",
-            {
-                type: "button",
-                class: "adv-toggle",
-                "aria-expanded": String(C.advOpen),
-                onclick() {
-                    C.advOpen = !C.advOpen;
-                    toggle.setAttribute("aria-expanded", String(C.advOpen));
-                    panel.hidden = !C.advOpen;
-                },
-            },
-            [T.icon("chevron", "icon-sm"), T.h("span", { text: t("advanced") })],
-        );
-        return { persona, nodes: [T.h("hr", { class: "divider" }), toggle, panel] };
+        return { persona, nodes: [T.h("hr", { class: "divider" }), C.fieldOf(t("persona"), persona, t("personaDesc"))] };
     }
 
     function saveErrorMessage(err) {
@@ -134,8 +111,7 @@
     }
 
     // 저장하고 화면을 맞춘다. 새 에이전트는 설정에 머물지 않고 그 에이전트의 채팅으로 바로 이동한다.
-    async function saveAgent({ agent, body, saveBtn }) {
-        saveBtn.disabled = true;
+    async function saveAgent(agent, body) {
         try {
             const r = agent ? await T.api.updateAgent(agent.id, body) : await T.api.createAgent(body);
             if (r && Array.isArray(r.agents)) {
@@ -155,13 +131,11 @@
             C.syncPath();
             C.build();
         } catch (err) {
-            saveBtn.disabled = false;
             T.toast.show("error", saveErrorMessage(err));
         }
     }
 
-    function deleteAgent(agent, delBtn) {
-        delBtn.disabled = true;
+    function deleteAgent(agent) {
         T.api
             .deleteAgent(agent.id)
             .then((r) => {
@@ -178,7 +152,6 @@
                 C.build();
             })
             .catch((err) => {
-                delBtn.disabled = false;
                 T.toast.show("error", err?.status === 400 ? t("lastBotTooltip") : T.api.errorText(err, t("saveFailed")));
             });
     }
@@ -201,40 +174,35 @@
         const personaSection = buildPersonaSection(agent);
         editor.append(...personaSection.nodes);
 
-        const actions = T.h("div", { class: "editor-actions" });
-        const saveBtn = T.h("button", {
-            class: "btn primary",
-            text: t("save"),
-            onclick() {
-                const n = name.value.trim();
-                if (!n) {
-                    name.focus();
-                    return;
-                }
-                const body = { name: n, persona: personaSection.persona.value, model: modelPicker.select.value, color: colorPicker.value() };
-                if (thinkingPicker) body.thinkingLevel = thinkingPicker.select.value;
-                void saveAgent({ agent, body, saveBtn });
-            },
+        C.headAction(t("save"), async () => {
+            const n = name.value.trim();
+            if (!n) {
+                name.focus();
+                return;
+            }
+            const body = { name: n, persona: personaSection.persona.value, model: modelPicker.select.value, color: colorPicker.value() };
+            if (thinkingPicker) body.thinkingLevel = thinkingPicker.select.value;
+            await saveAgent(agent, body);
         });
-        actions.append(saveBtn);
 
         // 마지막으로 남은 봇은 삭제할 수 없다.
         const botsCount = state.state.bots?.length || (state.state.settings?.agents?.length ?? 0);
-        if (!isNew && botsCount > 1) {
-            const delBtn = T.h("button", {
-                type: "button",
-                class: "btn ghost",
-                text: t("delete"),
-                async onclick() {
-                    if (await C.confirmDelete(agent.name)) deleteAgent(agent, delBtn);
+        if (!isNew) {
+            const del = C.actionRow(
+                t("delete"),
+                async () => {
+                    if (await C.confirmDelete(agent.name)) deleteAgent(agent);
                 },
-            });
-            actions.append(delBtn);
-        } else if (!isNew) {
-            actions.append(T.h("span", { class: "set-desc", text: t("lastBotTooltip") }));
+                { danger: true, own: true },
+            );
+            editor.append(del);
+            if (botsCount <= 1) {
+                del.row.disabled = true;
+                editor.append(T.h("div", { class: "set-desc", text: t("lastBotTooltip") }));
+            }
         }
 
-        editor.append(actions);
+        C.trackForm(editor, colorPicker.value);
         return editor;
     }
 
