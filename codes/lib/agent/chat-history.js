@@ -12,6 +12,7 @@ export {
 export { stripMarkdownForPreview, previewSnippetFromTurns, lastActivityAtFromTurns, markChatRead } from "./history/preview.js";
 export {
     loadChatHistory,
+    loadFullChatHistory,
     compressedSummaryTurn,
     replaceChatHistoryAfterCompression,
     extractSessionTextLines,

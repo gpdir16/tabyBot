@@ -8,6 +8,7 @@ import {
     conversationDir,
     lastActivityAtFromTurns,
     loadChatHistory,
+    loadFullChatHistory,
     markChatRead,
     previewSnippetFromTurns,
     stripMarkdownForPreview,
@@ -128,14 +129,14 @@ export function getConversationDetail(id) {
     if (!meta) return null;
     let turns = [];
     try {
-        turns = loadChatHistory(id);
+        turns = loadFullChatHistory(id);
     } catch {
         turns = [];
     }
     return { ...meta, turns: toDisplayTurns(turns) };
 }
 
-// 메시지 전문 검색: 모든 에이전트의 활성 세션에서 표시용 발화 텍스트를 찾는다.
+// 메시지 전문 검색: 모든 에이전트의 전체 세션(아카이브 포함)에서 표시용 발화 텍스트를 찾는다.
 // 반환 인덱스는 toDisplayTurns 기준: 클라이언트는 같은 순서로 턴을 받으므로
 // turnIndex/messageIndex로 곧장 그 행을 찾을 수 있다.
 export function searchMessages(query, { limit = 30 } = {}) {
@@ -147,7 +148,7 @@ export function searchMessages(query, { limit = 30 } = {}) {
     for (const agent of listAgents()) {
         let turns;
         try {
-            turns = toDisplayTurns(loadChatHistory(agent.uuid));
+            turns = toDisplayTurns(loadFullChatHistory(agent.uuid));
         } catch {
             continue;
         }

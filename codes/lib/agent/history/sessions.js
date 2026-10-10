@@ -19,6 +19,29 @@ export function loadChatHistory(chatId) {
     return readActiveSessionData(chatId).turns;
 }
 
+// 화면 표시용 전체 기록: 아카이브된 과거 세션 + 활성 세션을 시간순으로 합친다.
+// 모델 컨텍스트(loadChatHistory)는 활성 세션만 쓰고, 여기는 채팅 화면·검색 전용이다.
+export function loadFullChatHistory(chatId) {
+    const archived = listArchivedSessionFiles(chatId)
+        .slice()
+        .sort((a, b) => String(a.startedAt || "").localeCompare(String(b.startedAt || "")));
+    const turns = [];
+    // 압축이 이전 세션의 꼬리 턴을 새 세션 앞에 그대로 복사하므로,
+    // 합칠 때 완전히 같은 턴은 한 번만 넣는다.
+    const seen = new Set();
+    const pushAll = (list) => {
+        for (const t of list || []) {
+            const key = JSON.stringify(t);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            turns.push(t);
+        }
+    };
+    for (const s of archived) pushAll(readJsonFile(s.absolutePath, {}).turns);
+    pushAll(loadChatHistory(chatId));
+    return turns;
+}
+
 export function replaceChatHistory(chatId, turns) {
     if (!chatId) return;
     writeActiveSessionData(chatId, turns);
