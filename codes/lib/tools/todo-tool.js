@@ -313,7 +313,7 @@ const TODO_TOOL_HANDLERS = {
     },
 };
 
-export async function executeTodoTool(name, args, ctx = {}) {
+export function executeTodoTool(name, args, ctx = {}) {
     const agentId = ctx.agentId;
     if (!agentId) return { error: "no agent in this turn" };
     const handler = Object.hasOwn(TODO_TOOL_HANDLERS, name) ? TODO_TOOL_HANDLERS[name] : null;

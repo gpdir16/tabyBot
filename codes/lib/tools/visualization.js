@@ -103,7 +103,7 @@ const VALIDATORS = {
     "decision-tree": validateDecisionTreeConfig,
 };
 
-export async function executeVizTool(name, args) {
+export function executeVizTool(name, args) {
     if (name !== "viz_create") return { error: `Unknown viz tool: ${name}` };
 
     const template = args?.template;

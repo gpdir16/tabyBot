@@ -33,7 +33,7 @@ export async function createLlmClient(overrides = {}) {
         return {
             provider,
             modelMeta,
-            async complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+            complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
                 return codexComplete({
                     model: provider.model,
                     messages,
@@ -54,7 +54,7 @@ export async function createLlmClient(overrides = {}) {
         return {
             provider,
             modelMeta,
-            async complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+            complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
                 return grokComplete({
                     model: provider.model,
                     messages,
@@ -75,7 +75,7 @@ export async function createLlmClient(overrides = {}) {
         return {
             provider,
             modelMeta,
-            async complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+            complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
                 return githubCopilotComplete({
                     model: provider.autoMode ? "auto" : provider.model,
                     messages,
@@ -106,7 +106,7 @@ export async function createLlmClient(overrides = {}) {
     return {
         provider,
         modelMeta,
-        async complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+        complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
             return chatCompletions({
                 client,
                 model: provider.model,

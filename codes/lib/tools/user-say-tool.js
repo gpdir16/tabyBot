@@ -25,7 +25,7 @@ export const userSayToolDefinitions = [
     },
 ];
 
-export async function executeUserSayTool(args, ctx) {
+export function executeUserSayTool(args, ctx) {
     const text = String(args?.text ?? "").trim();
     if (!text) return { error: "text is required" };
 

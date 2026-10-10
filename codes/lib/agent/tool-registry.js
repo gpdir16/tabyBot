@@ -21,7 +21,7 @@ import { stopProactiveScheduler } from "../proactive.js";
 import { sanitizeTextForLlm } from "../llm/sanitize-messages.js";
 import { isDockerRuntime } from "../runtime.js";
 
-export async function initTools() {
+export function initTools() {
     // MCP 연결은 백그라운드로 한다. 죽은 서버 하나가 웹 UI 부팅을 막지 않게 한다.
     // 첫 턴의 getAllToolDefinitions이 같은 진행 중 sync를 await한다.
     void syncMcpServers();

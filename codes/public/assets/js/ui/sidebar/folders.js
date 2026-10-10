@@ -258,6 +258,26 @@
     // 밑줄 애니메이션과 가로 스크롤 위치가 끊기지 않게 한다.
     let tabsSig = null;
 
+    // 활성 표시와 배지를 탭마다 제자리에서 갱신한다. 바뀐 게 하나라도 있으면 true.
+    function syncTabs(active, counts) {
+        let moved = false;
+        for (const tab of tabsEl.querySelectorAll(".sb-tab")) {
+            const on = tab.dataset.folder === active;
+            if (tab.classList.contains("active") !== on) moved = true;
+            tab.classList.toggle("active", on);
+            tab.setAttribute("aria-selected", String(on));
+            const n = counts.get(tab.dataset.folder) || 0;
+            const badge = tab.querySelector(".sb-tab-count");
+            const text = n > 99 ? "99+" : String(n);
+            if (badge.hidden !== !n || (n && badge.textContent !== text)) {
+                badge.hidden = !n;
+                badge.textContent = n ? text : "";
+                moved = true;
+            }
+        }
+        return moved;
+    }
+
     function renderTabs() {
         if (!tabsEl) return;
         const folders = state.state.folders || [];
@@ -288,21 +308,7 @@
         }
         const active = activeFolderId();
         // 활성 표시와 배지는 제자리에서 갱신한다. 배지가 생기면 탭 폭이 바뀌므로 밑줄도 다시 맞춘다.
-        let moved = false;
-        for (const tab of tabsEl.querySelectorAll(".sb-tab")) {
-            const on = tab.dataset.folder === active;
-            if (tab.classList.contains("active") !== on) moved = true;
-            tab.classList.toggle("active", on);
-            tab.setAttribute("aria-selected", String(on));
-            const n = counts.get(tab.dataset.folder) || 0;
-            const badge = tab.querySelector(".sb-tab-count");
-            const text = n > 99 ? "99+" : String(n);
-            if (badge.hidden !== !n || (n && badge.textContent !== text)) {
-                badge.hidden = !n;
-                badge.textContent = n ? text : "";
-                moved = true;
-            }
-        }
+        const moved = syncTabs(active, counts);
         if (rebuilt || moved) placeTabIndicator(!rebuilt);
     }
 

@@ -83,7 +83,7 @@ class StreamAccumulator {
     }
 }
 
-export async function chatCompletions({
+export function chatCompletions({
     client,
     model,
     messages,

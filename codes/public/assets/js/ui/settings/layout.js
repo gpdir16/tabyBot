@@ -308,21 +308,7 @@
         // 모바일 목록은 떠날 때 기억해 둔 위치로, 그 밖에는 직전 화면의 목록 위치로 되돌린다.
         const scrollNav = view.dataset.view === "root" && !sameKey ? C.rootScroll : prev?.querySelector(".sp-nav")?.scrollTop || 0;
         if (anim) {
-            // 얕아질 때 드러나는 화면은 떠날 때 보던 위치 그대로 나타난다.
-            const back = anim === "pop" ? leftScroll.get(view.dataset.key) || 0 : 0;
-            if (anim === "push") leftScroll.set(prev.dataset.key, prev.querySelector(".sp-body")?.scrollTop || 0);
-            prev.classList.add("sp-leaving", anim === "push" ? "sp-out-left" : "sp-out-right");
-            view.classList.add(anim === "push" ? "sp-in-right" : "sp-in-left");
-            // 위에 놓이는 쪽이 뒤에 온다: 들어갈 때는 새 화면이, 나올 때는 옛 화면이 위다.
-            if (anim === "push") page.append(view);
-            else page.prepend(view);
-            if (back) view.querySelector(".sp-body").scrollTop = back;
-            C.viewBusy = true;
-            C.viewTimer = setTimeout(() => {
-                prev.remove();
-                view.classList.remove("sp-in-right", "sp-in-left");
-                settleView();
-            }, VIEW_MS);
+            animateView(anim, prev, view);
         } else {
             C.viewBusy = false;
             C.rebuildPending = false;
@@ -337,6 +323,26 @@
 
     // 더 깊은 화면으로 들어갈 때 떠난 화면의 스크롤 위치(화면 key → scrollTop).
     const leftScroll = new Map();
+
+    // 깊이가 달라질 때 옛 화면이 밀려 나가고 새 화면이 밀려 들어오는 전환을 시작한다.
+    // 애니메션이 끝나면 settleView()가 이어 붙인다.
+    function animateView(anim, prev, view) {
+        // 얕아질 때 드러나는 화면은 떠날 때 보던 위치 그대로 나타난다.
+        const back = anim === "pop" ? leftScroll.get(view.dataset.key) || 0 : 0;
+        if (anim === "push") leftScroll.set(prev.dataset.key, prev.querySelector(".sp-body")?.scrollTop || 0);
+        prev.classList.add("sp-leaving", anim === "push" ? "sp-out-left" : "sp-out-right");
+        view.classList.add(anim === "push" ? "sp-in-right" : "sp-in-left");
+        // 위에 놓이는 쪽이 뒤에 온다: 들어갈 때는 새 화면이, 나올 때는 옛 화면이 위다.
+        if (anim === "push") page.append(view);
+        else page.prepend(view);
+        if (back) view.querySelector(".sp-body").scrollTop = back;
+        C.viewBusy = true;
+        C.viewTimer = setTimeout(() => {
+            prev.remove();
+            view.classList.remove("sp-in-right", "sp-in-left");
+            settleView();
+        }, VIEW_MS);
+    }
 
     // 데스크톱: 목록 · 상세 · 편집 폼을 바꿔 끼우지 않고 왼쪽부터 열로 나란히 놓는다.
     // 새 열이 생기면 그 열이 보이도록 앱의 가로 스크롤을 옮긴다.

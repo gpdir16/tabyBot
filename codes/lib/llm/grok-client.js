@@ -25,7 +25,7 @@ function buildHeaders(accessToken) {
     };
 }
 
-async function getAuth() {
+function getAuth() {
     const stored = loadGrokTokens();
     return ensureFreshToken(stored);
 }

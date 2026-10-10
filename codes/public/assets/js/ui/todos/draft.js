@@ -151,7 +151,7 @@
         return errorCode(err) === "conflict";
     }
 
-    async function commitStagedAssign(id, botId) {
+    function commitStagedAssign(id, botId) {
         const cur = C.items().find((row) => row.id === id);
         const offered = (cur?.offers || []).find((o) => o.agentId === botId);
         if (offered) return T.api.acceptHandoff(id, botId);

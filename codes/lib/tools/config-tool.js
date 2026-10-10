@@ -25,7 +25,7 @@ export const configToolDefinitions = [
     },
 ];
 
-export async function executeConfigTool(name, args) {
+export function executeConfigTool(name, args) {
     if (name !== "config_set") return { error: `Unknown config tool: ${name}` };
 
     const config = loadUserConfig();

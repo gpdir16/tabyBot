@@ -278,6 +278,29 @@ class AgentTurn {
         return undefined;
     }
 
+    // 한 라운드의 모델 호출. 중단으로 끝내야 하면 { stopped }를, 아니면 { response }를 돌려준다.
+    async callModel({ tools, toolsEnabled }) {
+        this.setStatus("thinking");
+        this.modelCallCount += 1;
+        try {
+            const response = await this.llm.complete({
+                messages: this.messages,
+                tools: toolsEnabled ? tools : undefined,
+                tool_choice: toolsEnabled ? "auto" : "none",
+                stream: Boolean(this.onTextDelta),
+                onTextDelta: this.streamDelta(),
+                signal: this.session?.signal,
+            });
+            return { response };
+        } catch (err) {
+            if (isStoppedError(err, this.session)) {
+                if (err.partialText) this.partialText = err.partialText;
+                return { stopped: this.stopped() };
+            }
+            throw err;
+        }
+    }
+
     // 라운드를 다 쓴 뒤: 도구 없이 마지막 답변을 받고, 그사이 들어온 사용자 메시지에도 답한다.
     async finishAfterRounds(maxRounds) {
         if (this.stopRequested) return this.stopped();
@@ -407,26 +430,9 @@ async function runAgentTurn(
         if (turn.stopRequested) return turn.stopped();
 
         const toolsEnabled = turn.toolCallCount < maxToolCalls;
-        turn.setStatus("thinking");
 
-        turn.modelCallCount += 1;
-        let response;
-        try {
-            response = await turn.llm.complete({
-                messages,
-                tools: toolsEnabled ? tools : undefined,
-                tool_choice: toolsEnabled ? "auto" : "none",
-                stream: Boolean(onTextDelta),
-                onTextDelta: turn.streamDelta(),
-                signal: session?.signal,
-            });
-        } catch (err) {
-            if (isStoppedError(err, session)) {
-                if (err.partialText) turn.partialText = err.partialText;
-                return turn.stopped();
-            }
-            throw err;
-        }
+        const { response, stopped: stoppedResult } = await turn.callModel({ tools, toolsEnabled });
+        if (stoppedResult) return stoppedResult;
 
         if (turn.stopRequested) return turn.stopped();
 

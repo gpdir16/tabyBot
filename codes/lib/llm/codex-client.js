@@ -16,7 +16,7 @@ function buildHeaders(accessToken, accountId) {
     return headers;
 }
 
-async function getAuth() {
+function getAuth() {
     const stored = loadCodexTokens();
     return ensureFreshToken(stored);
 }

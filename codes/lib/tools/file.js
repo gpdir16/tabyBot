@@ -127,7 +127,7 @@ function recordFileSnapshot(ctx, resolvedPath, content) {
     ctx.fileSnapshots?.set(resolvedPath, content);
 }
 
-export async function executeFileRead(args, ctx) {
+export function executeFileRead(args, ctx) {
     const resolved = resolveFilePath(args?.path);
     if (!resolved) return { error: "path is required" };
     if (isSecretStorePath(resolved)) return { error: "The secret vault files are off limits. Use {{secret:NAME}} placeholders instead." };
@@ -263,7 +263,7 @@ function applyHunk(fileLines, hunk, offset = 0) {
     return { ok: true, result, offset: offset + newLines.length - hunk.oldCount };
 }
 
-export async function executeFilePatch(args, ctx = {}) {
+export function executeFilePatch(args, ctx = {}) {
     const resolved = resolveFilePath(args?.path);
     if (!resolved) return { error: "path is required" };
     if (isSecretStorePath(resolved)) return { error: "The secret vault files are off limits. Use {{secret:NAME}} placeholders instead." };
