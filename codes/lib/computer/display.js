@@ -282,7 +282,7 @@ export function sleep(ms) {
 }
 
 // GUI 앱도 직계 자식으로 띄운다(dash sh -c는 단일 명령을 exec하므로 pid=앱).
-export async function launchApp(sess, appCmd) {
+export function launchApp(sess, appCmd) {
     if (!appCmd) return { error: "app is required for launch" };
     if (/[\r\n]/.test(appCmd)) return { error: "app command must be a single line" };
     if (/[;&|`$<>]/.test(appCmd)) return { error: "app command must not contain shell control characters" };
@@ -463,7 +463,7 @@ const INPUT_HANDLERS = new Map([
 
 // 웹 포인터/키보드 입력을 xdotool로 보낸다. doAction과 달리 자동 스크린샷은 하지 않는다.
 // 셸을 거치지 않는 execFile 경로라 따옴표 이스케이프 걱정 없이 인자를 넘긴다.
-export async function sendInput(sess, input) {
+export function sendInput(sess, input) {
     const handler = INPUT_HANDLERS.get(input?.type);
     return handler ? handler(sess, input) : { error: "unknown input type" };
 }

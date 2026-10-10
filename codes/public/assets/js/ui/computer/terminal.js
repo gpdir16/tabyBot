@@ -192,6 +192,21 @@
         return true;
     }
 
+    // 서버가 PTY를 준비했다는 신호를 받았다. 크기가 다르면 맞추고, 탭 전환 직후라면 포커스한다.
+    function onTermReady(ws, msg) {
+        C.setMsg(C.termMsg, "");
+        if (msg.cols && msg.rows && term.cols && term.rows && (msg.cols !== term.cols || msg.rows !== term.rows)) {
+            ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+        }
+        // 탭을 막 전환했을 때만 포커스한다. 자동 재접속 때마다
+        // 키보드가 열리거나 다른 입력(URL 바 등)의 포커스를 뺏지 않게.
+        if (C.focusTermOnReady) {
+            C.focusTermOnReady = false;
+            const ae = document.activeElement;
+            if (!ae || ae === document.body || ae === C.page || ae === C.els.tabTerm) term.focus();
+        }
+    }
+
     function connectTerminal() {
         if (!term && !window.Terminal) {
             C.setMsg(C.termMsg, t("computerConnecting"));
@@ -231,17 +246,7 @@
                     return;
                 }
                 if (msg.type === "ready") {
-                    C.setMsg(C.termMsg, "");
-                    if (msg.cols && msg.rows && term.cols && term.rows && (msg.cols !== term.cols || msg.rows !== term.rows)) {
-                        ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-                    }
-                    // 탭을 막 전환했을 때만 포커스한다. 자동 재접속 때마다
-                    // 키보드가 열리거나 다른 입력(URL 바 등)의 포커스를 뺏지 않게.
-                    if (C.focusTermOnReady) {
-                        C.focusTermOnReady = false;
-                        const ae = document.activeElement;
-                        if (!ae || ae === document.body || ae === C.page || ae === C.els.tabTerm) term.focus();
-                    }
+                    onTermReady(ws, msg);
                 } else if (msg.type === "exit") {
                     term.write(`\r\n\x1b[90m[process exited${msg.code != null ? ` ${msg.code}` : ""}]\x1b[0m\r\n`);
                 } else if (msg.type === "error") {

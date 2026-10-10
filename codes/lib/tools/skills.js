@@ -20,7 +20,7 @@ export const skillsToolDefinitions = [
     },
 ];
 
-export async function executeSkillsTool(name, args) {
+export function executeSkillsTool(name, args) {
     if (name === "skills_read") {
         const skillName = args?.name?.trim();
         if (!skillName) return { error: "name is required" };

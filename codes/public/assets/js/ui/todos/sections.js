@@ -33,7 +33,7 @@
             T.icon("chevron", "icon-sm"),
             T.h("span", { text: t("todosCompleted", { n: doneItems.length }) }),
         ]);
-        btn.addEventListener("click", async () => {
+        btn.addEventListener("click", () => {
             C.doneOpen[doneKey] = !C.doneOpen[doneKey];
             build();
         });
@@ -96,7 +96,7 @@
                 { type: "button", class: `td-done-btn td-sub-head${collapsed ? "" : " open"}`, "aria-expanded": String(!collapsed) },
                 [T.icon("chevron", "icon-sm"), T.h("span", { text: `${t("todosAgent")} (${agentOpen.length})` })],
             );
-            head.addEventListener("click", async () => {
+            head.addEventListener("click", () => {
                 agentOpenCollapsed = !collapsed;
                 try {
                     localStorage.setItem(AGENT_OPEN_KEY, agentOpenCollapsed ? "1" : "0");

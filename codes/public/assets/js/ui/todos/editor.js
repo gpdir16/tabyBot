@@ -391,6 +391,40 @@
         return null;
     }
 
+    // 저장 중이면 끝날 때까지 미루고, 아니면 초안을 커밋한 뒤 바로 실행한다.
+    async function dispatchRun(item, b) {
+        if (b.disabled || C.dispatching.has(item.id)) return;
+        if (C.saving) {
+            C.queuePending(() => {
+                const cur = C.items().find((r) => r.id === item.id);
+                if (C.routeFromPath() && (cur?.executor || cur?.assigneeId) && cur.status === "open" && !cur.running && !C.dispatching.has(item.id))
+                    void dispatchRun(item, b);
+            });
+            return;
+        }
+        C.dispatching.add(item.id);
+        b.disabled = true;
+        try {
+            C.pullFields();
+            const parsed = C.draft ? C.draftToPatch() : null;
+            if (parsed?.error) {
+                T.toast.show("error", parsed.error === "title" ? t("todosNoTitle") : t("todosErrSchedule"));
+                return;
+            }
+            if (parsed && Object.keys(parsed.body).length) {
+                const ok = await C.commitDraft();
+                if (!ok) return;
+            }
+            await T.api.runTodo(item.id);
+            T.toast.show("info", t("todosQueued"));
+        } catch (err) {
+            T.toast.show("error", C.humanErr(err));
+        } finally {
+            C.dispatching.delete(item.id);
+            b.disabled = false;
+        }
+    }
+
     function editEl(item, checked) {
         const title = T.h("input", {
             type: "text",
@@ -546,50 +580,12 @@
             delBtn,
             (item.executor || item.assignee) && item.status !== "done"
                 ? (() => {
-                      const runNow = async (b) => {
-                          if (b.disabled || C.dispatching.has(item.id)) return;
-                          if (C.saving) {
-                              C.queuePending(() => {
-                                  const cur = C.items().find((r) => r.id === item.id);
-                                  if (
-                                      C.routeFromPath() &&
-                                      (cur?.executor || cur?.assigneeId) &&
-                                      cur.status === "open" &&
-                                      !cur.running &&
-                                      !C.dispatching.has(item.id)
-                                  )
-                                      void runNow(b);
-                              });
-                              return;
-                          }
-                          C.dispatching.add(item.id);
-                          b.disabled = true;
-                          try {
-                              C.pullFields();
-                              const parsed = C.draft ? C.draftToPatch() : null;
-                              if (parsed?.error) {
-                                  T.toast.show("error", parsed.error === "title" ? t("todosNoTitle") : t("todosErrSchedule"));
-                                  return;
-                              }
-                              if (parsed && Object.keys(parsed.body).length) {
-                                  const ok = await C.commitDraft();
-                                  if (!ok) return;
-                              }
-                              await T.api.runTodo(item.id);
-                              T.toast.show("info", t("todosQueued"));
-                          } catch (err) {
-                              T.toast.show("error", C.humanErr(err));
-                          } finally {
-                              C.dispatching.delete(item.id);
-                              b.disabled = false;
-                          }
-                      };
                       return T.h("button", {
                           type: "button",
                           class: "btn ghost",
                           text: item.running ? t("todosRunning") : t("todosRunNow"),
                           disabled: !!item.running,
-                          onclick: (e) => void runNow(e.currentTarget),
+                          onclick: (e) => void dispatchRun(item, e.currentTarget),
                       });
                   })()
                 : null,

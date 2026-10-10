@@ -92,6 +92,17 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null, 
     }
 }
 
+// 실행 중 대화가 삭제되었으면 디스크에 되살리지 않는다.
+function persistCompletedTurn({ sessionKey, agentId, result, attachments, displayText, resumed, recoveryBaseMessages, automated }) {
+    if (!getConversationMeta(sessionKey)) return;
+    const skipPersist = automated && isUnremarkableAutoTurn(result);
+    if (!skipPersist) {
+        saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
+        if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
+    }
+    maybeScheduleSessionReview({ sessionKey, agentId, result, automated });
+}
+
 async function runTurn({
     sessionKey,
     agentId,
@@ -159,15 +170,7 @@ async function runTurn({
             result = await run(RECOVERY_PROMPT, true);
         }
 
-        // 실행 중 대화가 삭제되었으면 디스크에 되살리지 않는다.
-        if (getConversationMeta(sessionKey)) {
-            const skipPersist = automated && isUnremarkableAutoTurn(result);
-            if (!skipPersist) {
-                saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
-                if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
-            }
-            maybeScheduleSessionReview({ sessionKey, agentId, result, automated });
-        }
+        persistCompletedTurn({ sessionKey, agentId, result, attachments, displayText, resumed, recoveryBaseMessages, automated });
 
         if (isStoppedByUser(result)) {
             emit({
@@ -379,7 +382,7 @@ export function setTodoJobHandler() {
                 return { error: err?.message || String(err), silent: true };
             }
         },
-        async remindUser({ item }) {
+        remindUser({ item }) {
             emit({
                 type: "todo_due",
                 title: item.title,

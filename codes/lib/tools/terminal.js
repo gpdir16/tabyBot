@@ -208,7 +208,7 @@ function executeBackgroundTool(name, args, { maxChars } = {}) {
     return { error: `Unknown terminal tool: ${name}` };
 }
 
-export async function executeTerminalTool(name, args, { signal, agentId, secretEnv } = {}) {
+export function executeTerminalTool(name, args, { signal, agentId, secretEnv } = {}) {
     if (!["terminal_run", "bg_status", "bg_list", "bg_kill"].includes(name)) {
         return { error: `Unknown terminal tool: ${name}` };
     }

@@ -151,7 +151,7 @@ async function pickReadyRelease(releases, imageName) {
     return null;
 }
 
-async function pickUpdateRelease(releases, imageName) {
+function pickUpdateRelease(releases, imageName) {
     if (!releases.length) return null;
     if (isDockerRuntime()) {
         return pickReadyRelease(releases, imageName);

@@ -69,6 +69,32 @@
         return T.h("span", { class: "td-who" }, [dotEl(item.assignee?.color || "#8e8e93"), T.h("span", { text: t("todosAssignedTo", { name }) })]);
     }
 
+    // 열린 항목의 상태(멈춤·마지막 실행·응답 대기·실행 중·실패)를 나타내는 표시들.
+    function stateParts(item) {
+        const parts = [];
+        if (C.isJob(item) && item.enabled === false) {
+            parts.push(T.h("span", { class: "td-when paused", text: t("todosPaused") }));
+        }
+        if (C.isJob(item) && item.lastRunAt) {
+            parts.push(T.h("span", { class: "td-when", text: t("todosLastRun", { time: C.formatDay(item.lastRunAt) }) }));
+        }
+        if (item.waiting) {
+            parts.push(T.h("span", { class: "td-when waiting", text: t("todosNeedsYou") }));
+            const q = String(item.waiting.question || "")
+                .replace(/\s+/g, " ")
+                .trim();
+            if (q) parts.push(T.h("span", { class: "td-wait-q", title: q, text: q }));
+        } else if (item.running) {
+            parts.push(T.h("span", { class: "td-when running", text: t("todosRunning") }));
+        }
+        if (item.lastError?.message) {
+            const raw = String(item.lastError.message);
+            const reason = raw === "interrupted" ? t("todosRunInterrupted") : raw.replace(/\s+/g, " ").trim().slice(0, 80);
+            parts.push(T.h("span", { class: "td-when failed", title: raw, text: `${t("todosRunFailed")} · ${reason}` }));
+        }
+        return parts;
+    }
+
     function metaEl(item, done) {
         const parts = [];
         const when = C.whenLabel(item);
@@ -76,26 +102,7 @@
             const cls = `td-when${done ? "" : C.isOverdue(item) ? " over" : C.isTodayKind(item) ? " today" : ""}`;
             parts.push(T.h("span", { class: cls, text: when }));
         }
-        if (!done && C.isJob(item) && item.enabled === false) {
-            parts.push(T.h("span", { class: "td-when paused", text: t("todosPaused") }));
-        }
-        if (!done && C.isJob(item) && item.lastRunAt) {
-            parts.push(T.h("span", { class: "td-when", text: t("todosLastRun", { time: C.formatDay(item.lastRunAt) }) }));
-        }
-        if (!done && item.waiting) {
-            parts.push(T.h("span", { class: "td-when waiting", text: t("todosNeedsYou") }));
-            const q = String(item.waiting.question || "")
-                .replace(/\s+/g, " ")
-                .trim();
-            if (q) parts.push(T.h("span", { class: "td-wait-q", title: q, text: q }));
-        } else if (!done && item.running) {
-            parts.push(T.h("span", { class: "td-when running", text: t("todosRunning") }));
-        }
-        if (!done && item.lastError?.message) {
-            const raw = String(item.lastError.message);
-            const reason = raw === "interrupted" ? t("todosRunInterrupted") : raw.replace(/\s+/g, " ").trim().slice(0, 80);
-            parts.push(T.h("span", { class: "td-when failed", title: raw, text: `${t("todosRunFailed")} · ${reason}` }));
-        }
+        if (!done) parts.push(...stateParts(item));
         if (!done) {
             const who = whoSpan(item);
             if (who) parts.push(who);

@@ -33,7 +33,7 @@ export const userAskToolDefinitions = [
     },
 ];
 
-export async function executeUserAskTool(_name, args, ctx) {
+export function executeUserAskTool(_name, args, ctx) {
     if (!ctx?.sessionKey) {
         return { error: "No active session. user_ask only works during a user message turn" };
     }

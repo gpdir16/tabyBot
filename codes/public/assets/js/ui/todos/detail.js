@@ -177,6 +177,19 @@
         return viewEl(item, 1, t("todosDetails"), leaveDetail, body);
     }
 
+    // 새 화면을 밀려 들어오게/나가게 그린다. 앞 화면(prev)이 있으면 반대쪽으로 밀려 나간다.
+    function slideDetailView(anim, view, prev) {
+        // 위에 놓이는 쪽이 뒤에 온다: 들어갈 때는 새 화면이, 나올 때는 옛 화면이 위다.
+        view.classList.add(anim === "push" ? "sp-in-right" : "sp-in-left");
+        if (prev) prev.classList.add("sp-leaving", anim === "push" ? "sp-out-left" : "sp-out-right");
+        if (anim === "push") C.sheetHost.append(view);
+        else C.sheetHost.prepend(view);
+        viewTimer = setTimeout(() => {
+            prev?.remove();
+            view.classList.remove("sp-in-right", "sp-in-left");
+        }, VIEW_MS);
+    }
+
     // 편집 중인 항목이 있으면 상세 화면을 그리고, 없으면 닫는다. 깊이가 달라지면 화면이 밀려 들어오고 나간다.
     function renderDetail(all) {
         const item = C.editId && C.draft ? all.find((row) => row.id === C.editId) : null;
@@ -210,15 +223,7 @@
             view.querySelector(".td-view-body").scrollTop = top;
             return;
         }
-        // 위에 놓이는 쪽이 뒤에 온다: 들어갈 때는 새 화면이, 나올 때는 옛 화면이 위다.
-        view.classList.add(anim === "push" ? "sp-in-right" : "sp-in-left");
-        if (prev) prev.classList.add("sp-leaving", anim === "push" ? "sp-out-left" : "sp-out-right");
-        if (anim === "push") C.sheetHost.append(view);
-        else C.sheetHost.prepend(view);
-        viewTimer = setTimeout(() => {
-            prev?.remove();
-            view.classList.remove("sp-in-right", "sp-in-left");
-        }, VIEW_MS);
+        slideDetailView(anim, view, prev);
     }
 
     // 데스크톱: 상세 화면을 목록 오른쪽에 열로 놓는다. 일정·담당을 열면 그 오른쪽에 열이 하나 더 붙는다.

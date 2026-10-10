@@ -45,7 +45,7 @@ function snippetAround(text, idx, queryLen) {
     return `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ")}${end < text.length ? "…" : ""}`;
 }
 
-export async function executeSessionSearchTool(name, args) {
+export function executeSessionSearchTool(name, args) {
     if (name !== "session_search") return { error: `Unknown tool: ${name}` };
 
     const query = String(args?.query || "").trim();
