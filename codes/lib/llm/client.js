@@ -33,8 +33,9 @@ export async function createLlmClient(overrides = {}) {
         return {
             provider,
             modelMeta,
-            complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+            complete({ messages, tools, tool_choice, stream, onTextDelta, signal, cacheKey }) {
                 return codexComplete({
+                    cacheKey,
                     model: provider.model,
                     messages,
                     tools: tools?.length ? tools : undefined,

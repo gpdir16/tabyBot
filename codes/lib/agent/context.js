@@ -20,13 +20,7 @@ import { estimateContentTokens } from "../llm/vision.js";
 import { collectFilesFromHistory, formatAttachedFilesPrompt, hydrateUserContent } from "../web/attachments.js";
 import { formatSkillsListForPrompt } from "../skills-catalog.js";
 import { formatSecretsForPrompt } from "../secrets/vault.js";
-import {
-    buildDateTimePromptVars,
-    buildEnvironmentPromptVars,
-    buildFilesystemPromptBlock,
-    buildRuntimeInfoLine,
-    renderSystemPrompt,
-} from "./system-prompt.js";
+import { buildEnvironmentPromptVars, buildFilesystemPromptBlock, buildRuntimeInfoLine, renderSystemPrompt } from "./system-prompt.js";
 import { formatPastSessionsForPrompt, turnToMessages, cloneStoredMessage } from "./chat-history.js";
 import { isStandalonePendingTurn } from "./history/messages.js";
 const SYSTEM_PATH = path.join(CODES_DIR, "lib", "prompts", "system.txt");
@@ -104,13 +98,12 @@ function peerAgentsText(agentId) {
     return formatPeerAgentsForPrompt(agentId || firstAgent()?.id) || "- (none)";
 }
 
-function buildSystemMessageContent(lang, { truncateMemory = false, maxMemoryChars = 120000, runtimeInfo = {} } = {}) {
+function buildSystemMessageContent({ truncateMemory = false, maxMemoryChars = 120000, runtimeInfo = {} } = {}) {
     const template = loadSystemPromptTemplate();
     const rt = runtimeInfo || {};
     const pastSessions = formatPastSessionsForPrompt(rt.sessionKey);
     const todoBlocks = formatTodosForPrompt(rt.agentId);
     const vars = {
-        ...buildDateTimePromptVars(lang),
         ...buildEnvironmentPromptVars(),
         FILESYSTEM_BLOCK: buildFilesystemPromptBlock(),
         SKILLS_LIST: formatSkillsListForPrompt(),
@@ -186,8 +179,7 @@ export function buildInitialMessages(
     const currentFiles = Array.isArray(attachments) ? attachments : [];
     const historyForPrompt = dropPendingCurrent(dropOwnedPendingTurns(history, excludeMessageIds), userMessage);
     const attachedFiles = collectFilesFromHistory(historyForPrompt, currentFiles);
-    const lang = loadUserConfig().language || "en";
-    const systemContent = buildSystemMessageContent(lang, {
+    const systemContent = buildSystemMessageContent({
         truncateMemory,
         maxMemoryChars,
         runtimeInfo: { ...runtimeInfo, attachedFiles },
