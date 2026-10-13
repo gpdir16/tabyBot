@@ -54,6 +54,11 @@ function previewTextFromMessage(message) {
     if (typeof message.content !== "string") return "";
     if (message.role === "assistant" && isSilentMarkedText(message.content)) return "";
     if (message.role === "user" && isScheduledTurnText(message.content)) return "";
+    // 작업 중에 합쳐 넣은 메시지 묶음: 모델용 머리말이 아니라 마지막으로 보낸 말을 쓴다.
+    if (message.role === "user" && Array.isArray(message.queued)) {
+        const last = message.queued.at(-1);
+        return stripMarkdownForPreview(last?.text || "") || last?.attachments?.[0]?.name || "";
+    }
     const text = stripAttachedFiles(message.content);
     if (text) return stripMarkdownForPreview(text);
     return message.attachments?.[0]?.name || "";

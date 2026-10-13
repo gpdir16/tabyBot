@@ -28,6 +28,7 @@ import {
     renderSystemPrompt,
 } from "./system-prompt.js";
 import { formatPastSessionsForPrompt, turnToMessages, cloneStoredMessage } from "./chat-history.js";
+import { isStandalonePendingTurn } from "./history/messages.js";
 const SYSTEM_PATH = path.join(CODES_DIR, "lib", "prompts", "system.txt");
 
 let encoding;
@@ -135,11 +136,20 @@ function buildSystemMessageContent(lang, { truncateMemory = false, maxMemoryChar
     return renderSystemPrompt(template, vars).trim();
 }
 
+// 이번 실행이 직접 다루는 메시지의 대기 턴은 프롬프트에서 뺀다. 지금 메시지는 맨 끝에 다시 붙고,
+// 대기열에 쌓인 메시지는 실행 중에 합쳐 넣으므로 그대로 두면 모델이 같은 말을 두 번 읽는다.
+function dropOwnedPendingTurns(history, excludeMessageIds) {
+    const owned = new Set(excludeMessageIds || []);
+    if (!owned.size) return history || [];
+    return (history || []).filter((turn) => !(isStandalonePendingTurn(turn) && owned.has(turn.messages[0].id)));
+}
+
+// id가 없는 예전 기록용: 마지막 대기 턴이 지금 메시지와 같은 본문이면 뺀다.
 function dropPendingCurrent(history, userMessage) {
     if (!history?.length) return history || [];
     const last = history[history.length - 1];
     const msgs = last?.messages || [];
-    if (msgs.length !== 1 || msgs[0]?.role !== "user") return history;
+    if (msgs.length !== 1 || msgs[0]?.role !== "user" || msgs[0].id) return history;
     const lastText = typeof msgs[0].content === "string" ? msgs[0].content.trim() : "";
     const incoming = String(userMessage || "").trim();
     if (lastText === incoming) return history.slice(0, -1);
@@ -162,11 +172,19 @@ function toLlmMessage(message) {
 
 export function buildInitialMessages(
     userMessage,
-    { truncateMemory = false, maxMemoryChars = 120000, history = [], attachments = [], modelMeta = null, runtimeInfo = {} } = {},
+    {
+        truncateMemory = false,
+        maxMemoryChars = 120000,
+        history = [],
+        attachments = [],
+        modelMeta = null,
+        runtimeInfo = {},
+        excludeMessageIds = [],
+    } = {},
 ) {
     const visionEnabled = modelMeta?.supportsVision === true;
     const currentFiles = Array.isArray(attachments) ? attachments : [];
-    const historyForPrompt = dropPendingCurrent(history, userMessage);
+    const historyForPrompt = dropPendingCurrent(dropOwnedPendingTurns(history, excludeMessageIds), userMessage);
     const attachedFiles = collectFilesFromHistory(historyForPrompt, currentFiles);
     const lang = loadUserConfig().language || "en";
     const systemContent = buildSystemMessageContent(lang, {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readJsonFile, writeJsonAtomic } from "../atomic-file.js";
 import { firstAgentId, getAgentByUuid, listAgents } from "../agents-store.js";
-import { isAgentSessionRunning } from "../agent/session.js";
+import { isAgentSessionAutomated, isAgentSessionRunning } from "../agent/session.js";
 import {
     conversationDir,
     lastActivityAtFromTurns,
@@ -13,7 +13,13 @@ import {
     previewSnippetFromTurns,
     stripMarkdownForPreview,
 } from "../agent/chat-history.js";
-import { PENDING_USER_PREFIX, isScheduledTurnText, stripAttachedFiles } from "../agent/history/messages.js";
+import {
+    PENDING_USER_PREFIX,
+    isScheduledTurnText,
+    isStandalonePendingTurn,
+    stripAttachedFiles,
+    userMessageIdsOf,
+} from "../agent/history/messages.js";
 import { isInternalHintText, isSilentMarkedText, sayTextsFromMessage } from "../agent/history/messages.js";
 
 // ── 대화 인덱스: 에이전트당 하나의 스레드. 디스크는 user/session/<agent-uuid>/. ──
@@ -98,6 +104,8 @@ function readMeta(id) {
         updatedAt: toIso(updatedAt),
         // 클라이언트가 SSE 재접속 사이에 놓친 turn_done을 정합한다.
         running: isAgentSessionRunning(id),
+        // 자동 실행(예약·능동 체크인)은 답이 나오기 전까지 목록 순서를 건드리지 않는다.
+        runningAutomated: isAgentSessionAutomated(id) || undefined,
         // 사용자가 아직 읽지 않은 에이전트 발화 수(사이드바 배지).
         unread: Number(manifest.unread) > 0 ? Number(manifest.unread) : 0,
     };
@@ -195,15 +203,13 @@ function publicMessage(message) {
 
 const withTime = (m) => (m.at ? { at: m.at } : {});
 
-// 큐에 들어갔던 같은 발화의 단독 pending 턴이 남아 있으면 화면에 두 번 보인다.
-function isDuplicateOfQueued(turn, rawMessages, queuedSeen) {
-    return (
-        turn?.status === "pending" &&
-        rawMessages.length === 1 &&
-        rawMessages[0]?.role === "user" &&
-        typeof rawMessages[0].content === "string" &&
-        queuedSeen.has(stripAttachedFiles(rawMessages[0].content).trim())
-    );
+// 실행 턴에 이미 합쳐진 메시지의 대기 턴이 남아 있으면 화면에 두 번 보인다. id로 가려낸다.
+// id가 없는 예전 기록만 본문으로 비교한다(예전 방식으로 합쳐 넣은 발화와 같은 본문일 때).
+function isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen) {
+    if (!isStandalonePendingTurn(turn)) return false;
+    const message = turn.messages[0];
+    if (message.id) return absorbedIds.has(message.id);
+    return typeof message.content === "string" && legacyQueuedSeen.has(stripAttachedFiles(message.content).trim());
 }
 
 // assistant 메시지 → 화면용 메시지 목록(보이지 않으면 빈 배열).
@@ -221,12 +227,28 @@ function displayAssistant(m) {
     return [m.attachments ? publicMessage(m) : m];
 }
 
-// 작업 중 보낸 메시지들(머리말 뒤에 빈 줄로 이어 붙은 것)을 일반 사용자 메시지로 분해한다.
-function splitPendingUserMessage(m, content, queuedSeen) {
+// 작업 중에 합쳐 넣은 메시지 묶음을 메시지별 버블로 푼다. 저장된 메타가 정본이라
+// 빈 줄이 든 메시지도 쪼개지지 않고, 메시지마다 제 id·시각·첨부를 갖는다.
+function displayQueuedMessages(m) {
+    return m.queued
+        .filter((item) => String(item?.text || "").trim() || item?.attachments?.length)
+        .map((item) =>
+            publicMessage({
+                role: "user",
+                ...(item.id ? { id: item.id } : {}),
+                content: String(item.text || "").trim(),
+                ...(item.at || m.at ? { at: item.at || m.at } : {}),
+                ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+            }),
+        );
+}
+
+// 메타가 없는 예전 기록: 머리말 뒤에 빈 줄로 이어 붙은 본문을 일반 사용자 메시지로 분해한다.
+function splitPendingUserMessage(m, content, legacyQueuedSeen) {
     const out = [];
     for (const part of content.slice(PENDING_USER_PREFIX.length).split("\n\n")) {
         const clean = stripAttachedFiles(part.trim());
-        if (clean) queuedSeen.add(clean);
+        if (clean) legacyQueuedSeen.add(clean);
         if (clean || m.attachments?.length) {
             out.push(publicMessage({ role: "user", content: clean, ...withTime(m), ...(m.attachments ? { attachments: m.attachments } : {}) }));
         }
@@ -235,34 +257,43 @@ function splitPendingUserMessage(m, content, queuedSeen) {
 }
 
 // user 메시지 → 화면용 메시지 목록.
-function displayUser(m, queuedSeen) {
+function displayUser(m, legacyQueuedSeen) {
     if (isScheduledTurnText(m.content)) return [];
+    if (Array.isArray(m.queued)) return displayQueuedMessages(m);
     const content = stripAttachedFiles(m.content);
     if (isInternalHintText(content.trim())) return []; // 순수 내부 지시는 숨김
-    if (content.startsWith(PENDING_USER_PREFIX)) return splitPendingUserMessage(m, content, queuedSeen);
+    if (content.startsWith(PENDING_USER_PREFIX)) return splitPendingUserMessage(m, content, legacyQueuedSeen);
     if (!content && !m.attachments?.length) return [];
     return [publicMessage({ ...m, content })];
 }
 
-function displayMessage(m, queuedSeen) {
-    // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다.
-    // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
-    if (m?.role === "user" && Array.isArray(m.content)) return [];
+function displayMessage(m, legacyQueuedSeen) {
+    if (m?.role === "user" && Array.isArray(m.content)) {
+        // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다.
+        // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
+        if (!m.id) return [];
+        // id가 있으면 사용자가 보낸 메시지다(이미지 파트가 붙은 채 저장된 경우). 글 부분만 보인다.
+        return displayUser({ ...m, content: m.content.find((part) => part?.type === "text")?.text || "" }, legacyQueuedSeen);
+    }
     // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
     if (m?.role === "tool") return [];
     if (m?.role === "assistant") return displayAssistant(m);
-    if (m?.role === "user" && typeof m.content === "string") return displayUser(m, queuedSeen);
+    if (m?.role === "user" && typeof m.content === "string") return displayUser(m, legacyQueuedSeen);
     return [m?.attachments ? publicMessage(m) : m];
 }
 
 export function toDisplayTurns(rawTurns) {
     const turns = [];
-    // 실행 중 주입된 큐 메시지 텍스트: 이미 래핑 본문으로 표시된 텍스트는 여기서 기억한다.
-    const queuedSeen = new Set();
+    // 실행 턴(대기 턴이 아닌 턴)에 이미 들어 있는 사용자 메시지 id.
+    const absorbedIds = new Set();
     for (const turn of rawTurns || []) {
-        const rawMessages = turn?.messages || [];
-        if (isDuplicateOfQueued(turn, rawMessages, queuedSeen)) continue;
-        const messages = rawMessages.flatMap((m) => displayMessage(m, queuedSeen));
+        if (isStandalonePendingTurn(turn)) continue;
+        for (const id of userMessageIdsOf(turn?.messages)) absorbedIds.add(id);
+    }
+    const legacyQueuedSeen = new Set();
+    for (const turn of rawTurns || []) {
+        if (isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen)) continue;
+        const messages = (turn?.messages || []).flatMap((m) => displayMessage(m, legacyQueuedSeen));
         // 도구 프레임 제거로 빈 turn이 되면 아예 생략
         if (messages.some((m) => m.role === "user" || m.role === "assistant")) turns.push({ ...turn, messages });
     }

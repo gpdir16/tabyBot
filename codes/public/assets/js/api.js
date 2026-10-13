@@ -114,8 +114,9 @@
         conversations: () => request("/api/conversations"),
         conversation: (id) => request(`/api/conversations/${enc(id)}`),
 
-        sendMessage: (id, text, attachmentIds) => {
+        sendMessage: (id, text, attachmentIds, clientId) => {
             const body = { text };
+            if (clientId) body.clientId = clientId;
             if (Array.isArray(attachmentIds) && attachmentIds.length) body.attachmentIds = attachmentIds;
             return request(`/api/conversations/${enc(id)}/messages`, { method: "POST", json: body });
         },

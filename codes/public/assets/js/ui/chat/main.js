@@ -182,14 +182,6 @@
             C.updateJump();
         });
 
-        state.on("user_message", (p) => {
-            if (p.id !== state.state.currentId) return;
-            // 낙관적 버블의 확인 표시만 한다. 턴 렌더는 "turns" 이벤트가 담당한다.
-            if (p.confirmed) {
-                for (const el of thread.querySelectorAll(".msg-row.optimistic")) el.classList.remove("optimistic");
-            }
-        });
-
         state.on("turn_done", (p) => {
             if (p.id !== state.state.currentId) return;
             // 라이브 DOM을 승격하지 않는다. 스트림이 없거나 비면 빈 껍데기만 남아

@@ -96,12 +96,8 @@
             C.watchBubble(el.querySelector(".bubble"));
         });
 
-        // 낙관적(미확정) 사용자 메시지
-        for (const p of c.pending) {
-            const el = C.buildUserMessage(p.text, null, true, p.attachments, p.at);
-            thread.append(el);
-            C.watchBubble(el.querySelector(".bubble"));
-        }
+        // 아직 정본에 나타나지 않은 내 메시지(낙관적 버블)
+        for (const p of c.pending) thread.append(buildPendingRow(p));
 
         if (c.live) mountLive(c.live);
 
@@ -219,6 +215,26 @@
         return state.state.currentId || null;
     }
 
+    // 서버 기록과 짝을 맞출 메시지 id. randomUUID는 보안 컨텍스트(HTTPS/localhost)에서만 있어
+    // 내부망 HTTP 접속에서는 getRandomValues로 만든다.
+    function newClientId() {
+        if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function buildPendingRow(p) {
+        const el = C.buildUserMessage(p.text, null, !p.sent, p.attachments, p.at);
+        el.dataset.pending = p.id;
+        C.watchBubble(el.querySelector(".bubble"));
+        return el;
+    }
+
+    function pendingRow(p) {
+        return [...thread.querySelectorAll(".msg-row[data-pending]")].find((el) => el.dataset.pending === p.id) || null;
+    }
+
     // 컴포저/재생성 공용 진입. attachments: [{id, objUrl}]
     async function submitMessage(payload) {
         const text = (payload?.text ? String(payload.text) : "").trim();
@@ -232,29 +248,30 @@
         }
         const c = state.conv(convId);
 
-        const pend = { text, attachments: atts, imageUrl: null, at: new Date().toISOString() };
+        // 서버 기록에 같은 id의 메시지가 나타날 때까지 이 버블을 유지한다(state/live.js reconcilePending).
+        const pend = { id: newClientId(), text, attachments: atts, at: new Date().toISOString(), sent: false };
         c.pending.push(pend);
 
         // 빈 스레드 첫 진입이면 안내줄을 치운다
         thread.querySelector(".thread-intro")?.remove();
-        const el = C.buildUserMessage(text, null, true, atts, pend.at);
-        pend._el = el;
-        thread.append(el);
-        for (const p of c.pending) {
-            if (p !== pend && p._el && p._el.parentElement !== thread) thread.append(p._el);
-        }
+        // 낙관적 버블은 다른 대기 버블 뒤, 라이브 블록 앞에 둔다(다시 그릴 때의 순서와 같게).
+        const liveRoot = C.liveEls?.root?.parentElement === thread ? C.liveEls.root : null;
+        thread.insertBefore(buildPendingRow(pend), liveRoot);
         C.refreshHeader();
         C.scrollToBottom(false);
 
         try {
-            await T.api.sendMessage(convId, text, atts.map((a) => a.id).filter(Boolean));
-            el.classList.remove("optimistic");
+            await T.api.sendMessage(convId, text, atts.map((a) => a.id).filter(Boolean), pend.id);
+            pend.sent = true;
+            // 컴포저가 전송 후 미리보기 주소(objUrl)를 해제한다. 버블은 업로드된 파일 주소로 그린다.
+            pend.attachments = atts.map(({ objUrl: _objUrl, ...rest }) => rest);
+            pendingRow(pend)?.classList.remove("optimistic");
             return true;
         } catch (err) {
             // 롤백: 낙관적 항목 제거 + 입력 복원은 컴포저가 처리
             const i = c.pending.indexOf(pend);
             if (i > -1) c.pending.splice(i, 1);
-            if (pend._el?.parentElement) pend._el.parentElement.remove();
+            if (state.state.currentId === convId) pendingRow(pend)?.remove();
             const notConfigured = err?.status === 409 && err.payload?.error === "not_configured";
             T.toast.show("error", notConfigured ? T.api.errorDetail(err) : T.api.errorText(err, t("sendFailed")));
             if (notConfigured) {

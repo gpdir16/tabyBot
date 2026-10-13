@@ -122,8 +122,9 @@
         state.conversations.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
     }
 
-    // 목록 교체: 캐시의 턴/라이브는 보존, 사라진 항목은 라이브 없을 때만 제거
-    function replaceConversations(list) {
+    // 목록 교체: 캐시의 턴/라이브는 보존, 사라진 항목은 라이브 없을 때만 제거.
+    // requestedAt: 이 목록을 요청한 시각. 그 뒤에 시작된 live는 응답보다 새 것이므로 지우지 않는다.
+    function replaceConversations(list, requestedAt = Date.now()) {
         const seen = new Set();
         for (const item of list || []) {
             seen.add(item.id);
@@ -131,10 +132,15 @@
             c.meta = Object.assign({}, c.meta, item);
             // 재접속 사이에 놓친 turn_done: 서버가 실행 중이 아니면 stale live를 정리한다.
             // (running 필드가 없는 예전 서버와의 하위 호환을 위해 명시적 false만 본다)
-            if (item.running === false && c.live) {
+            if (item.running === false && c.live && c.live.startedAt < requestedAt) {
                 c.live = null;
                 emit("live", { id: item.id });
                 emit("turn_done", { id: item.id, error: null, finalized: true });
+            } else if (item.running === true && !c.live) {
+                // 새로고침·재접속 뒤: 진행 중인 턴을 다음 상태 이벤트를 기다리지 않고 바로 붙인다.
+                c.live = C.freshLive(Boolean(item.runningAutomated));
+                emit("live", { id: item.id });
+                emit("status", { id: item.id });
             }
         }
         for (const [id, c] of state.convs) {

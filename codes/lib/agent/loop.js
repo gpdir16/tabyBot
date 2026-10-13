@@ -8,7 +8,7 @@ import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
 import { countMessagesTokens } from "./context.js";
 import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
-import { PENDING_USER_PREFIX } from "./history/messages.js";
+import { buildQueuedUserMessage } from "./history/messages.js";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
 
 const SILENT_REPLY_TOKEN = "__SILENT__";
@@ -126,10 +126,7 @@ class AgentTurn {
         if (!this.session) return false;
         const pending = this.session.drainPendingMessages();
         if (!pending.length) return false;
-        this.messages.push({
-            role: "user",
-            content: `${PENDING_USER_PREFIX}\n\n${pending.join("\n\n")}`,
-        });
+        this.messages.push(buildQueuedUserMessage(pending));
         return true;
     }
 
@@ -366,6 +363,7 @@ async function runAgentTurn(
         onCheckpoint,
         quietEmpty = false,
         todoId = null,
+        userMessageMeta = null,
     } = {},
 ) {
     clearFileReadCache();
@@ -385,11 +383,15 @@ async function runAgentTurn(
     const maxEmptyReplyRetries = agentConfig.maxEmptyReplyRetries ?? 8;
 
     setStatus("generating");
+    // 이번 실행이 직접 다루는 메시지(지금 메시지와, 시작 전에 대기열에 쌓인 메시지)는
+    // 기록에 대기 턴으로도 남아 있다. 프롬프트에 두 번 들어가지 않게 그 id를 넘긴다.
+    const ownedMessageIds = [userMessageMeta?.id, ...(session?.pendingMessageIds?.() || [])].filter(Boolean);
     const contextResult = await ensureWithinContextLimit(llm, userMessage, llm.modelMeta, {
         chatId: persistHistory === false ? null : resolvedSessionKey,
         onStatusPhase: setStatus,
         attachments,
         session,
+        excludeMessageIds: ownedMessageIds,
         runtimeInfo: {
             model: llm.provider.model,
             sessionKey: resolvedSessionKey,
@@ -401,6 +403,12 @@ async function runAgentTurn(
     const messages = contextResult.messages;
     // 사용자 메시지는 messages의 마지막이다. -1로 두면 extractTurnMessages가 그것을 이번 턴에 포함한다.
     const contextBaseLength = messages.length - 1;
+    // 기록·화면이 대기 턴과 이 메시지를 같은 것으로 알아보게 id와 보낸 시각을 싣는다.
+    if (userMessageMeta?.id) {
+        const current = messages[contextBaseLength];
+        current.id = userMessageMeta.id;
+        if (userMessageMeta.at) current.at = userMessageMeta.at;
+    }
 
     const turn = new AgentTurn({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries });
 
