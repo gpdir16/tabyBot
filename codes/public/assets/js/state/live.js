@@ -7,7 +7,17 @@
 
     /* ── SSE 이벤트 반영(mutator) ──────────────────────────── */
     function freshLive(automated) {
-        return { phase: "generating", detail: "", elapsedMs: null, text: "", tools: [], asks: [], intermediate: [], automated };
+        return {
+            phase: "generating",
+            detail: "",
+            elapsedMs: null,
+            text: "",
+            tools: [],
+            asks: [],
+            intermediate: [],
+            automated,
+            startedAt: Date.now(), // 이보다 먼저 보낸 요청의 "실행 중 아님" 응답으로는 지우지 않는다
+        };
     }
 
     // 목록 정렬(updatedAt)을 새 활동 시각으로 맞춘다. 정본은 뒤따르는
@@ -40,22 +50,20 @@
         if (phase) c.live.phase = phase;
         // 툴 호출에 붙은 텍스트는 사용자에게 가지 않는 내부 메모: 버리기만 한다.
         // 사용자용 중간 발화는 user_say 호출(applySay)로만 들어온다.
+        // 정본이 바뀌는 시점은 서버가 turns_changed로 따로 알린다.
         if (phase === "tools") c.live.text = "";
-        // 툴 라운드 경계는 서버 체크포인트/펜딩 메시지 병합 시점과 겹친다.
-        // 정본을 다시 읽어 실행 중 메시지 위치를 새로고침 상태와 맞춘다.
-        if (phase === "tools")
-            void refreshTurns(id).catch(() => {
-                /* 실패해도 다음 이벤트나 재접속 때 다시 받는다 */
-            });
         c.live.detail = detail || "";
         c.live.elapsedMs = elapsedMs != null ? elapsedMs : c.live.elapsedMs;
         C.emit("status", { id });
     }
 
-    function applyDelta(id, full, text, automated = false) {
+    // 서버는 늘어난 부분만 보낸다. offset은 그 조각이 붙을 자리(지금까지의 길이)다.
+    function applyDelta(id, offset, text, automated = false) {
         const c = ensureLive(id, automated);
-        // full이 지금까지 전체 누적. 없으면 text를 덧셈 폴백.
-        c.live.text = typeof full === "string" ? full : c.live.text + (text || "");
+        if (offset === 0) c.live.text = text || "";
+        else if (offset === c.live.text.length) c.live.text += text || "";
+        // 중간을 놓쳤다(재접속 등). 어긋난 본문을 잇지 않고 다음 본문이 처음부터 올 때까지 비워 둔다.
+        else c.live.text = "";
         C.emit("delta", { id });
     }
 
@@ -64,7 +72,8 @@
         const s = String(text || "");
         if (!s.trim() || isSilentMarkedText(s)) return;
         const c = ensureLive(id);
-        if (!c.live.intermediate.includes(s)) c.live.intermediate.push(s);
+        // 발화는 도구 실행 전에 이미 기록에 적힌다. 정본이 먼저 도착했으면 라이브에 또 쌓지 않는다.
+        if (!c.live.intermediate.includes(s) && !runningTurnTexts(c.turns).has(s.trim())) c.live.intermediate.push(s);
         // 자동 실행은 실제로 사용자에게 말을 건 이 시점에 처음으로 목록 순서가 오른다.
         if (c.live.automated) touchMeta(c, id);
         C.emit("status", { id });
@@ -110,11 +119,12 @@
     /* ── 턴 정본 동기화 ─────────────────────────────────────── */
     // 클라이언트가 턴을 직접 조립하면 이벤트 도착/완료 시점 순서로 붙어
     // 전송 직후·생성 중 새로고침·완료·완료 후 새로고침에서 순서가 갈린다.
-    // 디스크 히스토리(서버)가 유일한 정본이므로 이벤트마다 통째로 다시 읽는다.
+    // 디스크 히스토리(서버)가 유일한 정본이므로 바뀔 때마다 통째로 다시 읽는다.
 
     function normalizeTurn(turn) {
         return {
             at: turn.at,
+            status: turn.status || null,
             stats: turn.stats || null,
             attachments: turn.attachments || [],
             messages: (turn.messages || []).map((m) => {
@@ -122,6 +132,7 @@
                 const textPart = isParts ? m.content.find((part) => part?.type === "text")?.text || "" : m.content;
                 return {
                     role: m.role,
+                    id: typeof m.id === "string" ? m.id : null,
                     content: T.util.displayUserText(textPart),
                     at: typeof m.at === "string" ? m.at : null,
                     isParts,
@@ -132,38 +143,62 @@
         };
     }
 
-    // 대화당 최신 요청만 반영: 오래된 응답이 정본을 덮지 않도록 세대 번호로 가드.
-    const turnsReqSeq = new Map();
+    // 실행 중인 턴에 이미 저장된 assistant 발화.
+    function runningTurnTexts(turns) {
+        const texts = new Set();
+        for (const turn of turns || []) {
+            if (turn.status !== "in_progress") continue;
+            for (const m of turn.messages || []) {
+                if (m.role === "assistant") texts.add(String(m.content || "").trim());
+            }
+        }
+        return texts;
+    }
 
-    // 새 정본 턴에 이미 담긴 assistant 발화를 기준으로 라이브 상태를 정리한다. 바뀌었으면 true.
-    function settleLive(c, id, running, incoming) {
-        if (!c.live) return false;
-        if (running === false) {
-            // 서버는 끝났는데 live만 남은 경우(turn_done 유실) 정본으로 정리
+    // 정본에 들어온 내 메시지는 낙관적 버블에서 걷어 낸다. 메시지 id로만 맞춘다:
+    // 정본에 실제로 나타나기 전에는 지우지 않으므로 보낸 메시지가 화면에서 사라지지 않는다.
+    function reconcilePending(c, incoming) {
+        if (!c.pending.length) return false;
+        const stored = new Set();
+        for (const turn of incoming) {
+            for (const m of turn.messages || []) {
+                if (m.role === "user" && m.id) stored.add(m.id);
+            }
+        }
+        const before = c.pending.length;
+        c.pending = c.pending.filter((p) => !stored.has(p.id));
+        return c.pending.length !== before;
+    }
+
+    // 서버의 실행 상태와 새 정본에 맞춰 라이브 상태를 정리한다. 바뀌었으면 true.
+    function settleLive(c, id, detail, incoming, requestedAt) {
+        if (detail.running === false) {
+            // 서버는 끝났는데 live만 남은 경우(turn_done 유실). 요청을 보낸 뒤에 시작된 live는
+            // 새 턴의 것이므로(응답이 그 전 상태다) 건드리지 않는다.
+            if (!c.live || c.live.startedAt >= requestedAt) return false;
             c.live = null;
             C.emit("live", { id });
             return true;
         }
-        if (!c.live.intermediate?.length) return false;
-        // 이미 저장된 라이브 중간 발화는 라이브에서 걷어 낸다.
-        const stored = new Set();
-        for (const turn of incoming) {
-            for (const m of turn.messages || []) {
-                if (m.role === "assistant") stored.add(String(m.content || "").trim());
-            }
+        if (detail.running === true && !c.live) {
+            // 새로고침·재접속 뒤: 진행 중인 턴을 다음 상태 이벤트를 기다리지 않고 바로 붙인다.
+            c.live = freshLive(Boolean(detail.runningAutomated));
+            C.emit("live", { id });
+            C.emit("status", { id });
+            return true;
         }
+        if (!c.live?.intermediate.length) return false;
+        // 이미 저장된 라이브 중간 발화는 라이브에서 걷어 낸다.
+        const stored = runningTurnTexts(incoming);
         const before = c.live.intermediate.length;
         c.live.intermediate = c.live.intermediate.filter((x) => !stored.has(String(x || "").trim()));
         return c.live.intermediate.length !== before;
     }
 
-    async function refreshTurns(id) {
-        const c = C.conv(id);
-        if (!c) return false;
-        const seq = (turnsReqSeq.get(id) || 0) + 1;
-        turnsReqSeq.set(id, seq);
+    async function loadTurns(id) {
+        const requestedAt = Date.now();
         const r = await T.api.conversation(id);
-        if (seq !== turnsReqSeq.get(id)) return true; // 더 새 요청이 진행 중
+        const c = C.conv(id);
         const incoming = (Array.isArray(r?.turns) ? r.turns : []).map(normalizeTurn);
         // 정본이 그대로면 다시 그리지 않는다. 스레드 전체 재렌더(마크다운/하이라이트)가 비싸다.
         const sig = JSON.stringify(incoming);
@@ -172,18 +207,41 @@
         c.turnsSig = sig;
         c.loaded = true;
         c.fetchedAt = Date.now();
+        c.running = r?.running === true;
         if (r && typeof r === "object") {
             const { turns: _turns, ...meta } = r;
             if (meta?.id) C.upsertMeta(Object.assign({}, c.meta, meta));
         }
-        // 정본에 흡수된 확정 pending을 정리한다.
-        if (c.pending.some((p) => p.confirmed)) {
-            c.pending = c.pending.filter((p) => !p.confirmed);
-            changed = true;
-        }
-        if (settleLive(c, id, r.running, incoming)) changed = true;
+        if (reconcilePending(c, incoming)) changed = true;
+        if (settleLive(c, id, r || {}, incoming, requestedAt)) changed = true;
         if (changed) C.emit("turns", { id });
-        return true;
+    }
+
+    // 대화당 요청은 한 번에 하나만 보낸다. 받는 중에 또 요청이 오면 끝난 뒤 한 번 더 읽는다:
+    // 응답이 뒤바뀌어 오래된 정본이 새 정본을 덮는 일이 없고, 연달아 온 이벤트가 요청을 쌓지도 않는다.
+    const turnsInFlight = new Map();
+
+    function refreshTurns(id) {
+        if (!id) return Promise.resolve(false);
+        const running = turnsInFlight.get(id);
+        if (running) {
+            running.again = true;
+            return running.promise;
+        }
+        const entry = { again: false, promise: null };
+        entry.promise = (async () => {
+            try {
+                do {
+                    entry.again = false;
+                    await loadTurns(id);
+                } while (entry.again);
+                return true;
+            } finally {
+                turnsInFlight.delete(id);
+            }
+        })();
+        turnsInFlight.set(id, entry);
+        return entry.promise;
     }
 
     // refreshTurns를 부르되 실패해도 던지지 않는다. 정본을 읽었으면 true.
@@ -196,51 +254,31 @@
         }
     }
 
-    const attachmentIdsOf = (list) => (list || []).map((a) => a.id).filter(Boolean);
+    // 정본이 바뀌었다는 신호. 보고 있는 대화는 바로 다시 읽고, 나머지는 열 때 다시 읽도록 표시만 한다
+    // (실행 중인 모든 대화의 기록 전체를 체크포인트마다 받지 않게).
+    function touchTurns(id) {
+        if (!id) return;
+        if (id === C.state.currentId) void refreshTurnsQuietly(id);
+        else C.conv(id).fetchedAt = 0;
+    }
 
     function lastMessageOf(c) {
         const last = c.turns[c.turns.length - 1];
         return last?.messages?.[last.messages.length - 1];
     }
 
-    function applyUserMessage(id, text, imageUrl, attachments = []) {
+    // 다른 탭·기기에서 보낸 것까지 포함해, 사용자 메시지가 접수됐다는 알림.
+    // 이 탭이 보낸 메시지의 낙관적 버블은 정본에 같은 id가 나타날 때 reconcilePending이 걷어 낸다.
+    function applyUserMessage(id, text) {
         const c = C.conv(id);
         if (!c) return;
-        const attachmentIds = attachmentIdsOf(attachments);
-        // 낙관적으로 추가한 내 메시지와 일치하면 확정 표시: 정본이 도착할 때까지
-        // 버블을 유지하기 위해 confirmed 플래그만 세우고 refreshTurns에서 제거한다.
-        const pending = c.pending.find(
-            (p) =>
-                p.text === (text || "") &&
-                (p.imageUrl || null) === (imageUrl || null) &&
-                attachmentIdsOf(p.attachments).join(",") === attachmentIds.join(","),
-        );
-        if (pending) pending.confirmed = true;
         const snippet = String(text || "")
             .replace(/\s+/g, " ")
             .trim()
             .slice(0, 120);
         c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet ? { preview: snippet } : {}) });
-        C.emit("user_message", { id, confirmed: Boolean(pending) });
-        void (async () => {
-            if (await refreshTurnsQuietly(id)) return;
-            // 정본 읽기 실패 폴백: 기존처럼 로컬에 붙여 메시지가 안 보이는 일은 막는다.
-            c.pending = c.pending.filter((p) => !p.confirmed);
-            const lastMsg = lastMessageOf(c);
-            const already =
-                lastMsg?.role === "user" &&
-                lastMsg.content === (text || "") &&
-                (lastMsg.imageUrl || null) === (imageUrl || null) &&
-                (lastMsg.attachments || []).map((a) => a.id).join(",") === attachmentIds.join(",");
-            if (!already) {
-                c.turns.push({
-                    at: new Date().toISOString(),
-                    messages: [{ role: "user", content: text || "", imageUrl: imageUrl || null, attachments }],
-                    stats: null,
-                });
-            }
-            C.emit("turns", { id });
-        })();
+        C.emit("user_message", { id });
+        void refreshTurnsQuietly(id);
     }
 
     // 정본을 읽지 못했을 때, 라이브로 보여 준 발화를 로컬 턴으로 남긴다.
@@ -251,7 +289,7 @@
         const tail = spoken.length ? spoken[spoken.length - 1].content : null;
         const already = tail != null && lastMsg?.role === "assistant" && lastMsg.content === tail;
         if (already) return;
-        c.turns.push({ at: new Date().toISOString(), messages: spoken, stats: stats || null, attachments });
+        c.turns.push({ at: new Date().toISOString(), status: null, messages: spoken, stats: stats || null, attachments });
     }
 
     // 정본 읽기 실패 폴백: 라이브 내용을 로컬 턴으로 승격한다.
@@ -284,7 +322,8 @@
             const ok = await refreshTurnsQuietly(id);
             if (!ok) promoteLiveToTurn(c, { intermediate, text, fallback, silent, stats, attachments });
             // 정본이 턴을 저장한 뒤에만 live를 해제한다. 답 버블이 깜빡 사라지지 않게.
-            if (c.live === liveSnap) c.live = null;
+            // 서버가 곧바로 다음 턴(끝나기 직전에 보낸 메시지)을 돌리고 있으면 새 라이브로 갈아 끼운다.
+            if (c.live === liveSnap) c.live = ok && c.running ? freshLive(Boolean(c.meta?.runningAutomated)) : null;
             C.emit("live", { id });
             C.emit("turn_done", { id, error: error != null ? error : null, finalized: hadLive });
         })();
@@ -304,6 +343,8 @@
     C.applyAskResolved = applyAskResolved;
     C.normalizeTurn = normalizeTurn;
     C.refreshTurns = refreshTurns;
+    C.touchTurns = touchTurns;
+    C.freshLive = freshLive;
     C.applyUserMessage = applyUserMessage;
     C.applyTurnDone = applyTurnDone;
 })(window.Taby);

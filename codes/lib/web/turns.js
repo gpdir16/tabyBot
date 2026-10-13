@@ -10,16 +10,19 @@ import {
     isSilentMarkedText,
     lastChatTurnMessages,
     markChatTurnInterrupted,
+    newMessageId,
     prepareChatTurnRecovery,
+    settlePendingUserTurns,
+    userMessageIdsOf,
 } from "../agent/chat-history.js";
-import { beginAgentSession, endAgentSession, enqueueAgentMessage, isAgentSessionRunning, requestAgentStop } from "../agent/session.js";
+import { beginAgentSession, endAgentSession, enqueueAgentMessage, requestAgentStop } from "../agent/session.js";
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
 import { setTodoHandlers } from "../todos/scheduler.js";
 import { SCHEDULED_TURN_MARKER, isScheduledTurnText } from "../agent/history/messages.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
-import { ensureConversation, getConversationMeta, listConversations } from "./conversations.js";
+import { ensureConversation, getConversationMeta, listConversations, toDisplayTurns } from "./conversations.js";
 import { maybeScheduleSessionReview } from "../dreaming/review.js";
 import { markUserActivity } from "../user-activity.js";
 import { setProactiveRunner, CHECKIN_PROMPT } from "../proactive.js";
@@ -68,22 +71,28 @@ function isUnremarkableAutoTurn(result) {
     return true;
 }
 
-function saveChatTurn(sessionKey, result, attachments = [], displayText = null, baseMessages = null) {
+// 이번 턴을 시작시킨 사용자 메시지를 저장용 모양으로 되돌린다.
+// 모델에 보낸 본문은 가공돼 있다(이미지 파트 배열, 시크릿 자리표시자). 그대로 저장하면
+// 실행 중인 화면에서 그 메시지가 숨겨지고 세션 파일에 이미지 원문이 들어간다.
+function storableTurnMessages(turnMessages, { messageId = null, displayText = null, attachments = [] } = {}) {
+    const messages = turnMessages.map((message) => ({ ...message }));
+    const userMessage = messageId ? messages.find((message) => message?.role === "user" && message.id === messageId) : null;
+    if (!userMessage) return messages;
+    if (displayText != null) {
+        userMessage.content = displayText;
+    } else if (Array.isArray(userMessage.content)) {
+        userMessage.content = userMessage.content.find((part) => part?.type === "text")?.text || "";
+    }
+    if (attachments.length) userMessage.attachments = attachments;
+    return messages;
+}
+
+function saveChatTurn(sessionKey, result, { turnId, messageId, displayText, attachments, baseMessages }) {
     if (!result?.turnMessages?.length) return;
     try {
-        const messages = result.turnMessages.map((message) => ({ ...message }));
-        const userMessage = messages.find((message) => message?.role === "user");
-        if (userMessage) {
-            if (Array.isArray(userMessage.content)) {
-                const textPart = userMessage.content.find((part) => part?.type === "text");
-                userMessage.content = displayText != null ? displayText : textPart?.text || "";
-            } else if (displayText != null) {
-                userMessage.content = displayText;
-            }
-        }
-        appendChatTurn(sessionKey, messages, {
+        appendChatTurn(sessionKey, storableTurnMessages(result.turnMessages, { messageId, displayText, attachments }), {
+            turnId,
             stats: result.stats,
-            attachments,
             deliveredAttachments: result.deliveredAttachments,
             baseMessages,
         });
@@ -93,14 +102,65 @@ function saveChatTurn(sessionKey, result, attachments = [], displayText = null, 
 }
 
 // 실행 중 대화가 삭제되었으면 디스크에 되살리지 않는다.
-function persistCompletedTurn({ sessionKey, agentId, result, attachments, displayText, resumed, recoveryBaseMessages, automated }) {
+function persistCompletedTurn({
+    sessionKey,
+    agentId,
+    result,
+    turnId,
+    messageId,
+    attachments,
+    displayText,
+    resumed,
+    recoveryBaseMessages,
+    automated,
+}) {
     if (!getConversationMeta(sessionKey)) return;
     const skipPersist = automated && isUnremarkableAutoTurn(result);
     if (!skipPersist) {
-        saveChatTurn(sessionKey, result, resumed ? [] : attachments, resumed ? null : displayText, resumed ? recoveryBaseMessages : null);
+        saveChatTurn(sessionKey, result, { turnId, messageId, displayText, attachments, baseMessages: resumed ? recoveryBaseMessages : null });
         if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
     }
     maybeScheduleSessionReview({ sessionKey, agentId, result, automated });
+}
+
+// 스트리밍 본문을 짧게 묶어 늘어난 부분만 보낸다. 토큰마다 지금까지의 전문을 실어 보내면
+// 긴 답변에서 전송량이 길이의 제곱으로 불어나고, 재접속용 이벤트 기록도 델타로 가득 찬다.
+const DELTA_FLUSH_MS = 60;
+
+function createDeltaStream({ sessionKey, automated, quietEmpty }) {
+    let full = "";
+    let sent = 0;
+    let timer = null;
+
+    function flush() {
+        clearTimeout(timer);
+        timer = null;
+        if (full.length <= sent) return;
+        // 자동 실행의 침묵 답변은 화면에 내보내지 않는다.
+        if (quietEmpty && full.trim().startsWith("__SILENT__")) return;
+        emit({ type: "delta", conversationId: sessionKey, offset: sent, text: full.slice(sent), automated: automated || undefined });
+        sent = full.length;
+    }
+
+    return {
+        push(delta, nextFull) {
+            const next = String(nextFull || "");
+            // 새 모델 호출은 본문이 처음부터 다시 쌓인다. 이어지는 본문이 아니면 offset 0부터 다시 보낸다.
+            if (next.length !== full.length + String(delta || "").length) sent = 0;
+            full = next;
+            if (!timer) timer = setTimeout(flush, DELTA_FLUSH_MS);
+        },
+        flush,
+        stop() {
+            clearTimeout(timer);
+            timer = null;
+        },
+    };
+}
+
+// 화면에 보이는 내용이 달라졌을 때만 알리기 위한 서명.
+function displaySignature(messages) {
+    return JSON.stringify(toDisplayTurns([{ messages }]));
 }
 
 async function runTurn({
@@ -109,6 +169,8 @@ async function runTurn({
     userText,
     displayText = null,
     attachments = [],
+    messageId = null,
+    messageAt = null,
     recovery = false,
     quietEmpty = false,
     automated = false,
@@ -116,15 +178,23 @@ async function runTurn({
 }) {
     const lang = loadUserConfig().language || "en";
     const session = beginAgentSession(sessionKey, { automated });
+    // 이 실행의 기록은 turnId로 찾는다. 위치(마지막 턴)로 찾으면 실행 중에 온 메시지와 뒤섞인다.
+    const turnId = newMessageId();
     let recoveryBaseMessages = recovery ? lastChatTurnMessages(sessionKey) : null;
     let resumed = recovery;
     const startedAt = Date.now();
     let lastPhase = null;
+    let lastDisplay = null;
+    // 턴이 어떻게 끝났는지: 남은 대기 메시지를 어떻게 할지 정한다.
+    let outcome = "failed";
+    const deltas = createDeltaStream({ sessionKey, automated, quietEmpty });
 
     const status = (phase, detail = null) => {
         // 같은 phase 연속 방출은 클라이언트 상태 깜빡임만 유발하므로 스킵
         if (phase === lastPhase && !detail) return;
         lastPhase = phase;
+        // 묶어 둔 본문을 먼저 내보내 이벤트 순서를 지킨다(도구 단계 뒤에 앞선 본문이 도착하지 않게).
+        deltas.flush();
         emit({ type: "status", conversationId: sessionKey, phase, detail, automated: automated || undefined });
     };
 
@@ -139,24 +209,23 @@ async function runTurn({
                 quietEmpty,
                 todoId,
                 attachments: appendToRecovery ? [] : attachments,
+                userMessageMeta: appendToRecovery || !messageId ? null : { id: messageId, at: messageAt },
                 onStatusPhase: (phase, detail) => status(phase, detail),
-                onTextDelta: (text, full) => {
-                    if (
-                        quietEmpty &&
-                        String(full || "")
-                            .trim()
-                            .startsWith("__SILENT__")
-                    )
-                        return;
-                    emit({ type: "delta", conversationId: sessionKey, text, full, automated: automated || undefined });
-                },
+                onTextDelta: (text, full) => deltas.push(text, full),
                 onCheckpoint: automated
                     ? undefined // 자동 턴은 중간 체크포인트를 쓰지 않는다. 무의미 턴이면 통째로 저장을 건너뛴다.
                     : (turnMessages) => {
                           if (!getConversationMeta(sessionKey)) return;
-                          checkpointChatTurn(sessionKey, turnMessages, {
+                          const messages = storableTurnMessages(turnMessages, { messageId, displayText, attachments });
+                          checkpointChatTurn(sessionKey, messages, {
+                              turnId,
                               baseMessages: appendToRecovery ? recoveryBaseMessages : null,
                           });
+                          // 보이는 내용(중간 발화, 답변, 합쳐진 사용자 메시지)이 바뀐 체크포인트만 화면에 알린다.
+                          const display = displaySignature(messages);
+                          if (display === lastDisplay) return;
+                          lastDisplay = display;
+                          emit({ type: "turns_changed", conversationId: sessionKey });
                       },
             });
 
@@ -165,14 +234,31 @@ async function runTurn({
             markChatTurnInterrupted(sessionKey);
             prepareChatTurnRecovery(sessionKey);
             recoveryBaseMessages = lastChatTurnMessages(sessionKey);
+            // 끊긴 턴에 함께 묶인 대기 메시지는 이미 기록으로 모델에 들어간다. 대기열에서 또 넣지 않는다.
+            session.dropPendingMessages(new Set(userMessageIdsOf(recoveryBaseMessages)));
             resumed = true;
             status("generating", "resuming interrupted run");
             result = await run(RECOVERY_PROMPT, true);
         }
+        deltas.stop();
+        const stoppedByUser = isStoppedByUser(result);
+        if (stoppedByUser) outcome = "stopped";
+        else if (!result?.error || result.error === "silent") outcome = "done";
 
-        persistCompletedTurn({ sessionKey, agentId, result, attachments, displayText, resumed, recoveryBaseMessages, automated });
+        persistCompletedTurn({
+            sessionKey,
+            agentId,
+            result,
+            turnId,
+            messageId: resumed ? null : messageId,
+            attachments: resumed ? [] : attachments,
+            displayText: resumed ? null : displayText,
+            resumed,
+            recoveryBaseMessages,
+            automated,
+        });
 
-        if (isStoppedByUser(result)) {
+        if (stoppedByUser) {
             emit({
                 type: "turn_done",
                 conversationId: sessionKey,
@@ -221,26 +307,42 @@ async function runTurn({
         });
         return { error: "agent_turn_failed", text: null };
     } finally {
+        deltas.stop();
+        const leftover = session.drainPendingMessages();
         endAgentSession(sessionKey);
+        if (outcome === "stopped") settleStoppedConversation(sessionKey);
+        // 끝나기 직전에 도착해 이번 실행에 합쳐지지 못한 메시지: 버리지 않고 다음 턴으로 넘긴다.
+        // 실패한 턴 뒤에는 잇지 않는다(같은 오류를 되풀이한다). 기록에는 끊긴 턴으로 남아 있다.
+        else if (outcome === "done" && leftover.length) startUserTurn({ sessionKey, agentId, messages: leftover });
     }
 }
 
-// 실행 중이면 현재 턴에 끼워 넣고(pending), 아니면 새 턴을 예약한다.
-export function dispatchMessage({ sessionKey, agentId, userText, displayText = null, attachments = [] }) {
-    markUserActivity();
+// 사용자가 멈춘 대화에 남은 대기 메시지는 다시 실행하지 않고 기록으로만 남긴다.
+function settleStoppedConversation(sessionKey) {
     try {
-        appendPendingUserTurn(sessionKey, displayText ?? userText, attachments);
+        if (settlePendingUserTurns(sessionKey)) emit({ type: "turns_changed", conversationId: sessionKey });
     } catch (err) {
-        console.error("Pending user turn save failed:", err?.stack || err);
+        console.error("Pending user turn settle failed:", err?.stack || err);
     }
-    if (isAgentSessionRunning(sessionKey)) {
-        const queued = enqueueAgentMessage(sessionKey, userText);
-        if (queued) return { queued: true };
-    }
-    void scheduleWork("user", () => runTurn({ sessionKey, agentId, userText, displayText, attachments }), {
-        sessionKey,
-        cancellable: true,
-    }).catch((err) => {
+}
+
+// 사용자 메시지로 새 턴을 예약한다. 첫 메시지가 턴을 시작하고, 나머지는 실행 중에 합쳐 넣는다.
+function startUserTurn({ sessionKey, agentId, messages }) {
+    const [first, ...rest] = messages;
+    void scheduleWork(
+        "user",
+        () =>
+            runTurn({
+                sessionKey,
+                agentId,
+                userText: first.text,
+                displayText: first.text,
+                attachments: first.attachments || [],
+                messageId: first.id,
+                messageAt: first.at,
+            }),
+        { sessionKey, cancellable: true },
+    ).catch((err) => {
         console.error("Agent error:", err?.stack || err);
         emit({
             type: "turn_done",
@@ -250,7 +352,23 @@ export function dispatchMessage({ sessionKey, agentId, userText, displayText = n
             error: { code: "agent_turn_failed", detail: formatAgentError(err, loadUserConfig().language || "en") },
         });
     });
-    return { queued: false };
+    // scheduleWork가 세션을 만들어 두므로, 뒤따르는 메시지는 그 세션의 대기열에 쌓인다.
+    for (const message of rest) enqueueAgentMessage(sessionKey, message);
+}
+
+// 사용자 메시지 한 건을 받는다. 실행 중이면 현재 턴에 끼워 넣고(대기열), 아니면 새 턴을 예약한다.
+// 같은 id가 이미 처리됐으면(재전송) 아무것도 하지 않는다.
+export function dispatchMessage({ sessionKey, agentId, id = null, userText, attachments = [] }) {
+    markUserActivity();
+    const message = { id: id || newMessageId(), text: String(userText || "").trim(), attachments, at: new Date().toISOString() };
+    try {
+        if (!appendPendingUserTurn(sessionKey, message)) return { id: message.id, duplicate: true };
+    } catch (err) {
+        console.error("Pending user turn save failed:", err?.stack || err);
+    }
+    if (enqueueAgentMessage(sessionKey, message)) return { id: message.id, queued: true };
+    startUserTurn({ sessionKey, agentId, messages: [message] });
+    return { id: message.id, queued: false };
 }
 
 // 재시작으로 끊긴 턴을 이어서 돌린다. 한꺼번에 모델을 호출하지 않도록 하나씩 차례로 이어간다.
@@ -282,6 +400,8 @@ export function recoverInterruptedTurns() {
 export function stopConversation(sessionKey) {
     const stoppedQueued = cancelQueuedAgentWork(sessionKey);
     const stoppedActive = requestAgentStop(sessionKey);
+    // 실행 중인 턴은 끝나면서 스스로 정리한다. 예약만 돼 있던 턴은 여기서 대기 메시지를 확정한다.
+    if (stoppedQueued && !stoppedActive) settleStoppedConversation(sessionKey);
     if (stoppedQueued || stoppedActive) {
         emit({
             type: "turn_done",

@@ -7,11 +7,12 @@ import { dispatchMessage, stopConversation } from "../turns.js";
 import { listPendingAsks, resolvePendingAskByAskId } from "../../agent/user-ask.js";
 import { SecretError } from "../../secrets/store.js";
 import { clearNotices, listNotices, markNoticesRead } from "../notices.js";
-import { listRunningSessionKeys } from "../../agent/session.js";
 import fs from "node:fs";
 import { getVapidPublicKey, removeSubscription, saveSubscription } from "../push.js";
 
 // ── 대화와 질문(user_ask) 응답 API. ──
+
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,80}$/;
 
 function resolveConversationMeta(id) {
     return conversationsStore.getConversationMeta(id) || conversationsStore.ensureConversation(id);
@@ -52,21 +53,26 @@ function registerConversationsRoutes(router) {
         if (!text && !stored.length) return ctx.json400("empty_message");
 
         const published = stored.map(publicAttachment);
-        dispatchMessage({
+        // 클라이언트가 붙인 id: 낙관적으로 그린 버블과 기록의 메시지를 같은 것으로 맞추고, 재전송을 걸러 낸다.
+        const clientId = typeof body.clientId === "string" && CLIENT_ID_RE.test(body.clientId) ? body.clientId : null;
+        const dispatched = dispatchMessage({
             sessionKey: id,
             agentId: meta.agentId,
+            id: clientId,
             userText: text,
-            displayText: text,
             attachments: stored,
         });
         // 멀티탭 동기화: 다른 클라이언트에도 사용자 메시지를 즉시 반영
-        emit({
-            type: "user_message",
-            conversationId: id,
-            text,
-            attachments: published,
-        });
-        ctx.json200({ ok: true });
+        if (!dispatched.duplicate) {
+            emit({
+                type: "user_message",
+                conversationId: id,
+                messageId: dispatched.id,
+                text,
+                attachments: published,
+            });
+        }
+        ctx.json200({ ok: true, id: dispatched.id });
     });
 
     // 읽음 처리: 다른 기기의 배지도 지워지게 목록 변경을 알린다.
@@ -109,12 +115,10 @@ function registerConversationsRoutes(router) {
 // ── 실시간 이벤트(SSE)와 시스템 알림 기록 API. ──
 
 function registerEventsRoutes(router) {
+    // 진행 중인 턴은 대화 목록·상세의 running 값으로 알린다. 접속할 때마다 상태 이벤트를
+    // 전체에 뿌리면 이미 보고 있던 다른 화면의 진행 단계까지 처음으로 되돌아간다.
     router.add("GET", "/api/events", (ctx) => {
         ctx.sse();
-        // 새로고침 직후 진행 중 턴을 바로 붙인다. 다음 phase 이벤트까지 기다리지 않는다.
-        for (const conversationId of listRunningSessionKeys()) {
-            emit({ type: "status", conversationId, phase: "generating" });
-        }
     });
     router.add("GET", "/api/events/poll", (ctx) => {
         ctx.json200(eventsSince(ctx.query.since, ctx.query.recentMs));

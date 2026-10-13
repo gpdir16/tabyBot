@@ -22,7 +22,6 @@
     // 중복 스트림이 되지 않도록 세대 번호로 끊는다.
     let generation = 0;
     const handledSeqs = new Set();
-    let connectionStartedAt = 0;
     let receivedEvent = false;
 
     // 이미 닫혔거나 정리된 대상이면 무시한다.
@@ -58,7 +57,11 @@
     }
 
     // 재생(replay)해도 안전한 이벤트: 다시 받아도 화면이 어긋나지 않는 "다시 읽어라" 신호들이다.
-    const GAP_SAFE_TYPES = new Set(["todo_due", "todos_changed", "conversations_changed", "notices_changed", "hello"]);
+    const GAP_SAFE_TYPES = new Set(["todo_due", "todos_changed", "conversations_changed", "notices_changed", "turns_changed", "hello"]);
+
+    // 재생할 때는 내용을 그대로 다시 적용하지 않고 "그 대화를 다시 읽어라"로만 쓰는 이벤트.
+    // 끊긴 사이에 지나간 사용자 메시지·턴 완료를 정본으로 되살린다(알림은 다시 울리지 않는다).
+    const REPLAY_AS_REFRESH = new Set(["user_message", "turn_done"]);
 
     // hello는 서버 이벤트 번호의 기준점이다. 번호가 거꾸로 가면(서버 재시작) 중복 기록을 비우고,
     // 끊긴 사이의 이벤트를 폴링으로 되살린다.
@@ -77,9 +80,9 @@
         if (msg.type === "hello") trackHello(seq, replay);
         else if (seq && seq <= pollCursor && !replay) return false;
 
-        const gapSafe = GAP_SAFE_TYPES.has(msg.type);
-        if (replay && !gapSafe) return false;
-        if (msg.at && connectionStartedAt && Date.parse(msg.at) < connectionStartedAt && !gapSafe) return false;
+        // 지난 이벤트인지는 서버 이벤트 번호로만 가린다. 시각으로 비교하면 서버와 이 기기의
+        // 시계가 어긋났을 때 방금 온 이벤트(사용자 메시지, 턴 완료)까지 버려진다.
+        if (replay && !GAP_SAFE_TYPES.has(msg.type) && !REPLAY_AS_REFRESH.has(msg.type)) return false;
         if (seq && msg.type !== "hello") {
             if (handledSeqs.has(seq)) return false;
             handledSeqs.add(seq);
@@ -144,7 +147,7 @@
             state.applyStatus(msg.conversationId, msg.phase, msg.detail || "", msg.elapsedMs != null ? msg.elapsedMs : null, Boolean(msg.automated));
         },
         delta(msg) {
-            state.applyDelta(msg.conversationId, typeof msg.full === "string" ? msg.full : undefined, msg.text || "", Boolean(msg.automated));
+            state.applyDelta(msg.conversationId, Number(msg.offset) || 0, msg.text || "", Boolean(msg.automated));
         },
         say(msg) {
             const sayText = String(msg.text || "").trim();
@@ -178,7 +181,10 @@
             }
         },
         user_message(msg) {
-            state.applyUserMessage(msg.conversationId, msg.text || "", msg.imageUrl || null, msg.attachments || []);
+            state.applyUserMessage(msg.conversationId, msg.text || "");
+        },
+        turns_changed(msg) {
+            state.touchTurns(msg.conversationId);
         },
         ask(msg) {
             state.applyAsk(msg.conversationId, {
@@ -227,6 +233,11 @@
     function handle(msg, replay = false) {
         if (!msg || typeof msg !== "object" || !msg.type) return;
         if (!admit(msg, replay)) return;
+        if (replay && REPLAY_AS_REFRESH.has(msg.type)) {
+            state.touchTurns(msg.conversationId);
+            refreshConversations();
+            return;
+        }
         HANDLERS[msg.type]?.(msg);
     }
 
@@ -248,8 +259,9 @@
         refreshTimer = setTimeout(async () => {
             if (state.state.offline) return;
             try {
+                const requestedAt = Date.now();
                 const r = await api.conversations();
-                state.replaceConversations(r?.conversations || []);
+                state.replaceConversations(r?.conversations || [], requestedAt);
             } catch (_) {
                 /* 다음 이벤트에서 재시도 */
             }
@@ -279,10 +291,14 @@
         // 서버 다운 시 connection refused가 즉시 실패하므로 고정 500ms 폴링은
         // 죽은 서버를 두드린다. 실패하면 지수적으로 늘린다(최대 10초).
         let delay = 500;
+        let first = true;
         while (polling && !stopped && gen === generation) {
             try {
-                const result = await api.eventsPoll(pollCursor, pollCursor ? 0 : FRESH_LOAD_GAP_MS);
-                for (const event of result?.events || []) handle(event);
+                // 기준점 없이 시작한 첫 폴링은 접속 전 15초치를 받는다. 이미 지난 일이므로 재생으로 다룬다(다시 읽기 신호만 쓴다).
+                const catchUp = first && !pollCursor;
+                first = false;
+                const result = await api.eventsPoll(pollCursor, catchUp ? FRESH_LOAD_GAP_MS : 0);
+                for (const event of result?.events || []) handle(event, catchUp);
                 if (result && Number.isFinite(Number(result.cursor)) && Number(result.cursor) !== pollCursor) {
                     pollCursor = Number(result.cursor);
                 }
@@ -419,7 +435,6 @@
         const gen = generation;
         stopped = false;
         backoff = 1000;
-        connectionStartedAt = Date.now();
         receivedEvent = false;
         if (state.state.offline) {
             state.setConn("disconnected");

@@ -52,6 +52,10 @@ export function collectFilesFromHistory(history, extra = []) {
     for (const turn of history || []) {
         for (const message of turn?.messages || []) {
             if (Array.isArray(message?.attachments)) files.push(...message.attachments);
+            // 작업 중에 합쳐 넣은 메시지의 첨부는 메시지별 메타에 들어 있다.
+            for (const item of Array.isArray(message?.queued) ? message.queued : []) {
+                if (Array.isArray(item?.attachments)) files.push(...item.attachments);
+            }
         }
     }
     if (Array.isArray(extra)) files.push(...extra);

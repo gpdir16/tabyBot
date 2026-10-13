@@ -77,7 +77,9 @@
         C.emit("bootstrap");
         if (snap.settings) C.setSettings(snap.settings);
         C.applyAgents({ agents: snap.agents, folders: snap.folders });
-        C.replaceConversations(Array.isArray(snap.conversations) ? snap.conversations : []);
+        // 실행 상태는 지난번 것이다. 그대로 믿으면 끝난 턴의 진행 표시가 되살아난다. 서버 응답으로만 붙인다.
+        const conversations = Array.isArray(snap.conversations) ? snap.conversations : [];
+        C.replaceConversations(conversations.map(({ running: _running, runningAutomated: _automated, ...meta }) => meta));
         if (snap.todos) C.setTodos(snap.todos);
         if (cached?.id && Array.isArray(cached.turns) && C.botByUuid(cached.id)) {
             const c = C.conv(cached.id);
@@ -130,6 +132,7 @@
         applyUserMessage: C.applyUserMessage,
         applyTurnDone: C.applyTurnDone,
         refreshTurns: C.refreshTurns,
+        touchTurns: C.touchTurns,
         normalizeTurn: C.normalizeTurn,
         setSettings: C.setSettings,
         mergeSettingsLocal: C.mergeSettingsLocal,

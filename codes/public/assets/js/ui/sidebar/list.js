@@ -41,13 +41,12 @@
     }
 
     // 마지막 발화를 보여 주고, 없으면 "아직 맡은 일이 없어요"로 미리보기 줄을 채운다.
-    // 다음 순서로 먼저 있는 것을 쓴다: 확인 전 낙관 메시지, 실행 중 발화(중간 say/스트리밍),
+    // 다음 순서로 먼저 있는 것을 쓴다: 아직 기록에 없는 내 메시지, 실행 중 발화(중간 say/스트리밍),
     // 서버 메타, 봇 목록 스냅샷, 캐시된 턴.
     function previewOf(bot) {
         const c = state.conv(bot.uuid);
         const pending = c?.pending || [];
         for (let i = pending.length - 1; i >= 0; i--) {
-            if (pending[i]?.confirmed) continue;
             const text = snippet(pending[i]?.text);
             if (text) return text;
         }

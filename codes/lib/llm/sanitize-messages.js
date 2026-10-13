@@ -45,8 +45,10 @@ export function sanitizeMessagesForApi(messages) {
 
     const sanitized = messages.map((m) => {
         const out = { ...m };
-        // 화면 표시용 발화 시각 메타: API 페이로드로는 보내지 않는다.
+        // 화면 표시·저장용 메타(발화 시각, 메시지 id, 합쳐 넣은 메시지 목록): API 페이로드로는 보내지 않는다.
         delete out.at;
+        delete out.id;
+        delete out.queued;
 
         if (typeof out.content === "string") {
             out.content = sanitizeTextForLlm(out.content);

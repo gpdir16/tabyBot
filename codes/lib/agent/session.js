@@ -23,14 +23,26 @@ class AgentSession {
         this.abortController.abort();
     }
 
-    addPendingMessage(text) {
-        const trimmed = String(text || "").trim();
-        if (!trimmed) return;
-        this.pendingUserMessages.push(trimmed);
+    // message: { id, text, attachments, at }. 첨부만 있는 메시지도 받는다.
+    addPendingMessage(message) {
+        const text = String(message?.text || "").trim();
+        const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
+        if (!text && !attachments.length) return false;
+        this.pendingUserMessages.push({ ...message, text, attachments });
+        return true;
     }
 
     drainPendingMessages() {
         return this.pendingUserMessages.splice(0);
+    }
+
+    pendingMessageIds() {
+        return this.pendingUserMessages.map((message) => message.id).filter(Boolean);
+    }
+
+    // 이미 다른 경로로 대화에 들어간 메시지는 대기열에서 뺀다.
+    dropPendingMessages(ids) {
+        this.pendingUserMessages = this.pendingUserMessages.filter((message) => !ids.has(message.id));
     }
 
     isAborted() {
@@ -64,8 +76,9 @@ export function isAgentSessionRunning(chatId) {
     return Boolean(getActiveAgentSession(chatId));
 }
 
-export function listRunningSessionKeys() {
-    return [...sessions.keys()].filter((id) => sessions.get(id)?.running);
+// 실행 중인 턴이 자동 실행(예약·능동 체크인)인가.
+export function isAgentSessionAutomated(chatId) {
+    return Boolean(getActiveAgentSession(chatId)?.automated);
 }
 
 export function requestAgentStop(chatId) {
@@ -75,10 +88,9 @@ export function requestAgentStop(chatId) {
     return true;
 }
 
-export function enqueueAgentMessage(chatId, text) {
+export function enqueueAgentMessage(chatId, message) {
     const session = getActiveAgentSession(chatId);
     if (!session) return false;
     if (session.automated) return false;
-    session.addPendingMessage(text);
-    return true;
+    return session.addPendingMessage(message);
 }

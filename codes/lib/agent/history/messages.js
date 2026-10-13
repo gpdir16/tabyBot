@@ -1,4 +1,5 @@
 // 저장된 메시지의 모양: 내부 메시지 판별, 표식, 침묵 마커, 말하기 호출 추출, 턴 변환.
+import crypto from "node:crypto";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT, STOP_BY_USER_HINT } from "../session.js";
 
 // ── 저장된 메시지의 모양: 내부 메시지 판별, 침묵 마커, 말하기 호출 추출, 턴 변환. ──
@@ -15,9 +16,6 @@ const INTERNAL_USER_HINTS = new Set([
 ]);
 
 export const RECOVERABLE_TURN_STATUSES = new Set(["pending", "in_progress", "interrupted"]);
-
-// 새 턴 체크포인트가 거슬러 합쳐도 되는 상태: interrupted는 복구 실행에서만 합친다.
-export const PENDING_MERGE_STATUSES = new Set(["pending", "in_progress"]);
 
 export function cloneStoredMessage(message) {
     return JSON.parse(JSON.stringify(message));
@@ -105,4 +103,56 @@ export function stripAttachedFiles(content) {
 
 export function isScheduledTurnText(text) {
     return typeof text === "string" && text.includes(SCHEDULED_TURN_MARKER);
+}
+
+// ── 사용자 메시지의 신원(id)과 작업 중에 합쳐 넣은 메시지 묶음. ──
+
+// 사용자 메시지와 실행 턴은 id로 짝을 맞춘다. 본문 일치로 맞추면 같은 말을 두 번 보냈을 때
+// 한쪽이 사라지거나 두 번 보인다.
+export function newMessageId() {
+    return crypto.randomUUID();
+}
+
+// 아직 어느 실행에도 합쳐지지 않은 사용자 메시지 하나짜리 대기 턴인가.
+export function isStandalonePendingTurn(turn) {
+    const messages = turn?.messages || [];
+    return turn?.status === "pending" && messages.length === 1 && messages[0]?.role === "user";
+}
+
+function queuedBodyForModel(item) {
+    const text = String(item.text || "").trim();
+    // 첨부 경로는 턴을 시작할 때 만든 시스템 프롬프트에 없으므로 본문에 직접 적어 준다.
+    const files = (item.attachments || [])
+        .filter((file) => file?.filePath)
+        .map((file) => `[attached file: ${file.name || "file"} (${file.filePath})]`)
+        .join("\n");
+    return [text, files].filter(Boolean).join("\n");
+}
+
+// 작업 중에 들어온 메시지들을 모델에 줄 user 메시지 하나로 만든다.
+// content는 모델용이고, 화면 표시와 저장은 queued(메시지별 id·원문·시각·첨부)를 정본으로 쓴다.
+export function buildQueuedUserMessage(items) {
+    return {
+        role: "user",
+        content: `${PENDING_USER_PREFIX}\n\n${items.map(queuedBodyForModel).filter(Boolean).join("\n\n")}`,
+        queued: items.map((item) => ({
+            id: item.id,
+            text: String(item.text || "").trim(),
+            ...(item.at ? { at: item.at } : {}),
+            ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+        })),
+    };
+}
+
+// 메시지들에 담긴 사용자 메시지 id(자기 id와, 합쳐 넣은 메시지들의 id).
+export function userMessageIdsOf(messages) {
+    const ids = [];
+    for (const m of messages || []) {
+        if (m?.role !== "user") continue;
+        if (typeof m.id === "string" && m.id) ids.push(m.id);
+        for (const item of Array.isArray(m.queued) ? m.queued : []) {
+            if (typeof item?.id === "string" && item.id) ids.push(item.id);
+        }
+    }
+    return ids;
 }

@@ -1,121 +1,79 @@
 // 진행 중인 턴의 저장: 대기 메시지, 체크포인트, 중단 복구, 완료 기록.
-import { PENDING_MERGE_STATUSES, RECOVERABLE_TURN_STATUSES, cloneStoredMessage, isInternalStoredMessage, sanitizeTurnStats } from "./messages.js";
-import { PENDING_USER_PREFIX } from "./messages.js";
+import { RECOVERABLE_TURN_STATUSES, cloneStoredMessage, isStandalonePendingTurn, sanitizeTurnStats, userMessageIdsOf } from "./messages.js";
 import { loadChatHistory, replaceChatHistory } from "./sessions.js";
 import { writePreview } from "./preview.js";
 
-function userContentsFromTurnMessages(turnMessages) {
-    const out = [];
-    for (const m of turnMessages || []) {
-        if (m?.role !== "user" || typeof m.content !== "string") continue;
-        if (isInternalStoredMessage(m)) continue;
-        const content = m.content;
-        if (content.startsWith(PENDING_USER_PREFIX)) {
-            for (const part of content.slice(PENDING_USER_PREFIX.length).split("\n\n")) {
-                const clean = part.trim();
-                if (clean) out.push(clean);
-            }
-            continue;
-        }
-        out.push(content);
-    }
-    return out;
-}
-
-// 턴 메시지에 이미 포함된 큐 발화의 단독 pending 턴을 뒤에서부터 소비한다.
-// 반환값은 제거된 pending 턴의 user 메시지들: 첨부 복구에 쓴다.
-function consumeQueuedUserTurns(turns, turnMessages) {
-    const incomingUsers = userContentsFromTurnMessages(turnMessages);
-    const popped = [];
-    while (turns.length && incomingUsers.length) {
-        const pending = turns[turns.length - 1];
-        const msgs = pending?.messages || [];
-        if (msgs.length !== 1 || msgs[0]?.role !== "user") break;
-        const content = msgs[0].content;
-        if (typeof content !== "string") break;
-        // 빈 줄이 들어간 메시지는 합성 래퍼에서 여러 파트로 쪼개져 있으므로
-        // 인접 파트를 다시 이어 붙여서 pending 턴 원문과 맞는지 본다.
-        let idx = -1;
-        let span = 1;
-        for (let i = incomingUsers.length - 1; i >= 0; i -= 1) {
-            for (let len = 1; i + len <= incomingUsers.length; len += 1) {
-                if (incomingUsers.slice(i, i + len).join("\n\n") === content) {
-                    idx = i;
-                    span = len;
-                    break;
-                }
-                if (incomingUsers.slice(i, i + len).join("\n\n").length > content.length) break;
-            }
-            if (idx >= 0) break;
-        }
-        if (idx < 0) break;
-        incomingUsers.splice(idx, span);
-        popped.push(turns.pop().messages[0]);
-    }
-    return popped;
-}
-
-// 소비된 pending 턴에 붙어 있던 첨부를 주입된 user 메시지로 옮긴다.
-// 큐에 실린 업로드가 히스토리에서 사라지지 않게.
-function rescuePoppedAttachments(popped, messages) {
-    for (const pm of popped) {
-        if (!pm?.attachments?.length) continue;
-        const userMessage = [...messages].reverse().find((m) => m?.role === "user");
-        if (userMessage && !userMessage.attachments) userMessage.attachments = pm.attachments;
-    }
-}
-
-export function appendPendingUserTurn(chatId, userText, attachments = []) {
-    const text = String(userText || "").trim();
-    if (!chatId || (!text && !attachments.length)) return;
+// 사용자 메시지를 대기 턴으로 적는다. 실행이 시작되면 그 실행의 턴이 이 자리를 넘겨받는다.
+// 같은 id가 이미 기록에 있으면(재전송) 다시 적지 않고 false를 돌려준다.
+export function appendPendingUserTurn(chatId, { id, text, attachments = [], at = null } = {}) {
+    const content = String(text || "").trim();
+    if (!chatId || (!content && !attachments.length)) return false;
 
     const turns = loadChatHistory(chatId);
-    const last = turns[turns.length - 1];
-    const lastMsgs = last?.messages || [];
-    const lastMsg = lastMsgs[lastMsgs.length - 1];
-    if (lastMsgs.length === 1 && lastMsg?.role === "user" && lastMsg.content === text) return;
+    if (id && turns.some((turn) => userMessageIdsOf(turn?.messages).includes(id))) return false;
 
-    const now = new Date().toISOString();
+    const now = at || new Date().toISOString();
     turns.push({
         at: now,
         status: "pending",
-        messages: [{ role: "user", content: text, at: now, ...(attachments.length ? { attachments } : {}) }],
+        messages: [{ role: "user", ...(id ? { id } : {}), content, at: now, ...(attachments.length ? { attachments } : {}) }],
     });
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);
+    return true;
 }
 
-export function checkpointChatTurn(chatId, turnMessages, { baseMessages = null } = {}) {
+// 끝에 줄지어 있는 대기 턴(아직 어느 실행에도 합쳐지지 않은 메시지)의 시작 위치.
+function trailingPendingStart(turns) {
+    let start = turns.length;
+    while (start > 0 && isStandalonePendingTurn(turns[start - 1])) start -= 1;
+    return start;
+}
+
+// 실행 턴의 기록(record)을 제자리에 놓는다.
+// - 이 실행이 이미 가져간 메시지의 대기 턴은 걷어 낸다(같은 말이 두 번 남지 않게).
+// - 같은 실행의 이전 체크포인트가 있으면 그 자리를 덮는다.
+// - 없으면 실행을 시작시킨 메시지의 대기 턴이 있던 자리에 놓는다.
+// - 그것도 없으면(자동 실행 등) 아직 처리되지 않은 대기 메시지들 앞에 놓는다.
+function placeRunTurn(turns, record, { turnId, recovery }) {
+    const owned = new Set(userMessageIdsOf(record.messages));
+    let originIndex = -1;
+    let originAt = null;
+    for (let i = turns.length - 1; i >= 0; i -= 1) {
+        if (!isStandalonePendingTurn(turns[i])) continue;
+        const id = turns[i].messages[0].id;
+        if (!id || !owned.has(id)) continue;
+        originIndex = i;
+        originAt = turns[i].at || null;
+        turns.splice(i, 1);
+    }
+
+    let index = turnId ? turns.findIndex((turn) => turn?.id === turnId) : -1;
+    // 복구 실행은 끊긴 턴을 이어 쓴다. 그 뒤에 새로 온 대기 메시지는 건너뛰고 찾는다.
+    if (index < 0 && recovery) {
+        const candidate = trailingPendingStart(turns) - 1;
+        if (candidate >= 0 && turns[candidate]?.status === "interrupted") index = candidate;
+    }
+
+    if (index >= 0) {
+        record.at = turns[index].at || record.at;
+        turns[index] = record;
+        return;
+    }
+    if (originAt) record.at = originAt;
+    turns.splice(originIndex >= 0 ? originIndex : trailingPendingStart(turns), 0, record);
+}
+
+export function checkpointChatTurn(chatId, turnMessages, { turnId = null, baseMessages = null } = {}) {
     if (!chatId || !turnMessages?.length) return;
 
     const turns = loadChatHistory(chatId);
-    // 실행 중 보낸 메시지가 이 체크포인트에 래핑 주입돼 있으면 단독 pending 턴을
-    // 여기서 소비한다. 턴 완료까지 남겨 두면 화면에 같은 발화가 두 번 보인다.
-    const consumedPending = consumeQueuedUserTurns(turns, turnMessages);
-    let targetIndex = turns.length - 1;
-    // 복구 실행(baseMessages 있음)이 아니면 interrupted 턴까지 거슬러 합치지 않는다.
-    // 이전 턴의 메시지가 새 턴 체크포인트로 교체되며 유실되는 것을 막기 위해서다.
-    const mergeable = Array.isArray(baseMessages) ? RECOVERABLE_TURN_STATUSES : PENDING_MERGE_STATUSES;
-    while (targetIndex > 0 && mergeable.has(turns[targetIndex - 1]?.status)) targetIndex -= 1;
-    const target = turns[targetIndex];
-    const messages = Array.isArray(baseMessages) ? [...baseMessages, ...turnMessages.map(cloneStoredMessage)] : turnMessages.map(cloneStoredMessage);
-    // 대기열(pending) 턴이 이 턴에 흡수되면 체크포인트가 메시지를 통째로 교체하므로
-    // 저장돼 있던 첨부 메타데이터를 새 유저 메시지로 옮겨 둔다.
-    const pendingAttachments = target?.messages?.[0]?.attachments;
-    if (Array.isArray(pendingAttachments) && pendingAttachments.length) {
-        const userMessage = messages.find((m) => m?.role === "user");
-        if (userMessage && !userMessage.attachments) userMessage.attachments = pendingAttachments;
-    }
-    rescuePoppedAttachments(consumedPending, messages);
-    const checkpoint = {
-        at: target?.at || new Date().toISOString(),
-        status: "in_progress",
-        checkpointAt: new Date().toISOString(),
-        messages,
-    };
-
-    if (target && mergeable.has(target.status)) turns[targetIndex] = checkpoint;
-    else turns.push(checkpoint);
+    const recovery = Array.isArray(baseMessages);
+    const messages = recovery
+        ? [...baseMessages.map(cloneStoredMessage), ...turnMessages.map(cloneStoredMessage)]
+        : turnMessages.map(cloneStoredMessage);
+    const now = new Date().toISOString();
+    placeRunTurn(turns, { ...(turnId ? { id: turnId } : {}), at: now, status: "in_progress", checkpointAt: now, messages }, { turnId, recovery });
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);
 }
@@ -133,6 +91,21 @@ export function markChatTurnInterrupted(chatId) {
     }
     replaceChatHistory(chatId, turns);
     return true;
+}
+
+// 사용자가 멈춘 대화에 남은 대기 메시지를 일반 기록으로 확정한다.
+// 대기 상태로 두면 다음 서버 시작 때 끊긴 턴으로 보고 다시 실행한다.
+export function settlePendingUserTurns(chatId) {
+    if (!chatId) return false;
+    const turns = loadChatHistory(chatId);
+    let changed = false;
+    for (const turn of turns) {
+        if (!isStandalonePendingTurn(turn)) continue;
+        delete turn.status;
+        changed = true;
+    }
+    if (changed) replaceChatHistory(chatId, turns);
+    return changed;
 }
 
 export function hasRecoverableChatTurn(chatId) {
@@ -180,42 +153,27 @@ export function lastChatTurnMessages(chatId) {
     return last?.messages?.map(cloneStoredMessage) || [];
 }
 
+// 실행이 끝난 턴을 확정한다. 체크포인트가 있었으면 그 자리를 덮고, 복구 실행이면
+// 끊긴 턴(baseMessages)과 새 실행분을 하나의 완료 턴으로 합친다.
 export function appendChatTurn(chatId, turnMessages, extra = {}) {
     if (!chatId || !turnMessages?.length) return;
 
     const turns = loadChatHistory(chatId);
     const stats = sanitizeTurnStats(extra.stats);
+    const recovery = Array.isArray(extra.baseMessages);
     const storedMessages = turnMessages.map(cloneStoredMessage);
-    if (extra.attachments?.length) {
-        const userMessage = storedMessages.find((message) => message?.role === "user");
-        if (userMessage) userMessage.attachments = extra.attachments;
-    }
-
-    const poppedPending = consumeQueuedUserTurns(turns, turnMessages);
-    rescuePoppedAttachments(poppedPending, storedMessages);
-
-    const last = turns[turns.length - 1];
-    // 복구 턴은 기존 체크포인트와 새 실행분을 하나의 완료 턴으로 확정한다.
-    // interrupted 턴은 복구 실행(baseMessages 있음)에서만 확정 대상이다. 새 턴이
-    // 미완료 이전 턴을 덮어쓰며 사용자 메시지를 지우는 것을 막는다.
-    if (last && (last.status === "in_progress" || (last.status === "interrupted" && Array.isArray(extra.baseMessages)))) {
-        const completedMessages = Array.isArray(extra.baseMessages)
-            ? [...extra.baseMessages.map(cloneStoredMessage), ...storedMessages]
-            : storedMessages;
-        turns[turns.length - 1] = {
-            at: last.at || new Date().toISOString(),
-            messages: completedMessages,
-            ...(stats ? { stats } : {}),
-            ...(extra.deliveredAttachments?.length ? { attachments: extra.deliveredAttachments } : {}),
-        };
-    } else {
-        turns.push({
+    const messages = recovery ? [...extra.baseMessages.map(cloneStoredMessage), ...storedMessages] : storedMessages;
+    placeRunTurn(
+        turns,
+        {
+            ...(extra.turnId ? { id: extra.turnId } : {}),
             at: new Date().toISOString(),
-            messages: storedMessages,
+            messages,
             ...(stats ? { stats } : {}),
             ...(extra.deliveredAttachments?.length ? { attachments: extra.deliveredAttachments } : {}),
-        });
-    }
+        },
+        { turnId: extra.turnId || null, recovery },
+    );
 
     replaceChatHistory(chatId, turns);
     writePreview(chatId, turns);

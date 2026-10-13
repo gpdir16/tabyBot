@@ -8,6 +8,8 @@ export {
     sayTextsFromMessage,
     turnToMessages,
     extractTurnMessages,
+    newMessageId,
+    userMessageIdsOf,
 } from "./history/messages.js";
 export { stripMarkdownForPreview, previewSnippetFromTurns, lastActivityAtFromTurns, markChatRead } from "./history/preview.js";
 export {
@@ -22,6 +24,7 @@ export {
     appendPendingUserTurn,
     checkpointChatTurn,
     markChatTurnInterrupted,
+    settlePendingUserTurns,
     hasRecoverableChatTurn,
     prepareChatTurnRecovery,
     lastChatTurnMessages,
