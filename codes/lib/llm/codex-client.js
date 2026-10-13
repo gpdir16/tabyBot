@@ -34,6 +34,7 @@ export async function codexComplete({
     signal,
     thinkingLevel,
     thinkingParam = "reasoning_effort",
+    cacheKey,
 }) {
     throwIfAborted(signal);
 
@@ -41,6 +42,8 @@ export async function codexComplete({
     const headers = buildHeaders(accessToken, accountId);
     const baseURL = "https://chatgpt.com/backend-api/codex";
     const payload = buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
+    // 같은 대화의 요청이 같은 프롬프트 캐시로 가도록 대화 키를 싣는다.
+    if (cacheKey) payload.prompt_cache_key = String(cacheKey);
 
     // 스트리밍 중에도 function_call 이벤트를 조립할 수 있으므로 툴 라운드에서도 스트리밍한다.
     // 비활성화하면 중간 라운드 텍스트가 프론트엔드에 도달하지 않는다.

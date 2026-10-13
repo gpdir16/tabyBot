@@ -135,6 +135,8 @@ export function buildQueuedUserMessage(items) {
     return {
         role: "user",
         content: `${PENDING_USER_PREFIX}\n\n${items.map(queuedBodyForModel).filter(Boolean).join("\n\n")}`,
+        // 모델에 보내는 시각 표기는 at에서 나온다. 첫 요청부터 붙어 있어야 라운드 사이에 본문이 달라지지 않는다.
+        at: new Date().toISOString(),
         queued: items.map((item) => ({
             id: item.id,
             text: String(item.text || "").trim(),

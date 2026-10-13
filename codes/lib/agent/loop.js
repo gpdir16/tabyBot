@@ -61,14 +61,19 @@ function buildToolImageObservation(result, { visionEnabled = false } = {}) {
     return {
         role: "user",
         content: buildToolResultContent(JSON.stringify(stripped) ?? "", __image, { visionEnabled }),
+        // 시각 표기가 첫 요청부터 붙도록 만들 때 at을 정한다(체크포인트가 나중에 붙이면 본문이 달라진다).
+        at: new Date().toISOString(),
     };
 }
 
 // 한 턴의 진행 상태. 메시지 목록·호출 횟수·중단 여부 같은 값을 묶어 두고,
 // 결과 만들기·체크포인트·빈 답변 복구를 메서드로 처리한다.
 class AgentTurn {
-    constructor({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries }) {
+    constructor({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries, cacheKey }) {
         this.llm = llm;
+        this.cacheKey = cacheKey || null;
+        this.inputTokens = 0;
+        this.cachedTokens = 0;
         this.messages = messages;
         this.contextBaseLength = contextBaseLength;
         this.session = session;
@@ -98,7 +103,23 @@ class AgentTurn {
         };
     }
 
+    // 응답의 usage에서 입력 토큰과 그중 캐시에서 읽은 토큰을 모은다(Chat Completions와 Responses 모양 모두).
+    recordUsage(usage) {
+        if (!usage) return;
+        this.inputTokens += Number(usage.prompt_tokens ?? usage.input_tokens) || 0;
+        this.cachedTokens += Number(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens) || 0;
+    }
+
+    logCacheUsage() {
+        if (!this.inputTokens) return;
+        const pct = Math.round((this.cachedTokens / this.inputTokens) * 100);
+        console.log(
+            `tabyBot: prompt cache ${this.cacheKey || "-"} calls=${this.modelCallCount} input=${this.inputTokens} cached=${this.cachedTokens} (${pct}%)`,
+        );
+    }
+
     result(extra = {}) {
+        this.logCacheUsage();
         const turnMessages = extractTurnMessages(this.messages, this.contextBaseLength);
         return {
             ...extra,
@@ -168,6 +189,7 @@ class AgentTurn {
                     stream: Boolean(this.onTextDelta),
                     onTextDelta: this.streamDelta(),
                     signal: this.session?.signal,
+                    cacheKey: this.cacheKey,
                 });
             } catch (err) {
                 if (isStoppedError(err, this.session)) {
@@ -176,6 +198,7 @@ class AgentTurn {
                 }
                 throw err;
             }
+            this.recordUsage(response.usage);
 
             if (this.stopRequested) return null;
 
@@ -287,7 +310,9 @@ class AgentTurn {
                 stream: Boolean(this.onTextDelta),
                 onTextDelta: this.streamDelta(),
                 signal: this.session?.signal,
+                cacheKey: this.cacheKey,
             });
+            this.recordUsage(response.usage);
             return { response };
         } catch (err) {
             if (isStoppedError(err, this.session)) {
@@ -404,13 +429,23 @@ async function runAgentTurn(
     // 사용자 메시지는 messages의 마지막이다. -1로 두면 extractTurnMessages가 그것을 이번 턴에 포함한다.
     const contextBaseLength = messages.length - 1;
     // 기록·화면이 대기 턴과 이 메시지를 같은 것으로 알아보게 id와 보낸 시각을 싣는다.
-    if (userMessageMeta?.id) {
-        const current = messages[contextBaseLength];
-        current.id = userMessageMeta.id;
-        if (userMessageMeta.at) current.at = userMessageMeta.at;
-    }
+    const current = messages[contextBaseLength];
+    if (userMessageMeta?.id) current.id = userMessageMeta.id;
+    // 모델이 보는 현재 시각은 이 at에서 나온다. 저장된 뒤에도 같은 값이라 다음 턴의 프롬프트 캐시가 유지된다.
+    current.at = (userMessageMeta?.id && userMessageMeta.at) || new Date().toISOString();
 
-    const turn = new AgentTurn({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries });
+    const turn = new AgentTurn({
+        llm,
+        messages,
+        contextBaseLength,
+        session,
+        setStatus,
+        onTextDelta,
+        onCheckpoint,
+        quietEmpty,
+        maxEmptyReplyRetries,
+        cacheKey: resolvedSessionKey,
+    });
 
     if (turn.stopRequested) return turn.stopped(null);
 

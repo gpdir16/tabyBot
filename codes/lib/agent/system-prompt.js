@@ -15,12 +15,6 @@ export function renderSystemPrompt(template, vars) {
     });
 }
 
-function localeForLanguage(lang) {
-    if (lang === "ko") return "ko-KR";
-    if (lang === "ja") return "ja-JP";
-    return "en-US";
-}
-
 export function buildEnvironmentPromptVars() {
     const docker = isDockerRuntime();
     const pathHint = `any absolute path, \`${USER_DIR}\`, or \`/tmp\``;
@@ -54,29 +48,6 @@ export function buildFilesystemPromptBlock() {
         "**Path handling:** `file_read` and `file_patch` accept any absolute path accessible to the process. Relative paths resolve to the main home above.",
     ];
     return lines.join("\n");
-}
-
-export function buildDateTimePromptVars(lang = "en") {
-    const now = new Date();
-    const timeZone = (typeof process.env.TZ === "string" && process.env.TZ.trim()) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    const locale = localeForLanguage(lang);
-    const localFormatted = new Intl.DateTimeFormat(locale, {
-        dateStyle: "full",
-        timeStyle: "long",
-        timeZone,
-    }).format(now);
-    const utcFormatted = new Intl.DateTimeFormat("en-US", {
-        dateStyle: "full",
-        timeStyle: "long",
-        timeZone: "UTC",
-    }).format(now);
-
-    return {
-        LOCAL_DATETIME: localFormatted,
-        UTC_DATETIME: utcFormatted,
-        ISO_UTC: now.toISOString(),
-        TIMEZONE: timeZone,
-    };
 }
 
 export function buildRuntimeInfoLine(info = {}) {
