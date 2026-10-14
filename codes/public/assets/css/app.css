@@ -2925,6 +2925,10 @@ body.sb-collapsed .sp-expand {
 .switch input:checked ~ .kn {
     transform: translateX(17px);
 }
+.switch input:disabled ~ .tr,
+.switch input:disabled ~ .kn {
+    opacity: 0.4;
+}
 .switch input:focus-visible ~ .tr {
     box-shadow: var(--focus-ring);
 }
@@ -3885,6 +3889,64 @@ body.sb-collapsed .sp-expand {
 .nt-body {
     flex: 1;
     min-width: 0;
+}
+/* 진행 중인 시스템 작업: 이름과 진행 표시줄 */
+.nt-task {
+    padding: var(--sp-3) 0;
+}
+.nt-task + .nt-task {
+    border-top: 1px solid var(--border);
+}
+.nt-task-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    font-size: 14px;
+}
+.nt-task-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.nt-task-count {
+    flex: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+.nt-bar {
+    height: 4px;
+    margin-top: var(--sp-2);
+    border-radius: var(--radius-pill);
+    background: var(--fill);
+    overflow: hidden;
+}
+.nt-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 240ms var(--ease);
+}
+/* 전체 양을 모르는 작업은 막대가 좌우로 오간다 */
+.nt-bar.busy > i {
+    width: 35%;
+    animation: ntBarBusy 1.4s ease-in-out infinite;
+}
+@keyframes ntBarBusy {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(290%);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .nt-bar.busy > i {
+        width: 100%;
+        opacity: 0.5;
+        animation: none;
+    }
 }
 .nt-text {
     font-size: 14px;

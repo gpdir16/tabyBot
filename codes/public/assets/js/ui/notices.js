@@ -19,6 +19,7 @@
     const ALERT_GAP_MS = 120; // 닫힌 뒤 다음 알림이 뜨기까지의 틈
 
     let items = []; // 서버 목록(최신 순)
+    let tasks = []; // 지금 돌고 있는 시스템 작업(시작한 순)
     let loaded = false;
     let reqSeq = 0;
     let modal = null; // 떠 있는 경고창 { el, id }
@@ -34,6 +35,8 @@
     /* ── 데이터 ─────────────────────────────────────────────── */
     function apply(payload) {
         items = Array.isArray(payload?.notices) ? payload.notices : [];
+        // 읽음 처리 같은 낙관적 갱신의 응답에는 작업 목록이 없을 수 있다. 그때는 가진 것을 둔다.
+        if (Array.isArray(payload?.tasks)) tasks = payload.tasks;
         loaded = true;
         state.emit("notices");
         syncModal();
@@ -123,10 +126,18 @@
             .catch((err) => T.toast.show("error", T.api.errorText(err, t("compressAllFailed"))));
     }
 
+    // 압축은 대화 기록을 다시 쓰므로 되돌릴 수 없다.
+    const compressConfirm = () => ({
+        title: t("compressAllConfirmTitle"),
+        text: t("compressAllNowDesc"),
+        confirmLabel: t("compressAllConfirmButton"),
+    });
+
     // 알림에 딸린 동작들. 경고창의 버튼과 기록 목록의 버튼이 같은 것을 쓴다.
     function actionsFor(n) {
         const out = [];
-        if (n.action?.kind === "compress_sessions") out.push({ label: t("noticeCompress"), run: () => runCompress(n.action) });
+        if (n.action?.kind === "compress_sessions")
+            out.push({ label: t("noticeCompress"), confirm: compressConfirm, run: () => runCompress(n.action) });
         if (n.type === "todo_due" && n.url) out.push({ label: t("noticeOpenTodo"), run: () => go(n.url) });
         if (n.conversationId && state.botByUuid(n.conversationId)) {
             out.push({ label: t("noticeOpenChat"), run: () => go(`/a/${n.conversationId}`) });
@@ -144,7 +155,16 @@
     function buildRow(n) {
         const level = LEVEL_ICON[n.level] ? n.level : "info";
         const actions = actionsFor(n).map((a) =>
-            T.h("button", { class: "btn ghost btn-sm", type: "button", text: a.label, onclick: () => runAction(n, a) }),
+            T.h("button", {
+                class: "btn ghost btn-sm",
+                type: "button",
+                text: a.label,
+                // 경고창은 그 자체가 "할까요?"라는 물음이지만, 기록 목록의 버튼은 누르면 바로 실행되므로 한 번 더 묻는다.
+                async onclick() {
+                    if (a.confirm && !(await T.confirm(a.confirm()))) return;
+                    runAction(n, a);
+                },
+            }),
         );
         return T.h("div", { class: `nt-row ${level}${n.read ? " read" : ""}` }, [
             T.icon(LEVEL_ICON[level], "nt-icon"),
@@ -154,6 +174,35 @@
                 T.h("div", { class: "nt-time", text: timeOf(n) }),
                 actions.length ? T.h("div", { class: "nt-actions" }, actions) : null,
             ]),
+        ]);
+    }
+
+    const TASK_LABEL = {
+        session_compress: "taskSessionCompress",
+        dream_sweep: "siDreaming",
+        session_review: "siReview",
+        update_check: "updateCheck",
+    };
+
+    // 설정의 알림 탭에 나오는 진행 중인 시스템 작업 한 줄. 전체 양을 알면 채워지는 막대를,
+    // 모르면 오가는 막대를 보여 준다.
+    function buildTask(task) {
+        const total = Number(task.total) || 0;
+        const done = Math.min(Number(task.done) || 0, total);
+        const label = TASK_LABEL[task.kind] ? t(TASK_LABEL[task.kind]) : String(task.kind || "");
+        const bar = T.h("div", { class: `nt-bar${total ? "" : " busy"}`, role: "progressbar", "aria-label": label }, [T.h("i")]);
+        if (total) {
+            bar.setAttribute("aria-valuemin", "0");
+            bar.setAttribute("aria-valuemax", String(total));
+            bar.setAttribute("aria-valuenow", String(done));
+            bar.firstChild.style.width = `${(done / total) * 100}%`;
+        }
+        return T.h("div", { class: "nt-task" }, [
+            T.h("div", { class: "nt-task-head" }, [
+                T.h("span", { class: "nt-task-name", text: task.name ? `${label} (${task.name})` : label }),
+                total ? T.h("span", { class: "nt-task-count", text: `${done} / ${total}` }) : null,
+            ]),
+            bar,
         ]);
     }
 
@@ -310,7 +359,9 @@
         dismiss,
         clearAll,
         buildRow,
+        buildTask,
         items: () => items,
+        tasks: () => tasks,
         loaded: () => loaded,
     };
 })(window.Taby);

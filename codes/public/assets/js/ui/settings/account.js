@@ -81,6 +81,13 @@
         const logout = C.actionRow(
             t("authLogout"),
             async () => {
+                const ok = await T.confirm({
+                    title: t("authLogoutConfirmTitle"),
+                    text: t("authLogoutConfirmText"),
+                    confirmLabel: t("authLogout"),
+                    danger: true,
+                });
+                if (!ok) return;
                 logout.row.disabled = true;
                 try {
                     await T.api.accountLogout();

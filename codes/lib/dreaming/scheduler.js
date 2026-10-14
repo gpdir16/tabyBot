@@ -4,6 +4,7 @@ import { getDreamingConfig } from "../self-improvement.js";
 import { isUserIdle, DEFAULT_IDLE_REQUIRED_MS } from "../user-activity.js";
 import { isValidTimeZone, defaultTimeZone } from "../scheduling/time.js";
 import { runDreamSweep } from "./sweep.js";
+import { trackTask } from "../web/tasks.js";
 
 let task = null;
 let idleTimer = null;
@@ -27,7 +28,7 @@ function queueSweep(trigger) {
     }
     sweepPending = false;
     sweepRunning = true;
-    scheduleWork("dream", () => runDreamSweep({ trigger }), { sessionKey: "dream:sweep" })
+    scheduleWork("dream", () => trackTask("dream_sweep", () => runDreamSweep({ trigger })), { sessionKey: "dream:sweep" })
         .catch((err) => console.error(`tabyBot: ${trigger} dream sweep failed:`, err?.stack || err))
         .finally(() => {
             sweepRunning = false;

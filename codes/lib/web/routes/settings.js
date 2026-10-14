@@ -18,6 +18,7 @@ import {
     normalizeNsfwLevel,
 } from "../../user-settings.js";
 import { compressBotSessions } from "../../agent/summarize.js";
+import { trackTask } from "../tasks.js";
 import { applySelfImprovementPatch, getDreamingConfig, getProactiveConfig, getReviewConfig } from "../../self-improvement.js";
 import { emit } from "../bus.js";
 import { t as i18nT } from "../../i18n.js";
@@ -127,7 +128,7 @@ export async function runSessionCompression(chatIds = null) {
     sessionCompressInFlight = true;
     emit({ type: "sessions_compress", running: true });
     try {
-        return await compressBotSessions(chatIds);
+        return await trackTask("session_compress", (progress) => compressBotSessions(chatIds, progress));
     } finally {
         sessionCompressInFlight = false;
         emit({ type: "sessions_compress", running: false });

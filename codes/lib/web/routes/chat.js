@@ -7,6 +7,7 @@ import { dispatchMessage, stopConversation } from "../turns.js";
 import { listPendingAsks, resolvePendingAskByAskId } from "../../agent/user-ask.js";
 import { SecretError } from "../../secrets/store.js";
 import { clearNotices, listNotices, markNoticesRead } from "../notices.js";
+import { listTasks } from "../tasks.js";
 import fs from "node:fs";
 import { getVapidPublicKey, removeSubscription, saveSubscription } from "../push.js";
 
@@ -114,6 +115,11 @@ function registerConversationsRoutes(router) {
 
 // ── 실시간 이벤트(SSE)와 시스템 알림 기록 API. ──
 
+// 알림 탭이 한 번에 받는 것: 알림 기록과 지금 돌고 있는 시스템 작업.
+function noticesPayload() {
+    return { ...listNotices(), tasks: listTasks() };
+}
+
 function registerEventsRoutes(router) {
     // 진행 중인 턴은 대화 목록·상세의 running 값으로 알린다. 접속할 때마다 상태 이벤트를
     // 전체에 뿌리면 이미 보고 있던 다른 화면의 진행 단계까지 처음으로 되돌아간다.
@@ -125,19 +131,19 @@ function registerEventsRoutes(router) {
     });
 
     router.add("GET", "/api/notices", (ctx) => {
-        ctx.json200(listNotices());
+        ctx.json200(noticesPayload());
     });
 
     // body.ids가 없으면 전부 읽음 처리. 다른 기기에 떠 있는 알림 모달도 닫히게 변경을 알린다.
     router.add("POST", "/api/notices/read", async (ctx) => {
         const body = await ctx.json().catch(() => ({}));
         if (markNoticesRead(Array.isArray(body?.ids) ? body.ids : null)) emit({ type: "notices_changed" });
-        ctx.json200(listNotices());
+        ctx.json200(noticesPayload());
     });
 
     router.add("DELETE", "/api/notices", (ctx) => {
         if (clearNotices()) emit({ type: "notices_changed" });
-        ctx.json200(listNotices());
+        ctx.json200(noticesPayload());
     });
 }
 

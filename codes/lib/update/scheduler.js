@@ -6,6 +6,7 @@ import { sendUpdateNotification } from "./notify.js";
 import { loadUserConfig } from "../config-loader.js";
 import { getUserUpdateCheckEnabled } from "../user-settings.js";
 import { isRunningVersionKnown, saveUpdateState, setLastNotifiedVersion } from "./store.js";
+import { trackTask } from "../web/tasks.js";
 
 let task = null;
 
@@ -36,7 +37,7 @@ async function runUpdateCheck() {
 function queueUpdateCheck(label) {
     scheduleWork("cron", async () => {
         try {
-            await runUpdateCheck();
+            await trackTask("update_check", runUpdateCheck);
         } catch (err) {
             console.error(`tabyBot: ${label} update check failed:`, err?.stack || err);
         }

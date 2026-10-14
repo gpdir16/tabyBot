@@ -7,6 +7,7 @@ import { loadChatHistory } from "../agent/chat-history.js";
 import { scheduleWork } from "../agent-queue.js";
 import { getReviewConfig } from "../self-improvement.js";
 import { loadDreamingState, saveDreamingState, appendDreamDiary } from "./state.js";
+import { trackTask } from "../web/tasks.js";
 
 const queued = new Set();
 
@@ -68,6 +69,10 @@ async function runSessionReview({ sessionKey, agentId }) {
     }
 }
 
+function reviewName(sessionKey, agentId) {
+    return getAgentByUuid(sessionKey)?.name || agentId || "";
+}
+
 export function maybeScheduleSessionReview({ sessionKey, agentId, result, automated = false }) {
     // 백그라운드(자동) 턴은 리뷰/학습 대상에서 제외: 체크인·잡이 리뷰를 연쇄 발동시키지 않게 한다.
     if (automated) return;
@@ -91,9 +96,13 @@ export function maybeScheduleSessionReview({ sessionKey, agentId, result, automa
     saveDreamingState(state);
     queued.add(sessionKey);
 
-    scheduleWork("dream", () => runSessionReview({ sessionKey, agentId }), {
-        sessionKey: `dream:review:${sessionKey}`,
-    })
+    scheduleWork(
+        "dream",
+        () => trackTask("session_review", () => runSessionReview({ sessionKey, agentId }), { name: reviewName(sessionKey, agentId) }),
+        {
+            sessionKey: `dream:review:${sessionKey}`,
+        },
+    )
         .catch((err) => console.error("tabyBot: session review failed:", err?.stack || err))
         .finally(() => queued.delete(sessionKey));
 }
