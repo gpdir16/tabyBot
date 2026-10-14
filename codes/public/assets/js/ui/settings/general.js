@@ -98,25 +98,6 @@
             ]),
         );
 
-        // 알림 (클라이언트 전용: OS 알림 + 웹 푸시)
-        if (T.notifications && typeof Notification !== "undefined") {
-            sec.append(
-                T.h("div", { class: "set-row" }, [
-                    T.h("div", { class: "set-label", text: t("notifications") }),
-                    C.switchEl(
-                        T.notifications.enabled(),
-                        (v) => {
-                            T.notifications.setOn(v).then((ok) => {
-                                if (v && !ok) T.toast.show("error", t("notificationsDenied"));
-                                C.build();
-                            });
-                        },
-                        t("notifications"),
-                    ),
-                ]),
-            );
-        }
-
         if (T.notifications?.canInstall()) {
             sec.append(
                 C.actionRow(t("installApp"), () => {
@@ -162,8 +143,47 @@
 
     /* ── 알림 탭 ────────────────────────────────────────────
        서버가 보낸 시스템 알림의 기록. 새 알림은 모달로 뜨고(ui/notices.js), 여기서 지난 것을 다시 본다. */
+    // 이 기기의 알림(OS 알림 + 웹 푸시) 스위치. 켤 수 없는 기기에서도 행은 보여 주고 이유를 적는다
+    // (iOS는 홈 화면에 추가한 앱에서만, 그 밖에는 HTTPS에서만 알림을 쓸 수 있다).
+    function appendNotifyToggle(sec) {
+        const support = T.notifications.support();
+        const usable = support === "ok" || support === "denied";
+        const toggle = C.switchEl(
+            usable && T.notifications.enabled(),
+            (v) => {
+                T.notifications.setOn(v).then((ok) => {
+                    if (v && !ok) T.toast.show("error", t("notificationsDenied"));
+                    C.build();
+                });
+            },
+            t("notifications"),
+        );
+        if (!usable) toggle.querySelector("input").disabled = true;
+        sec.append(T.h("div", { class: "set-row" }, [T.h("div", { class: "set-label", text: t("notifications") }), toggle]));
+        const reason = {
+            ok: "notificationsDesc",
+            denied: "notificationsBlocked",
+            "ios-install": "notificationsIosInstall",
+            insecure: "notificationsInsecure",
+            unsupported: "notificationsUnsupported",
+        }[support];
+        sec.append(T.h("div", { class: "set-desc", text: t(reason) }));
+    }
+
     function buildNotices(body) {
         const sec = T.h("div", { class: "set-section" });
+        appendNotifyToggle(sec);
+        sec.append(T.h("hr", { class: "divider" }));
+
+        const tasks = T.notices.tasks();
+        if (tasks.length) {
+            sec.append(
+                T.h("div", { class: "field-label", text: t("tasksRunning") }),
+                T.h("div", { class: "nt-list nt-history" }, tasks.map(T.notices.buildTask)),
+                T.h("hr", { class: "divider" }),
+            );
+        }
+
         sec.append(T.h("div", { class: "set-desc", text: t("noticesDesc") }));
         const list = T.notices.items();
         if (!T.notices.loaded()) {

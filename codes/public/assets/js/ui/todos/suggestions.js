@@ -82,7 +82,8 @@
     }
 
     // 승인·거절 버튼과 그 동작. 같은 제안에 대한 동작은 동시에 하나만 돈다.
-    function suggestionActions(row, kind, targetGone) {
+    function suggestionActions(row, kind, targetGone, title) {
+        const name = String(title || "").trim() || t("todos");
         const approveLabel = kind === "delete" ? t("delete") : kind === "edit" ? t("todosApply") : t("todosApprove");
         const rejectBtn = T.h("button", { type: "button", class: "btn ghost", text: t("todosReject") });
         const approveBtn = targetGone
@@ -142,13 +143,33 @@
             }
         };
         const approveFlow = async () => {
+            // 삭제 제안을 승인하면 그 할 일이 지워진다. 되돌릴 수 없으므로 한 번 더 묻는다.
+            if (kind === "delete") {
+                const ok = await T.confirm({
+                    title: t("confirmDeleteTitle", { name }),
+                    text: t("confirmDeleteText"),
+                    confirmLabel: t("delete"),
+                    danger: true,
+                });
+                if (!ok) return false;
+            }
             // 편집 중인 항목을 고치는 제안이면 편집 내용을 먼저 저장한다.
             if (C.editId === row.targetId && C.draft && kind !== "delete" && !(await C.commitDraft())) return false;
             const res = await T.api.approveTodo(row.id, { timezone: C.browserTz() });
             if (kind === "delete" && C.editId === row.targetId) C.closeGoneEditor(row.targetId);
             return res;
         };
-        rejectBtn.addEventListener("click", () => act(() => T.api.rejectTodo(row.id), t("todosSugRejected")));
+        // 거절한 제안은 다시 불러올 수 없다.
+        const rejectFlow = async () => {
+            const ok = await T.confirm({
+                title: t("todosRejectConfirmTitle", { name }),
+                text: t("todosRejectConfirmText"),
+                confirmLabel: t("todosReject"),
+                danger: true,
+            });
+            return ok ? T.api.rejectTodo(row.id) : false;
+        };
+        rejectBtn.addEventListener("click", () => act(rejectFlow, t("todosSugRejected")));
         if (approveBtn) approveBtn.addEventListener("click", () => act(approveFlow, kind === "add" ? t("todosAdded") : t("todosSugApproved")));
         return { rejectBtn, approveBtn };
     }
@@ -161,7 +182,7 @@
         const patch = row.patch && typeof row.patch === "object" ? row.patch : {};
 
         const { subs, previews } = describeSuggestion(row, kind, target, patch);
-        const { rejectBtn, approveBtn } = suggestionActions(row, kind, kind !== "add" && !target);
+        const { rejectBtn, approveBtn } = suggestionActions(row, kind, kind !== "add" && !target, title);
 
         const promptText = String((kind === "add" ? row.prompt : patch.prompt) || "")
             .replace(/\s+$/g, "")

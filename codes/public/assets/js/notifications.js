@@ -147,6 +147,23 @@
         return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     }
 
+    function isIos() {
+        // iPadOS는 데스크톱 Safari로 자신을 알리므로 터치 지원으로 구분한다.
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    }
+
+    // 이 기기에서 알림을 켤 수 있는지. 못 켜면 이유를 돌려준다(설정 화면이 그 이유를 보여 준다).
+    // "ok" | "insecure"(HTTPS 아님) | "ios-install"(홈 화면에 추가해야 함) | "unsupported" | "denied"(권한 차단)
+    function support() {
+        if (typeof Notification === "undefined") {
+            // iOS는 홈 화면에 추가한 앱에서만 알림 API를 연다. 그 밖에는 HTTPS가 아니면 막힌다.
+            if (isIos() && !isStandalone()) return "ios-install";
+            if (!window.isSecureContext) return "insecure";
+            return "unsupported";
+        }
+        return Notification.permission === "denied" ? "denied" : "ok";
+    }
+
     async function promptInstall() {
         if (!deferredInstall) return false;
         deferredInstall.prompt();
@@ -213,6 +230,7 @@
         show,
         setOn,
         enabled,
+        support,
         syncAuth,
         canInstall: () => Boolean(deferredInstall) && !isStandalone(),
         promptInstall,

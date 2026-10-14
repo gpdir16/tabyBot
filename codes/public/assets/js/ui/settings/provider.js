@@ -271,7 +271,17 @@
             .then((st) => {
                 const loggedIn = Boolean(st?.[kind]);
                 const loginLabel = loggedIn ? t("oauthRelogin") : t("oauthLogin");
-                const login = () => {
+                const login = async () => {
+                    // 다시 로그인을 시작하면 서버가 지금 로그인부터 지운다. 중간에 그만두면 로그인이 없는 상태로 남는다.
+                    if (loggedIn) {
+                        const ok = await T.confirm({
+                            title: t("oauthReloginConfirmTitle"),
+                            text: t("oauthReloginConfirmText"),
+                            confirmLabel: t("oauthRelogin"),
+                            danger: true,
+                        });
+                        if (!ok) return;
+                    }
                     T.api
                         .startOauth(kind)
                         .then((flow) => {

@@ -361,7 +361,8 @@ async function compressSessionHistory(llm, chatId) {
 
 // chatIds를 생략하면 모든 봇의 활성 세션을 압축한다.
 // 반환: { compressed, skipped, failed }. 실행 중/빈 세션은 skipped로 센다.
-export async function compressBotSessions(chatIds = null) {
+// onProgress(done, total): 압축 대상 중 몇 개를 끝냈는지 알린다.
+export async function compressBotSessions(chatIds = null, onProgress = null) {
     const ids =
         Array.isArray(chatIds) && chatIds.length
             ? chatIds
@@ -373,6 +374,8 @@ export async function compressBotSessions(chatIds = null) {
     const candidates = ids.filter(sessionNeedsCompression);
     result.skipped = ids.length - candidates.length;
     if (!candidates.length) return result;
+    let done = 0;
+    onProgress?.(done, candidates.length);
     // 자동 압축처럼 각 봇의 모델/사고 수준 오버라이드를 반영한 클라이언트로
     // 요약한다. 같은 오버라이드 조합은 클라이언트를 재사용한다.
     const clients = new Map();
@@ -393,6 +396,8 @@ export async function compressBotSessions(chatIds = null) {
             console.warn(`tabyBot: manual session compression failed for ${chatId}:`, err?.message || err);
             result.failed += 1;
         }
+        done += 1;
+        onProgress?.(done, candidates.length);
     }
     return result;
 }
