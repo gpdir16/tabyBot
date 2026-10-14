@@ -191,6 +191,10 @@
         computerBrowserOpen: (agentId, url) => request("/api/computer/browser/open", { method: "POST", json: { agentId, url } }),
 
         authStatus: () => request("/api/auth/status"),
+        claudeAuthStatus: () => request("/api/auth/claude/status"),
+        startClaudeLogin: () => request("/api/auth/claude/login/start", { method: "POST", json: {} }),
+        submitClaudeLoginCode: (code) => request("/api/auth/claude/login/code", { method: "POST", json: { code } }),
+        cancelClaudeLogin: () => request("/api/auth/claude/login/cancel", { method: "POST", json: {} }),
         startOauth: (kind) => request(`/api/auth/${enc(kind)}/start`, { method: "POST", json: {} }),
         cancelOauth: (kind) => request(`/api/auth/${enc(kind)}/cancel`, { method: "POST", json: {} }),
 

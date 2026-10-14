@@ -18,10 +18,15 @@
         return meta && /-oauth$/.test(String(meta.type || ""));
     }
 
+    // 로그인을 공식 CLI에서 하는 프로바이더(Claude Agent SDK)
+    function cliLoginKind(meta) {
+        return meta && meta.type === "claude-agent-sdk";
+    }
+
     // 인증이 채워져 모델 목록을 요구할 수 있는 상태인지
     function authReady(meta) {
         if (!C.draft.providerId) return false;
-        if (oauthKind(meta)) return true;
+        if (oauthKind(meta) || cliLoginKind(meta)) return true;
         const keyOk = !meta || meta.apiKeyOptional || C.draft.apiKey.trim().length > 0;
         const urlOk = !meta?.needsBaseURL || /^https?:\/\/.+/.test(C.draft.baseURL.trim());
         return keyOk && urlOk;
@@ -102,6 +107,8 @@
         }
         if (oauthKind(meta)) {
             box.append(C.labeled(t("oauthAccount"), T.settingsUI.oauthSection(meta.id, C.render)));
+        } else if (cliLoginKind(meta)) {
+            box.append(C.labeled(t("oauthAccount"), T.settingsUI.cliLoginSection(C.render)));
         } else {
             box.append(
                 C.labeled(

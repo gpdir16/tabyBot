@@ -298,6 +298,7 @@
         state.on("pwa", C.rebuildIfIdle);
         // OAuth 결과는 시트가 닫혀 있어도 반영한다(설정 갱신 + 토스트).
         state.on("oauth_done", (p) => {
+            C.cliLoginPending = null;
             C.oauthPending = null;
             C.stopOauthPoll();
             void T.api
@@ -341,8 +342,12 @@
             return C.gesture;
         },
         oauthSection: (...args) => C.oauthSection(...args),
+        cliLoginSection: (...args) => C.cliLoginSection(...args),
         secretInput: (...args) => C.secretInput(...args),
-        resetOauth: () => (C.oauthPending = null),
+        resetOauth: () => {
+            C.oauthPending = null;
+            C.cliLoginPending = null;
+        },
     };
 
     C.pathFor = pathFor;

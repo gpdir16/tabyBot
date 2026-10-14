@@ -24,6 +24,14 @@ function saveModelMeta(meta) {
     writeJsonAtomic(META_PATH, meta);
 }
 
+// 제공자가 응답과 함께 실제 컨텍스트 크기를 알려 주면 쓰고 있는 값과 캐시를 그 값으로 고침.
+export function rememberContextWindow(meta, contextWindow) {
+    if (!(contextWindow > 0) || meta.contextWindow === contextWindow) return;
+    meta.contextWindow = contextWindow;
+    const cached = loadModelMeta();
+    if (cached.model === meta.model) saveModelMeta({ ...cached, contextWindow });
+}
+
 export async function ensureModelMeta(provider) {
     let defaultContext = DEFAULT_CONTEXT;
     try {

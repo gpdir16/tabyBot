@@ -5,6 +5,7 @@ import { USER_DIR } from "../paths.js";
 import { fetchCodexModels } from "./codex-client.js";
 import { fetchGrokModels } from "./grok-client.js";
 import { fetchGithubCopilotModels } from "./github-copilot-client.js";
+import { fetchClaudeModels } from "./claude-agent-client.js";
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
@@ -69,6 +70,9 @@ export async function fetchProviderModels(provider, { useCache = true } = {}) {
     }
     if (provider?.type === "github-copilot-oauth") {
         return fetchGithubCopilotModels();
+    }
+    if (provider?.type === "claude-agent-sdk") {
+        return fetchClaudeModels();
     }
     if (!provider?.apiKey?.trim()) {
         throw new Error("API key required to list models");

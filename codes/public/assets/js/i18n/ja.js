@@ -322,6 +322,11 @@
         oauthPending: "認証を待っています…",
         oauthSuccess: "認証が完了しました",
         oauthFailed: "認証に失敗しました",
+        claudeLoginHint:
+            "tabyBot を実行しているマシンの公式 Claude CLI でログインします。tabyBot が Claude の認証情報を参照・保存することはありません。",
+        claudeLoginSteps: "ページを開いてログインしてください。コードが表示されたら、ここに貼り付けてください。",
+        claudeLoginCode: "認証コード",
+        claudeLoginSubmit: "送信",
         notifications: "通知",
         notificationsDenied: "通知の許可が拒否されました",
         installApp: "アプリをインストール",

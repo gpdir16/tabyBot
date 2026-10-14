@@ -54,6 +54,7 @@ export const PROVIDER_LABELS = {
     grok: "Grok OAuth",
     codex: "Codex OAuth (ChatGPT Plus/Pro)",
     "github-copilot": "GitHub Copilot OAuth",
+    claude: "Claude OAuth (Pro/Max)",
     ollama: "Ollama (local)",
     "ollama-cloud": "Ollama Cloud",
     synthetic: "Synthetic",
@@ -105,6 +106,7 @@ export function providerPresets() {
         "codex",
         "grok",
         "github-copilot",
+        "claude",
     ]
         .map((id) => byId.get(id))
         .filter(Boolean);

@@ -13,6 +13,8 @@ import {
     pollGithubCopilotDeviceFlow,
     startGithubCopilotDeviceFlow,
 } from "../../llm/github-copilot-tokens.js";
+import { getClaudeAuthStatus } from "../../llm/claude-agent-client.js";
+import { cancelClaudeLogin, startClaudeLogin, submitClaudeLoginCode } from "../../llm/claude-login.js";
 import { emit } from "../bus.js";
 
 // ── 앱 상태 API. ──
@@ -105,6 +107,34 @@ function registerLoginRoutes(router) {
 function registerOauthRoutes(router) {
     router.add("GET", "/api/auth/status", (ctx) => {
         ctx.json200({ codex: hasCodexAuth(), grok: hasGrokAuth(), "github-copilot": hasGithubCopilotAuth() });
+    });
+
+    // Claude 로그인은 공식 CLI(`claude auth login`)가 함. 여기서는 그 링크와 인증 코드만 중계함.
+    router.add("GET", "/api/auth/claude/status", async (ctx) => {
+        ctx.json200(await getClaudeAuthStatus());
+    });
+
+    router.add("POST", "/api/auth/claude/login/start", async (ctx) => {
+        try {
+            const done = (result) => emit({ type: "oauth_done", kind: "claude", ok: result.ok, detail: result.detail });
+            ctx.json200(await startClaudeLogin({ onDone: done }));
+        } catch (err) {
+            ctx.json400(err?.message || String(err));
+        }
+    });
+
+    router.add("POST", "/api/auth/claude/login/code", async (ctx) => {
+        try {
+            const body = await ctx.json();
+            ctx.json200(await submitClaudeLoginCode(body?.code));
+        } catch (err) {
+            ctx.json400(err?.message || String(err));
+        }
+    });
+
+    router.add("POST", "/api/auth/claude/login/cancel", (ctx) => {
+        cancelClaudeLogin();
+        ctx.json200({ ok: true });
     });
 
     router.add("POST", "/api/auth/:kind/start", async (ctx) => {
