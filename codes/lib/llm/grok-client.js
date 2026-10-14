@@ -1,25 +1,27 @@
 import { streamWithFallback, throwIfAborted } from "./transport.js";
 import { buildPayload, buildStreamResult } from "./responses-request.js";
-import { loadGrokTokens, ensureFreshToken } from "./grok-tokens.js";
+import { loadGrokTokens, ensureFreshToken, getClientVersion } from "./grok-tokens.js";
 import { consumeResponsesStream } from "./responses-stream.js";
 
 // OAuth 세션은 개발자 API(api.x.ai)가 아니라 CLI 프록시를 사용
 const BASE_URL = "https://cli-chat-proxy.grok.com/v1";
 
-function buildAuthHeaders(accessToken) {
+const OUTDATED_CLIENT = /update|upgrade|outdated|version/i;
+
+async function buildAuthHeaders(accessToken, options) {
     // CLI 프록시는 Grok CLI 식별 헤더가 없으면 미권한 API 클라이언트로 취급
     return {
         Authorization: `Bearer ${accessToken}`,
         "x-xai-token-auth": "xai-grok-cli",
         "x-grok-client-identifier": "grok-shell",
-        "x-grok-client-version": "0.2.93",
+        "x-grok-client-version": await getClientVersion(options),
         "User-Agent": "xai-grok-cli",
     };
 }
 
-function buildHeaders(accessToken) {
+async function buildHeaders(accessToken, options) {
     return {
-        ...buildAuthHeaders(accessToken),
+        ...(await buildAuthHeaders(accessToken, options)),
         "Content-Type": "application/json",
         Accept: "text/event-stream",
     };
@@ -44,7 +46,7 @@ export async function grokComplete({
     throwIfAborted(signal);
 
     const { accessToken } = await getAuth();
-    const headers = buildHeaders(accessToken);
+    const headers = await buildHeaders(accessToken);
     const payload = buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
 
     // 스트리밍 중에도 function_call 이벤트를 조립할 수 있으므로 툴 라운드에서도 스트리밍한다.
@@ -79,7 +81,16 @@ async function fetchGrokResponses(headers, body, requestOptions, { allowRefresh 
         const stored = loadGrokTokens();
         if (stored?.refreshToken) {
             const { accessToken } = await ensureFreshToken(stored, { forceRefresh: true });
-            const retryHeaders = buildHeaders(accessToken);
+            const retryHeaders = await buildHeaders(accessToken);
+            return fetchGrokResponses(retryHeaders, body, { ...requestOptions, headers: retryHeaders }, { allowRefresh: false });
+        }
+    }
+    // 버전이 낡았다는 거절이면 최신 버전을 다시 읽어 한 번만 재시도함
+    if (res.status >= 400 && res.status < 500 && res.status !== 401 && allowRefresh && OUTDATED_CLIENT.test(errBody)) {
+        const before = headers["x-grok-client-version"];
+        const version = await getClientVersion({ force: true });
+        if (version !== before) {
+            const retryHeaders = { ...headers, "x-grok-client-version": version };
             return fetchGrokResponses(retryHeaders, body, { ...requestOptions, headers: retryHeaders }, { allowRefresh: false });
         }
     }
@@ -122,7 +133,7 @@ function extractModelList(payload) {
 
 export async function fetchGrokModels() {
     const { accessToken } = await getAuth();
-    const headers = { ...buildAuthHeaders(accessToken), Accept: "application/json" };
+    const headers = { ...(await buildAuthHeaders(accessToken)), Accept: "application/json" };
     let res = await fetch(`${BASE_URL}/models-v2`, { headers });
     if (!res.ok) {
         res = await fetch(`${BASE_URL}/models`, { headers });

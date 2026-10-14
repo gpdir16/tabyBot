@@ -79,17 +79,41 @@ export function clearGrokTokens() {
     }
 }
 
-function tokenHeaders() {
+// xAI 서버(로그인, CLI 프록시)는 오래된 클라이언트 버전을 거절함("update Grok Build"). 버전을 고정해 두면 다시 막히므로
+// 공식 CLI 패키지의 최신 버전을 npm에서 읽어 씀. 못 읽으면 FALLBACK_CLIENT_VERSION.
+const CLIENT_VERSION_URL = "https://registry.npmjs.org/@xai-official/grok/latest";
+const CLIENT_VERSION_TTL_MS = 6 * 60 * 60_000;
+const FALLBACK_CLIENT_VERSION = "1.0.52";
+
+let clientVersion = { value: FALLBACK_CLIENT_VERSION, at: 0 };
+
+export async function getClientVersion({ force = false } = {}) {
+    if (!force && Date.now() - clientVersion.at < CLIENT_VERSION_TTL_MS) return clientVersion.value;
+    try {
+        const res = await fetch(CLIENT_VERSION_URL, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) });
+        const version = res.ok ? (await res.json())?.version : null;
+        if (typeof version === "string" && /^\d+\.\d+\.\d+/.test(version)) clientVersion = { value: version, at: Date.now() };
+    } catch {
+        // 못 읽으면 알고 있는 값을 그대로 씀
+    }
+    // 실패해도 매 요청마다 다시 묻지 않게 시각은 갱신함
+    clientVersion.at = Date.now();
+    return clientVersion.value;
+}
+
+// 공식 CLI는 로그인 요청에도 클라이언트 버전을 실어 보냄
+async function tokenHeaders() {
     return {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
+        "x-grok-client-version": await getClientVersion(),
     };
 }
 
 async function refreshGrokToken(refreshToken) {
     const res = await fetch(TOKEN_URL, {
         method: "POST",
-        headers: tokenHeaders(),
+        headers: await tokenHeaders(),
         body: new URLSearchParams({
             grant_type: "refresh_token",
             refresh_token: refreshToken,
@@ -162,7 +186,7 @@ export async function ensureFreshToken(stored, { forceRefresh = false } = {}) {
 export async function startGrokDeviceFlow() {
     const res = await fetch(DEVICE_CODE_URL, {
         method: "POST",
-        headers: tokenHeaders(),
+        headers: await tokenHeaders(),
         body: new URLSearchParams({ client_id: CLIENT_ID, scope: SCOPE }).toString(),
     });
     if (!res.ok) {
@@ -194,7 +218,7 @@ export async function pollGrokDeviceFlow({ deviceCode, intervalMs, expiresAt, si
 
         const res = await fetch(TOKEN_URL, {
             method: "POST",
-            headers: tokenHeaders(),
+            headers: await tokenHeaders(),
             body: new URLSearchParams({
                 grant_type: "urn:ietf:params:oauth:grant-type:device_code",
                 client_id: CLIENT_ID,
