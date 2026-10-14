@@ -1,0 +1,8 @@
+{
+    "id": "claude",
+    "type": "claude-agent-sdk",
+    "apiKeyOptional": true,
+    "defaultContextWindow": 1000000,
+    "thinkingLevels": ["low", "medium", "high", "xhigh", "max"],
+    "defaultThinkingLevel": "high"
+}

@@ -321,6 +321,11 @@
         oauthPending: "Waiting for authorization…",
         oauthSuccess: "Authorization complete",
         oauthFailed: "Authorization failed",
+        claudeLoginHint:
+            "Signs in through the official Claude CLI on the machine running tabyBot. tabyBot never sees or stores your Claude credentials.",
+        claudeLoginSteps: "Open the page and sign in. If it shows a code, paste it here.",
+        claudeLoginCode: "Authentication code",
+        claudeLoginSubmit: "Submit",
         notifications: "Notifications",
         notificationsDenied: "Notification permission was denied",
         installApp: "Install app",

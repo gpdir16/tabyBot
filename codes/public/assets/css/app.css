@@ -3160,6 +3160,21 @@ body.sb-collapsed .sp-expand {
     align-items: center;
     gap: var(--sp-2);
 }
+/* 인증 코드를 붙여 넣는 줄: 입력란이 남는 너비를 쓰고 버튼은 제 크기 유지 */
+.oauth-code-row.fill {
+    width: 100%;
+}
+.oauth-code-row.fill .input {
+    flex: 1;
+    min-width: 0;
+}
+.oauth-code-row.fill .btn {
+    flex: none;
+    white-space: nowrap;
+}
+.account-who {
+    overflow-wrap: anywhere;
+}
 .oauth-code {
     font-family: var(--font-mono);
     font-size: 20px;

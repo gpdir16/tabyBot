@@ -3,7 +3,8 @@ import { chatCompletions, createOpenAIClient } from "./openai-compatible.js";
 import { codexComplete } from "./codex-client.js";
 import { grokComplete } from "./grok-client.js";
 import { githubCopilotComplete } from "./github-copilot-client.js";
-import { ensureModelMeta } from "./model-meta.js";
+import { claudeAgentComplete } from "./claude-agent-client.js";
+import { ensureModelMeta, rememberContextWindow } from "./model-meta.js";
 import { getThinkingLevel, getCachedProviderThinkingMeta, normalizeThinkingLevel } from "../user-settings.js";
 
 const OAUTH_PROVIDER_TYPES = new Set(["codex-oauth", "grok-oauth", "github-copilot-oauth"]);
@@ -88,6 +89,28 @@ export async function createLlmClient(overrides = {}) {
                     thinkingLevel,
                     thinkingParam: getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort",
                     autoModelCandidates: provider.autoModelCandidates,
+                });
+            },
+        };
+    }
+
+    if (provider.type === "claude-agent-sdk") {
+        const modelMeta = await ensureModelMeta(provider);
+        return {
+            provider,
+            modelMeta,
+            complete({ messages, tools, tool_choice, stream, onTextDelta, signal, cacheKey }) {
+                return claudeAgentComplete({
+                    cacheKey,
+                    model: provider.model,
+                    messages,
+                    tools: tools?.length ? tools : undefined,
+                    tool_choice,
+                    stream,
+                    onTextDelta,
+                    signal,
+                    thinkingLevel,
+                    onContextWindow: (contextWindow) => rememberContextWindow(modelMeta, contextWindow),
                 });
             },
         };

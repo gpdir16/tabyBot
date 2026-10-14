@@ -21,6 +21,7 @@
 
     C.keyEditing = false; // 저장된 API 키를 다시 입력하는 중인지
 
+    C.cliLoginPending = null; // 진행 중 CLI 로그인 { url }
     C.oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
 
     /* ── 프로바이더 페이지 ──────────────────────────────────── */
@@ -54,6 +55,8 @@
             }
             if (isOauthProvider(meta)) {
                 sec.append(oauthSection(provider.id));
+            } else if (isCliLoginProvider(meta)) {
+                sec.append(cliLoginSection());
             } else {
                 sec.append(...apiKeyRows(provider, meta));
             }
@@ -146,6 +149,11 @@
 
     function isOauthProvider(meta) {
         return Boolean(meta && /-oauth$/.test(String(meta.type || "")));
+    }
+
+    // 로그인을 tabyBot이 아니라 공식 CLI에서 하는 프로바이더(Claude Agent SDK).
+    function isCliLoginProvider(meta) {
+        return Boolean(meta && meta.type === "claude-agent-sdk");
     }
 
     // 모델 목록 캐시 무효화: 키/URL 변경 후 공통으로 쓴다.
@@ -283,6 +291,102 @@
                     ...(inSettings ? [] : [T.h("button", { class: `btn${loggedIn ? " ghost" : " primary"}`, text: loginLabel, onclick: login })]),
                 );
                 // 계정 행은 이미 묶음에 담겨 있다. 같은 묶음의 다음 행으로 붙인다.
+                if (inSettings) row.after(C.actionRow(loginLabel, login));
+            })
+            .catch(() => {
+                account.replaceChildren(T.h("div", { class: "set-desc", text: t("offlineNote") }));
+            });
+        return box;
+    }
+
+    // CLI 로그인 섹션: 로그인은 서버의 공식 CLI가 함. 여기서는 그 링크를 열게 하고 인증 코드를 받아 넘김.
+    // rerender: 화면을 다시 그릴 콜백(설정 시트는 build, 온보딩은 render).
+    function cliLoginSection(rerender) {
+        const refresh = rerender || C.build;
+        // oauthSection과 같은 배치: 설정에서는 로그인이 계정 행 아래의 동작 행, 온보딩은 같은 줄의 버튼.
+        const inSettings = !rerender;
+        const box = T.h("div", { class: "set-section" });
+
+        if (C.cliLoginPending) {
+            const code = T.h("input", { class: "input", type: "text", "aria-label": t("claudeLoginCode"), placeholder: t("claudeLoginCode") });
+            const submit = T.h("button", {
+                class: "btn primary",
+                text: t("claudeLoginSubmit"),
+                onclick() {
+                    if (!code.value.trim()) return;
+                    submit.disabled = true;
+                    // 성공 여부는 oauth_done 이벤트로 옴. 여기서는 잘못된 코드만 바로 알림.
+                    T.api
+                        .submitClaudeLoginCode(code.value.trim())
+                        .catch((err) => T.toast.show("error", T.api.errorText(err, t("oauthFailed"))))
+                        .finally(() => {
+                            submit.disabled = false;
+                        });
+                },
+            });
+            box.append(
+                T.h("div", { class: "oauth-pending" }, [
+                    T.h("div", { class: "set-desc", text: t("claudeLoginSteps") }),
+                    T.h("a", {
+                        class: "btn primary oauth-open",
+                        href: C.cliLoginPending.url,
+                        target: "_blank",
+                        rel: "noopener noreferrer",
+                        text: t("oauthOpenPage"),
+                    }),
+                    T.h("div", { class: "oauth-code-row fill" }, [code, submit]),
+                    T.h("div", { class: "oauth-foot" }, [
+                        T.h("div", { class: "oauth-wait" }, [T.h("span", { class: "spin quiet" }), T.h("span", { text: t("oauthPending") })]),
+                        T.h("button", {
+                            class: "btn ghost",
+                            text: t("cancel"),
+                            onclick() {
+                                T.api.cancelClaudeLogin().catch(() => {
+                                    /* 취소 요청이 실패해도 대기 중인 로그인은 시간이 지나면 끝남 */
+                                });
+                                C.cliLoginPending = null;
+                                refresh();
+                            },
+                        }),
+                    ]),
+                ]),
+            );
+            return box;
+        }
+
+        const account = T.h("div", { class: "set-control" }, [T.h("div", { class: "set-desc", text: t("oauthChecking") })]);
+        const row = T.h("div", { class: "set-row" }, [T.h("div", { class: "set-label", text: t("oauthAccount") }), account]);
+        const hint = T.h("div", { class: "set-desc", text: t("claudeLoginHint") });
+        box.append(row, hint);
+
+        T.api
+            .claudeAuthStatus()
+            .then((st) => {
+                const loggedIn = Boolean(st?.loggedIn);
+                const loginLabel = loggedIn ? t("oauthRelogin") : t("oauthLogin");
+                // 계정 이름은 길어서 상태 옆에 두면 좁은 화면에서 줄이 깨짐. 설명 줄에 따로 적음.
+                const who = [st?.email, st?.plan].filter(Boolean).join(", ");
+                if (loggedIn && who) hint.before(T.h("div", { class: "set-desc account-who", text: who }));
+                const login = () => {
+                    T.api
+                        .startClaudeLogin()
+                        .then((flow) => {
+                            if (!flow?.url) throw new Error(t("oauthFailed"));
+                            C.cliLoginPending = { url: flow.url };
+                            refresh();
+                        })
+                        .catch((err) => {
+                            T.toast.show("error", T.api.errorText(err, t("oauthFailed")));
+                        });
+                };
+                account.replaceChildren(
+                    T.h("div", { class: `key-state${loggedIn ? "" : " off"}` }, [
+                        T.h("span", { class: "key-dot" }),
+                        T.h("span", { text: loggedIn ? t("oauthLoggedIn") : t("oauthNotLoggedIn") }),
+                    ]),
+                    ...(inSettings ? [] : [T.h("button", { class: `btn${loggedIn ? " ghost" : " primary"}`, text: loginLabel, onclick: login })]),
+                );
+                // 계정 행은 이미 묶음에 담겨 있음. 같은 묶음의 다음 행으로 붙임.
                 if (inSettings) row.after(C.actionRow(loginLabel, login));
             })
             .catch(() => {
@@ -654,6 +758,7 @@
     C.buildProvider = buildProvider;
     C.stopOauthPoll = stopOauthPoll;
     C.oauthSection = oauthSection;
+    C.cliLoginSection = cliLoginSection;
     C.modelsKey = modelsKey;
     C.loadModels = loadModels;
     C.buildModel = buildModel;
