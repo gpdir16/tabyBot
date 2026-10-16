@@ -23,6 +23,7 @@
             { id: "provider", label: "provider", icon: "cloud", color: "#5e5ce6" },
             { id: "model", label: "model", icon: "cpu", color: "#bf5af2" },
             { id: "account", label: "account", icon: "person", color: "#30d158" },
+            { id: "efficiency", label: "efficiency", icon: "gauge", color: "#32ade6" },
         ],
         [
             { id: "selfimprovement", label: "selfImprovement", icon: "sparkles", color: "#ff9f0a" },
@@ -33,7 +34,7 @@
     ];
 
     // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
-    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub"];
+    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub"];
 
     function formOpen() {
         return FORM_KEYS.some((k) => C[k]);
@@ -92,6 +93,7 @@
         if (C.secretEditing) return C.secretEditing.mode === "new" ? t("addSecret") : C.secretEditing.name;
         if (C.credsEditing) return t(C.credsEditing === "password" ? "authPassword" : "authUsername");
         if (C.modelSub) return t(C.modelSub === "adv" ? "advanced" : "model");
+        if (C.efficiencySub) return t(C.efficiencySub === "stats" ? "usageStats" : "cacheKeepAlive");
         return "";
     }
 
@@ -168,6 +170,7 @@
         provider: "buildProvider",
         model: "buildModel",
         account: "buildAccount",
+        efficiency: "buildEfficiency",
         selfimprovement: "buildSelfImprovement",
         skills: "buildSkills",
         mcp: "buildMcp",

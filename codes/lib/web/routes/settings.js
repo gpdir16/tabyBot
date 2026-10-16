@@ -24,6 +24,8 @@ import { emit } from "../bus.js";
 import { t as i18nT } from "../../i18n.js";
 import { isValidTimeZone } from "../../scheduling/time.js";
 import { fetchProviderModels } from "../../llm/models.js";
+import { cacheKeepAliveSummary, normalizeCacheKeepAlive } from "../../llm/cache-keepalive.js";
+import { usageSummary } from "../../llm/usage-log.js";
 import { fetchGithubCopilotRoutingModels } from "../../llm/github-copilot-client.js";
 import { startDreamingScheduler } from "../../dreaming/scheduler.js";
 import { restartUpdateScheduler } from "../../update/scheduler.js";
@@ -194,6 +196,10 @@ export function buildSettingsPayload() {
             autoMode: Boolean(merged?.autoMode),
             autoModelCandidates: merged?.autoModelCandidates || [],
         },
+        // 효율적인 운영 탭: 지금 프로바이더의 캐시 유지 설정과 예상. 핑이 이득이 없는 프로바이더(요청 수 과금, 로컬)는 null.
+        cacheKeepAlive: merged ? cacheKeepAliveSummary(merged, config) : null,
+        // 효율적인 운영 탭의 지표와 사용 기록: 날짜별, 프로바이더와 모델별 토큰 수.
+        usage: usageSummary(),
         providers: presets,
         agents: listAgents().map(publicAgent),
         agentColors: AVATAR_COLORS,
@@ -239,6 +245,14 @@ function applyGeneralFields(config, patch, providerId) {
     }
     if (patch.nsfwLevel !== undefined) config.nsfwLevel = normalizeNsfwLevel(patch.nsfwLevel);
     if (patch.approvalLevel !== undefined) config.approvalLevel = normalizeApprovalLevel(patch.approvalLevel);
+    // 캐시 유지는 지금 프로바이더에 대해 따로 둔다. 자동이 기본이라 끔이나 사용자 지정만 적는다.
+    if (patch.cacheKeepAlive !== undefined) {
+        config.cacheKeepAlive = { ...config.cacheKeepAlive };
+        const value = normalizeCacheKeepAlive(patch.cacheKeepAlive);
+        if (value) config.cacheKeepAlive[providerId] = value;
+        else delete config.cacheKeepAlive[providerId];
+        if (!Object.keys(config.cacheKeepAlive).length) delete config.cacheKeepAlive;
+    }
     if (patch.contextTriggerPercent !== undefined) {
         config.contextTriggerPercent = normalizeContextTriggerPercent(patch.contextTriggerPercent);
     }
