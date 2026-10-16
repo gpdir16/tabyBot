@@ -494,11 +494,15 @@ function toUsage(usage) {
     const cached = usage.cache_read_input_tokens || 0;
     const prompt = (usage.input_tokens || 0) + cached + (usage.cache_creation_input_tokens || 0);
     const completion = usage.output_tokens || 0;
+    // 새로 캐시에 쓴 부분의 만료 시간(구독은 보통 1시간, 추가 사용량을 쓰는 중이면 5분). 캐시 유지 핑 간격에 씀.
+    const written = usage.cache_creation || {};
+    const ttl = written.ephemeral_1h_input_tokens > 0 ? 3_600_000 : written.ephemeral_5m_input_tokens > 0 ? 300_000 : undefined;
     return {
         prompt_tokens: prompt,
         completion_tokens: completion,
         total_tokens: prompt + completion,
         prompt_tokens_details: { cached_tokens: cached },
+        ...(ttl ? { cache_ttl_ms: ttl } : {}),
     };
 }
 
@@ -698,6 +702,12 @@ class LiveProcess {
             cur.blocks = [];
             cur.text = "";
             cur.usage = { ...event.message?.usage };
+            // 캐시 유지 핑: 요청 앞부분은 이미 처리됐으므로 답을 받지 않고 바로 닫음.
+            if (cur.probe) {
+                this.current = null;
+                cur.done(null, { usage: toUsage(cur.usage) });
+                this.close();
+            }
             return;
         }
         if (!cur?.started) return;
@@ -805,13 +815,13 @@ class LiveProcess {
         return sizes.every((size) => size <= LIVE_RESULT_CHARS) && total <= LIVE_RESULTS_TOTAL_CHARS ? "tools" : null;
     }
 
-    request({ mode, tail, allowTools, onTextDelta, signal, onContextWindow }) {
+    request({ mode, tail, allowTools, onTextDelta, signal, onContextWindow, probe = false }) {
         this.usedAt = Date.now();
         clearTimeout(this.timer);
         this.onContextWindow = onContextWindow;
         this.apiError = null;
         return new Promise((resolve, reject) => {
-            const cur = { blocks: [], text: "", usage: null, started: false, allowTools, onTextDelta };
+            const cur = { blocks: [], text: "", usage: null, started: false, allowTools, onTextDelta, probe };
             const drop = (err) => {
                 if (this.current !== cur) return;
                 this.current = null;
@@ -910,8 +920,9 @@ function makeRoom() {
     while (lives.size >= MAX_LIVE && idle.length) idle.shift().close();
 }
 
-async function startLive(conv, { model, system, messages, list, level, resume, envOverride }) {
-    makeRoom();
+async function startLive(conv, { model, system, messages, list, level, resume, envOverride, probe = false }) {
+    // 캐시 유지 핑은 잠깐 떴다 닫히므로 대화가 쓰는 프로세스를 밀어내지 않음.
+    if (!probe) makeRoom();
     const cwd = WORK_DIR;
     fs.mkdirSync(cwd, { recursive: true, mode: 0o700 });
     const sessionId = crypto.randomUUID();
@@ -924,6 +935,7 @@ async function startLive(conv, { model, system, messages, list, level, resume, e
         ...envOverride,
     });
     const live = new LiveProcess(conv, { env, cwd, sessionId, hasTools: list.length > 0 });
+    if (probe) lives.delete(live);
     conv.proc = live;
     try {
         let mcpServers = {};
@@ -1039,6 +1051,41 @@ async function completeOnce({
     } finally {
         conv.busy = false;
         if (!cacheKey) conv.proc?.close();
+    }
+}
+
+// 캐시 유지 핑. 대화가 쓰는 프로세스는 건드리지 않고, 같은 기록을 넘긴 일회용 프로세스로 같은 앞부분의
+// 요청을 보낸 뒤 답이 시작되면 닫음. 앞부분이 그 대화의 기록과 정확히 같을 때만 보냄(다르면 캐시를 새로
+// 쓰게 되어 핑이 오히려 비쌈). 보낼 수 없으면 null.
+export async function claudeAgentPing({ cacheKey, model, messages, tools, thinkingLevel, signal, envOverride }) {
+    const conv = cacheKey ? conversations.get(String(cacheKey)) : null;
+    if (!conv || conv.busy || conv.proc?.current || conv.proc?.state === "tools") return null;
+    const list = toolList(tools?.length ? tools : conv.tools);
+    const level = String(thinkingLevel || "").toLowerCase();
+    const converted = toAnthropicMessages(sanitizeMessagesForApi(markToolObservations(messages)));
+    if (conv.key !== sha(model, converted.system, list, level, envOverride || null)) return null;
+    const last = converted.messages.length - 1;
+    const tail = converted.messages[last];
+    if (tail.results.length || conv.sigs.length < last) return null;
+    for (let i = 0; i < last; i += 1) if (conv.sigs[i] !== converted.messages[i].sig) return null;
+
+    const probe = { ...newConversation(), key: conv.key, tools: conv.tools, entries: [...conv.entries], sigs: [...conv.sigs] };
+    const live = await startLive(probe, {
+        model,
+        system: converted.system,
+        messages: converted.messages,
+        list,
+        level,
+        resume: false,
+        envOverride,
+        probe: true,
+    });
+    try {
+        throwIfAborted(signal);
+        const result = await live.request({ mode: "prompt", tail, allowTools: false, signal, probe: true });
+        return result.usage || null;
+    } finally {
+        live.close();
     }
 }
 

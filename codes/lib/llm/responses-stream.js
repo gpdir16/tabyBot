@@ -230,3 +230,35 @@ export async function consumeResponsesStream(res, signal, onTextDelta) {
     if (state.streamError) throw new Error(state.streamError);
     return { content: state.content, usage: state.usage, toolCalls: state.toolCalls };
 }
+
+// 캐시 유지 핑용. 모델이 출력을 시작하면(앞부분 처리가 끝났다는 뜻) 그 자리에서 읽기를 멈추고 undefined를,
+// 그 전에 응답이 끝나면 usage를 돌려준다. 연결을 끊는 것은 호출자가 한다.
+export async function readUntilOutput(res) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return undefined;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            let evt;
+            try {
+                evt = JSON.parse(trimmed.slice(5).replace(/^ /, ""));
+            } catch {
+                // 조각난 SSE JSON이나 [DONE]은 건너뛴다
+                continue;
+            }
+            const type = String(evt?.type || evt?.event_type || evt?.event || "");
+            if (type === "response.completed" || type === "response.done") return evt.response?.usage || evt.usage || undefined;
+            if (type === "response.failed" || type === "error") {
+                throw new Error(`Responses stream ${type}: ${evt.response?.error?.message || evt.error?.message || evt.message || type}`);
+            }
+            if (type === "response.output_item.added" || type.endsWith(".delta")) return undefined;
+        }
+    }
+}

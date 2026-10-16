@@ -1,7 +1,7 @@
 import { streamWithFallback, throwIfAborted } from "./transport.js";
 import { buildPayload, buildStreamResult } from "./responses-request.js";
 import { loadCodexTokens, ensureFreshToken } from "./codex-tokens.js";
-import { consumeResponsesStream } from "./responses-stream.js";
+import { consumeResponsesStream, readUntilOutput } from "./responses-stream.js";
 
 const ORIGINATOR = "tabybot";
 
@@ -70,6 +70,33 @@ export async function codexComplete({
         });
     }
     return codexCompleteCollected({ baseURL, headers, payload, signal });
+}
+
+// 캐시 유지 핑. Codex 백엔드는 출력 길이 제한(max_output_tokens)을 받지 않으므로 같은 요청을 스트리밍으로
+// 보내고 모델이 출력을 시작하면 바로 끊는다. 앞부분은 그때 이미 캐시에서 읽혔다.
+export async function codexPing({ model, messages, tools, tool_choice, signal, thinkingLevel, thinkingParam = "reasoning_effort", cacheKey }) {
+    const { accessToken, accountId } = await getAuth();
+    const payload = buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
+    if (cacheKey) payload.prompt_cache_key = String(cacheKey);
+    const abort = new AbortController();
+    const onAbort = () => abort.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+        const res = await fetch("https://chatgpt.com/backend-api/codex/responses", {
+            method: "POST",
+            headers: buildHeaders(accessToken, accountId),
+            body: JSON.stringify({ ...payload, stream: true }),
+            signal: abort.signal,
+        });
+        if (!res.ok) {
+            const errBody = await res.text().catch(() => "");
+            throw new Error(`Codex API error: ${res.status} ${errBody}`);
+        }
+        return await readUntilOutput(res);
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
+        abort.abort();
+    }
 }
 
 async function codexCompleteCollected({ baseURL, headers, payload, signal }) {
