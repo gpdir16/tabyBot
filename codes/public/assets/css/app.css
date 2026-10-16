@@ -759,7 +759,7 @@ kbd {
     color: #fff;
     opacity: 0.72;
 }
-/* 같은 사람이 이어서 보낸 말풍선은 바짝 붙이고, 묶음의 마지막 말풍선만 보낸 쪽 아래 모서리를 좁혀 꼬리처럼 보이게 한다 */
+/* 같은 사람이 이어서 보낸 말풍선은 바짝 붙이고, 묶음의 마지막 말풍선에만 아이메시지식 꼬리를 단다 */
 .msg-row.user + .msg-row.user,
 .msg-row.assistant + .msg-row.assistant {
     margin-top: -5px;
@@ -767,11 +767,35 @@ kbd {
 .msg-row:not(:has(.bubble)) + .msg-row {
     margin-top: 0;
 }
-.msg-row.user:not(:has(+ .msg-row.user)) .bubble {
-    border-bottom-right-radius: 6px;
-}
+/* 꼬리: 말풍선 아래 모서리를 덮고 바깥으로 휘어 나가는 모양을 마스크로 오려 낸다.
+   배경을 물려받으므로 테마·보낸 쪽 색이 그대로 따라온다. 상대 쪽은 좌우를 뒤집는다.
+   꼬리가 글자를 덮지 않도록 말풍선 안에서 배경과 글자 사이 층(z-index: -1)에 그린다. */
+.msg-row.user:not(:has(+ .msg-row.user)) .bubble,
 .msg-row.assistant:not(:has(+ .msg-row.assistant)) .msg-stack > .bubble:not(.inter) {
-    border-bottom-left-radius: 6px;
+    isolation: isolate;
+}
+.msg-row.user:not(:has(+ .msg-row.user)) .bubble::after,
+.msg-row.assistant:not(:has(+ .msg-row.assistant)) .msg-stack > .bubble:not(.inter)::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    right: -6px;
+    width: 22px;
+    height: 22px;
+    z-index: -1;
+    background: inherit;
+    pointer-events: none;
+    -webkit-mask:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Cpath d='M0 0H16V8C16 15 18.5 19.5 22 22C17.5 22 13.5 20.8 10.5 18.6C8 20.8 4.8 22 0 22Z'/%3E%3C/svg%3E")
+        no-repeat center / 100% 100%;
+    mask:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Cpath d='M0 0H16V8C16 15 18.5 19.5 22 22C17.5 22 13.5 20.8 10.5 18.6C8 20.8 4.8 22 0 22Z'/%3E%3C/svg%3E")
+        no-repeat center / 100% 100%;
+}
+.msg-row.assistant:not(:has(+ .msg-row.assistant)) .msg-stack > .bubble:not(.inter)::after {
+    right: auto;
+    left: -6px;
+    transform: scaleX(-1);
 }
 /* 날짜가 바뀌는 지점의 구분선: 메신저식 날짜 칩 */
 .date-sep {
