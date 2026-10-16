@@ -11,13 +11,15 @@ Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI 
 ## What it can do
 
 - **Everyday chat.** Get answers in the browser. It accepts text, images, files, and almost any other format.
-- **Inference providers.** Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Upstage, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, or your own API endpoint.
+- **Inference providers.** Connect OpenAI, OpenRouter, OrcaRouter, Synthetic, Upstage, Ollama (local and Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, Claude OAuth (Pro/Max), or your own API endpoint.
 - **Skills, MCP.** Add the capabilities and tools you want to the agent. Even if you don't install anything yourself, the agent finds and installs what it needs.
 - **Scheduled tasks.** Recurring jobs run on a schedule, report when they finish, and skip when they are not needed.
 - **Todos.** Manages todo lists for both you and the agents. You use it like a regular todo app. Agents watch the list, schedule work, and handle your tasks for you.
 - **Multiple agents.** Create specialist agents for different roles and have them work together.
 - **Run it anywhere.** Run it in a Docker container or on local Node.js. It supports macOS and Linux natively. Windows can work through Docker, but that is not guaranteed.
 - **Self-improvement.** tabyBot learns from how it solved past problems and from your corrections. It also learns what you do regularly and reminds you when you forget.
+- **Secret vault.** Keep passwords and API keys in an encrypted vault. Agents use them without ever seeing the values, and ask you through a masked field when they need a new one.
+- **Cost efficiency.** Keeps the prompt cache warm during short breaks only when that saves money, and shows token usage and cache hit rate by day and model.
 
 ## Differences
 
@@ -55,7 +57,7 @@ Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI 
 - "Cancel my ChatGPT Plus subscription for me."
 - "Is this actually real? (X/Reddit link)"
 - "Summarize this (long pasted text)."
-- "I'll give you my email account so you can use it later. Address is (), SMTP/POP3 password is ()."
+- "Remember my email account so you can use it later. The address is ()."
 - "Sign up for Spotify with the email account I told you about earlier."
 - "Visualize this paper so it's easy to understand. (paper link)"
 - "Compare privatestater analytics and privatestater captcha with Google Analytics and reCAPTCHA."
@@ -112,23 +114,25 @@ docker compose up -d
 
 ## Third-party licenses
 
-| Project                   | Version | License              | Source                                                               |
-| ------------------------- | ------- | -------------------- | -------------------------------------------------------------------- |
-| tabyAgent                 | n/a     | AGPL-3.0             | [Repository](https://github.com/gpdir16/tabyAgent)                   |
-| marked                    | 12.0.2  | MIT                  | [Repository](https://github.com/markedjs/marked)                     |
-| DOMPurify                 | 3.1.6   | Apache-2.0 / MPL-2.0 | [Repository](https://github.com/cure53/DOMPurify)                    |
-| Highlight.js              | 11.9.0  | BSD-3-Clause         | [Repository](https://github.com/highlightjs/highlight.js)            |
-| xterm.js                  | n/a     | MIT                  | [Repository](https://github.com/xtermjs/xterm.js)                    |
-| @modelcontextprotocol/sdk | 1.30.0  | MIT                  | [Repository](https://github.com/modelcontextprotocol/typescript-sdk) |
-| js-tiktoken               | 1.0.21  | MIT                  | [Repository](https://github.com/dqbd/tiktoken)                       |
-| node-cron                 | 3.0.3   | ISC                  | [Repository](https://github.com/node-cron/node-cron)                 |
-| openai                    | 4.104.0 | Apache-2.0           | [Repository](https://github.com/openai/openai-node)                  |
-| web-push                  | 3.6.7   | MPL-2.0              | [Repository](https://github.com/web-push-libs/web-push)              |
-| prettier                  | 3.8.3   | MIT                  | [Repository](https://github.com/prettier/prettier)                   |
-| @biomejs/biome            | 2.5.15  | MIT / Apache-2.0     | [Repository](https://github.com/biomejs/biome)                       |
-| camofox-browser           | 2.4.7   | MIT                  | [Repository](https://github.com/redf0x1/camofox-browser)             |
-| Camoufox                  | n/a     | MPL-2.0              | [Repository](https://github.com/daijro/camoufox)                     |
-| Playwright                | n/a     | Apache-2.0           | [Repository](https://github.com/microsoft/playwright)                |
+| Project                        | Version | License              | Source                                                                  |
+| ------------------------------ | ------- | -------------------- | ----------------------------------------------------------------------- |
+| tabyAgent                      | n/a     | AGPL-3.0             | [Repository](https://github.com/gpdir16/tabyAgent)                      |
+| marked                         | 12.0.2  | MIT                  | [Repository](https://github.com/markedjs/marked)                        |
+| DOMPurify                      | 3.1.6   | Apache-2.0 / MPL-2.0 | [Repository](https://github.com/cure53/DOMPurify)                       |
+| Highlight.js                   | 11.9.0  | BSD-3-Clause         | [Repository](https://github.com/highlightjs/highlight.js)               |
+| xterm.js                       | n/a     | MIT                  | [Repository](https://github.com/xtermjs/xterm.js)                       |
+| @modelcontextprotocol/sdk      | 1.30.0  | MIT                  | [Repository](https://github.com/modelcontextprotocol/typescript-sdk)    |
+| js-tiktoken                    | 1.0.21  | MIT                  | [Repository](https://github.com/dqbd/tiktoken)                          |
+| node-cron                      | 3.0.3   | ISC                  | [Repository](https://github.com/node-cron/node-cron)                    |
+| openai                         | 4.104.0 | Apache-2.0           | [Repository](https://github.com/openai/openai-node)                     |
+| web-push                       | 3.6.7   | MPL-2.0              | [Repository](https://github.com/web-push-libs/web-push)                 |
+| prettier                       | 3.8.3   | MIT                  | [Repository](https://github.com/prettier/prettier)                      |
+| @biomejs/biome                 | 2.5.15  | MIT / Apache-2.0     | [Repository](https://github.com/biomejs/biome)                          |
+| @anthropic-ai/claude-agent-sdk | 0.3.296 | Proprietary          | [Repository](https://github.com/anthropics/claude-agent-sdk-typescript) |
+| zod                            | 4.6.7   | MIT                  | [Repository](https://github.com/colinhacks/zod)                         |
+| camofox-browser                | 2.4.7   | MIT                  | [Repository](https://github.com/redf0x1/camofox-browser)                |
+| Camoufox                       | n/a     | MPL-2.0              | [Repository](https://github.com/daijro/camoufox)                        |
+| Playwright                     | n/a     | Apache-2.0           | [Repository](https://github.com/microsoft/playwright)                   |
 
 <details>
 <summary>Transitive npm dependencies</summary>
@@ -137,9 +141,11 @@ docker compose up -d
 - **BSD-2-Clause:** `json-schema-typed`, `webidl-conversions`
 - **BSD-3-Clause:** `buffer-equal-constant-time`, `fast-uri`, `qs`
 - **ISC:** `inherits`, `isexe`, `minimalistic-assert`, `node-cron`, `once`, `setprototypeof`, `which`, `wrappy`, `zod-to-json-schema`
-- **MIT:** `@hono/node-server`, `@modelcontextprotocol/sdk`, `@types/node`, `@types/node-fetch`, `abort-controller`, `accepts`, `agent-base`, `agentkeepalive`, `ajv`, `ajv-formats`, `asn1.js`, `asynckit`, `base64-js`, `bn.js`, `body-parser`, `bytes`, `call-bind-apply-helpers`, `call-bound`, `combined-stream`, `content-disposition`, `content-type`, `cookie`, `cookie-signature`, `cors`, `cross-spawn`, `debug`, `delayed-stream`, `depd`, `dunder-proto`, `ee-first`, `encodeurl`, `es-define-property`, `es-errors`, `es-object-atoms`, `es-set-tostringtag`, `escape-html`, `etag`, `event-target-shim`, `eventsource`, `eventsource-parser`, `express`, `express-rate-limit`, `fast-deep-equal`, `finalhandler`, `form-data`, `form-data-encoder`, `formdata-node`, `forwarded`, `fresh`, `function-bind`, `get-intrinsic`, `get-proto`, `gopd`, `has-symbols`, `has-tostringtag`, `hasown`, `hono`, `http-errors`, `http_ece`, `https-proxy-agent`, `humanize-ms`, `iconv-lite`, `ip-address`, `ipaddr.js`, `is-promise`, `jose`, `js-tiktoken`, `json-schema-traverse`, `jwa`, `jws`, `math-intrinsics`, `media-typer`, `merge-descriptors`, `mime-db`, `mime-types`, `minimist`, `ms`, `negotiator`, `node-domexception`, `node-fetch`, `object-assign`, `object-inspect`, `on-finished`, `parseurl`, `path-key`, `path-to-regexp`, `pkce-challenge`, `prettier`, `proxy-addr`, `range-parser`, `raw-body`, `require-from-string`, `router`, `safe-buffer`, `safer-buffer`, `send`, `serve-static`, `shebang-command`, `shebang-regex`, `side-channel`, `side-channel-list`, `side-channel-map`, `side-channel-weakmap`, `statuses`, `toidentifier`, `tr46`, `type-is`, `undici-types`, `unpipe`, `uuid`, `vary`, `web-streams-polyfill`, `whatwg-url`, `zod`
+- **MIT:** `@anthropic-ai/sdk`, `@babel/runtime`, `@hono/node-server`, `@modelcontextprotocol/sdk`, `@stablelib/base64`, `@types/node`, `@types/node-fetch`, `abort-controller`, `accepts`, `agent-base`, `agentkeepalive`, `ajv`, `ajv-formats`, `asn1.js`, `asynckit`, `base64-js`, `bn.js`, `body-parser`, `bytes`, `call-bind-apply-helpers`, `call-bound`, `combined-stream`, `content-disposition`, `content-type`, `cookie`, `cookie-signature`, `cors`, `cross-spawn`, `debug`, `delayed-stream`, `depd`, `dunder-proto`, `ee-first`, `encodeurl`, `es-define-property`, `es-errors`, `es-object-atoms`, `es-set-tostringtag`, `escape-html`, `etag`, `event-target-shim`, `eventsource`, `eventsource-parser`, `express`, `express-rate-limit`, `fast-deep-equal`, `finalhandler`, `form-data`, `form-data-encoder`, `formdata-node`, `forwarded`, `fresh`, `function-bind`, `get-intrinsic`, `get-proto`, `gopd`, `has-symbols`, `has-tostringtag`, `hasown`, `hono`, `http-errors`, `http_ece`, `https-proxy-agent`, `humanize-ms`, `iconv-lite`, `ip-address`, `ipaddr.js`, `is-promise`, `jose`, `js-tiktoken`, `json-schema-to-ts`, `json-schema-traverse`, `jwa`, `jws`, `math-intrinsics`, `media-typer`, `merge-descriptors`, `mime-db`, `mime-types`, `minimist`, `ms`, `negotiator`, `node-domexception`, `node-fetch`, `object-assign`, `object-inspect`, `on-finished`, `parseurl`, `path-key`, `path-to-regexp`, `pkce-challenge`, `prettier`, `proxy-addr`, `range-parser`, `raw-body`, `require-from-string`, `router`, `safe-buffer`, `safer-buffer`, `send`, `serve-static`, `shebang-command`, `shebang-regex`, `side-channel`, `side-channel-list`, `side-channel-map`, `side-channel-weakmap`, `standardwebhooks`, `statuses`, `toidentifier`, `tr46`, `ts-algebra`, `type-is`, `undici-types`, `unpipe`, `uuid`, `vary`, `web-streams-polyfill`, `whatwg-url`, `zod`
 - **MIT / Apache-2.0:** `@biomejs/cli-darwin-arm64`, `@biomejs/cli-darwin-x64`, `@biomejs/cli-linux-arm64`, `@biomejs/cli-linux-arm64-musl`, `@biomejs/cli-linux-x64`, `@biomejs/cli-linux-x64-musl`, `@biomejs/cli-win32-arm64`, `@biomejs/cli-win32-x64`
 - **MPL-2.0:** `web-push`
+- **Unlicense:** `fast-sha256`
+- **Proprietary (Anthropic):** `@anthropic-ai/claude-agent-sdk-darwin-arm64`, `@anthropic-ai/claude-agent-sdk-darwin-x64`, `@anthropic-ai/claude-agent-sdk-linux-arm64`, `@anthropic-ai/claude-agent-sdk-linux-arm64-musl`, `@anthropic-ai/claude-agent-sdk-linux-x64`, `@anthropic-ai/claude-agent-sdk-linux-x64-musl`, `@anthropic-ai/claude-agent-sdk-win32-arm64`, `@anthropic-ai/claude-agent-sdk-win32-x64`
 
 </details>
 

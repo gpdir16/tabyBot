@@ -11,13 +11,15 @@ Grok Bot의 오픈소스 대안입니다. 제 이전 프로젝트 [tabyAgent](ht
 ## 할 수 있는 것
 
 - **일상적인 채팅.** 브라우저에서 바로 답변을 받습니다. 텍스트와 이미지, 파일 등 거의 모든 형식을 지원합니다.
-- **추론 제공자 연결.** OpenAI, OpenRouter, OrcaRouter, Synthetic, Upstage, Ollama(로컬 & Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth 또는 직접 구축한 API 엔드포인트와 연동합니다.
+- **추론 제공자 연결.** OpenAI, OpenRouter, OrcaRouter, Synthetic, Upstage, Ollama(로컬 & Cloud), ZenMux, Codex OAuth, Grok OAuth, GitHub Copilot OAuth, Claude OAuth(Pro/Max) 또는 직접 구축한 API 엔드포인트와 연동합니다.
 - **Skills, MCP.** 에이전트에게 원하는 기능과 도구를 추가할 수 있습니다. 직접 설치시키지 않아도 에이전트가 필요한 것을 찾아 설치합니다.
 - **예약 작업.** 정기적으로 실행해야 하는 작업을 반복해서 실행하고, 끝나면 보고하거나 필요하지 않으면 건너뜁니다.
 - **할 일 목록.** 사용자와 에이전트 모두의 할 일 목록을 관리합니다. 사용자는 일반 Todo 앱처럼 사용하고, 에이전트는 자동으로 목록을 감시하고 예약하며 사용자의 할 일을 대신 처리합니다.
 - **여러 에이전트.** 역할별 전문 에이전트를 만들어 협업시킬 수 있습니다.
 - **어디서든 실행.** Docker 컨테이너 또는 로컬 Node.js로 실행할 수 있습니다. 네이티브 지원은 macOS와 Linux이며, Windows는 Docker를 통해 작동 가능하지만 보장되지는 않습니다.
 - **자기 개선.** tabyBot는 문제를 해결한 방법과 사용자의 지적을 학습합니다. 사용자가 평소에 늘 하던 일을 잊고 하지 않으면, 그 습관을 학습해 두었다가 알려주기도 합니다.
+- **시크릿 금고.** 비밀번호와 API 키를 암호화된 금고에 보관합니다. 에이전트는 값을 보지 않은 채로 사용하고, 새로 필요하면 마스킹된 입력칸으로 요청합니다.
+- **효율적인 운영.** 잠깐 쉬는 동안 이득일 때만 프롬프트 캐시를 유지하고, 날짜·모델별 토큰 사용량과 캐시 적중률을 보여줍니다.
 
 ## 차이점
 
@@ -55,7 +57,7 @@ Grok Bot의 오픈소스 대안입니다. 제 이전 프로젝트 [tabyAgent](ht
 - "chatgpt 플러스 구독좀 대신 취소시켜줘"
 - "(X/Reddit 등 링크) 이거 진짜 되는거임?"
 - "(붙여넣은 긴 글) 요약"
-- "나중에 너가 쓸수있게 내 이메일 계정 줄게 주소는 () 고 smtp/pop3 비번은 ()야"
+- "나중에 너가 쓸수있게 내 이메일 계정 기억해둬 주소는 ()야"
 - "전에 알려준 메일 계정으로 스포티파이 가입좀 해놔줘"
 - "(논문 링크) 요거 쉽게 이해 가능하게 시각화해줘"
 - "privatestater analytics랑 privatestater captcha 이거 구글 애널리틱스랑 리캡차랑 비교해줘"
@@ -112,23 +114,25 @@ docker compose up -d
 
 ## 제3자 라이선스
 
-| 프로젝트                  | 버전    | 라이선스             | 출처                                                             |
-| ------------------------- | ------- | -------------------- | ---------------------------------------------------------------- |
-| tabyAgent                 | 없음    | AGPL-3.0             | [저장소](https://github.com/gpdir16/tabyAgent)                   |
-| marked                    | 12.0.2  | MIT                  | [저장소](https://github.com/markedjs/marked)                     |
-| DOMPurify                 | 3.1.6   | Apache-2.0 / MPL-2.0 | [저장소](https://github.com/cure53/DOMPurify)                    |
-| Highlight.js              | 11.9.0  | BSD-3-Clause         | [저장소](https://github.com/highlightjs/highlight.js)            |
-| xterm.js                  | 없음    | MIT                  | [저장소](https://github.com/xtermjs/xterm.js)                    |
-| @modelcontextprotocol/sdk | 1.30.0  | MIT                  | [저장소](https://github.com/modelcontextprotocol/typescript-sdk) |
-| js-tiktoken               | 1.0.21  | MIT                  | [저장소](https://github.com/dqbd/tiktoken)                       |
-| node-cron                 | 3.0.3   | ISC                  | [저장소](https://github.com/node-cron/node-cron)                 |
-| openai                    | 4.104.0 | Apache-2.0           | [저장소](https://github.com/openai/openai-node)                  |
-| web-push                  | 3.6.7   | MPL-2.0              | [저장소](https://github.com/web-push-libs/web-push)              |
-| prettier                  | 3.8.3   | MIT                  | [저장소](https://github.com/prettier/prettier)                   |
-| @biomejs/biome            | 2.5.15  | MIT / Apache-2.0     | [저장소](https://github.com/biomejs/biome)                       |
-| camofox-browser           | 2.4.7   | MIT                  | [저장소](https://github.com/redf0x1/camofox-browser)             |
-| Camoufox                  | 없음    | MPL-2.0              | [저장소](https://github.com/daijro/camoufox)                     |
-| Playwright                | 없음    | Apache-2.0           | [저장소](https://github.com/microsoft/playwright)                |
+| 프로젝트                       | 버전    | 라이선스             | 출처                                                                |
+| ------------------------------ | ------- | -------------------- | ------------------------------------------------------------------- |
+| tabyAgent                      | 없음    | AGPL-3.0             | [저장소](https://github.com/gpdir16/tabyAgent)                      |
+| marked                         | 12.0.2  | MIT                  | [저장소](https://github.com/markedjs/marked)                        |
+| DOMPurify                      | 3.1.6   | Apache-2.0 / MPL-2.0 | [저장소](https://github.com/cure53/DOMPurify)                       |
+| Highlight.js                   | 11.9.0  | BSD-3-Clause         | [저장소](https://github.com/highlightjs/highlight.js)               |
+| xterm.js                       | 없음    | MIT                  | [저장소](https://github.com/xtermjs/xterm.js)                       |
+| @modelcontextprotocol/sdk      | 1.30.0  | MIT                  | [저장소](https://github.com/modelcontextprotocol/typescript-sdk)    |
+| js-tiktoken                    | 1.0.21  | MIT                  | [저장소](https://github.com/dqbd/tiktoken)                          |
+| node-cron                      | 3.0.3   | ISC                  | [저장소](https://github.com/node-cron/node-cron)                    |
+| openai                         | 4.104.0 | Apache-2.0           | [저장소](https://github.com/openai/openai-node)                     |
+| web-push                       | 3.6.7   | MPL-2.0              | [저장소](https://github.com/web-push-libs/web-push)                 |
+| prettier                       | 3.8.3   | MIT                  | [저장소](https://github.com/prettier/prettier)                      |
+| @biomejs/biome                 | 2.5.15  | MIT / Apache-2.0     | [저장소](https://github.com/biomejs/biome)                          |
+| @anthropic-ai/claude-agent-sdk | 0.3.296 | Proprietary          | [저장소](https://github.com/anthropics/claude-agent-sdk-typescript) |
+| zod                            | 4.6.7   | MIT                  | [저장소](https://github.com/colinhacks/zod)                         |
+| camofox-browser                | 2.4.7   | MIT                  | [저장소](https://github.com/redf0x1/camofox-browser)                |
+| Camoufox                       | 없음    | MPL-2.0              | [저장소](https://github.com/daijro/camoufox)                        |
+| Playwright                     | 없음    | Apache-2.0           | [저장소](https://github.com/microsoft/playwright)                   |
 
 <details>
 <summary>전이 의존성</summary>
@@ -137,9 +141,11 @@ docker compose up -d
 - **BSD-2-Clause:** `json-schema-typed`, `webidl-conversions`
 - **BSD-3-Clause:** `buffer-equal-constant-time`, `fast-uri`, `qs`
 - **ISC:** `inherits`, `isexe`, `minimalistic-assert`, `node-cron`, `once`, `setprototypeof`, `which`, `wrappy`, `zod-to-json-schema`
-- **MIT:** `@hono/node-server`, `@modelcontextprotocol/sdk`, `@types/node`, `@types/node-fetch`, `abort-controller`, `accepts`, `agent-base`, `agentkeepalive`, `ajv`, `ajv-formats`, `asn1.js`, `asynckit`, `base64-js`, `bn.js`, `body-parser`, `bytes`, `call-bind-apply-helpers`, `call-bound`, `combined-stream`, `content-disposition`, `content-type`, `cookie`, `cookie-signature`, `cors`, `cross-spawn`, `debug`, `delayed-stream`, `depd`, `dunder-proto`, `ee-first`, `encodeurl`, `es-define-property`, `es-errors`, `es-object-atoms`, `es-set-tostringtag`, `escape-html`, `etag`, `event-target-shim`, `eventsource`, `eventsource-parser`, `express`, `express-rate-limit`, `fast-deep-equal`, `finalhandler`, `form-data`, `form-data-encoder`, `formdata-node`, `forwarded`, `fresh`, `function-bind`, `get-intrinsic`, `get-proto`, `gopd`, `has-symbols`, `has-tostringtag`, `hasown`, `hono`, `http-errors`, `http_ece`, `https-proxy-agent`, `humanize-ms`, `iconv-lite`, `ip-address`, `ipaddr.js`, `is-promise`, `jose`, `js-tiktoken`, `json-schema-traverse`, `jwa`, `jws`, `math-intrinsics`, `media-typer`, `merge-descriptors`, `mime-db`, `mime-types`, `minimist`, `ms`, `negotiator`, `node-domexception`, `node-fetch`, `object-assign`, `object-inspect`, `on-finished`, `parseurl`, `path-key`, `path-to-regexp`, `pkce-challenge`, `prettier`, `proxy-addr`, `range-parser`, `raw-body`, `require-from-string`, `router`, `safe-buffer`, `safer-buffer`, `send`, `serve-static`, `shebang-command`, `shebang-regex`, `side-channel`, `side-channel-list`, `side-channel-map`, `side-channel-weakmap`, `statuses`, `toidentifier`, `tr46`, `type-is`, `undici-types`, `unpipe`, `uuid`, `vary`, `web-streams-polyfill`, `whatwg-url`, `zod`
+- **MIT:** `@anthropic-ai/sdk`, `@babel/runtime`, `@hono/node-server`, `@modelcontextprotocol/sdk`, `@stablelib/base64`, `@types/node`, `@types/node-fetch`, `abort-controller`, `accepts`, `agent-base`, `agentkeepalive`, `ajv`, `ajv-formats`, `asn1.js`, `asynckit`, `base64-js`, `bn.js`, `body-parser`, `bytes`, `call-bind-apply-helpers`, `call-bound`, `combined-stream`, `content-disposition`, `content-type`, `cookie`, `cookie-signature`, `cors`, `cross-spawn`, `debug`, `delayed-stream`, `depd`, `dunder-proto`, `ee-first`, `encodeurl`, `es-define-property`, `es-errors`, `es-object-atoms`, `es-set-tostringtag`, `escape-html`, `etag`, `event-target-shim`, `eventsource`, `eventsource-parser`, `express`, `express-rate-limit`, `fast-deep-equal`, `finalhandler`, `form-data`, `form-data-encoder`, `formdata-node`, `forwarded`, `fresh`, `function-bind`, `get-intrinsic`, `get-proto`, `gopd`, `has-symbols`, `has-tostringtag`, `hasown`, `hono`, `http-errors`, `http_ece`, `https-proxy-agent`, `humanize-ms`, `iconv-lite`, `ip-address`, `ipaddr.js`, `is-promise`, `jose`, `js-tiktoken`, `json-schema-to-ts`, `json-schema-traverse`, `jwa`, `jws`, `math-intrinsics`, `media-typer`, `merge-descriptors`, `mime-db`, `mime-types`, `minimist`, `ms`, `negotiator`, `node-domexception`, `node-fetch`, `object-assign`, `object-inspect`, `on-finished`, `parseurl`, `path-key`, `path-to-regexp`, `pkce-challenge`, `prettier`, `proxy-addr`, `range-parser`, `raw-body`, `require-from-string`, `router`, `safe-buffer`, `safer-buffer`, `send`, `serve-static`, `shebang-command`, `shebang-regex`, `side-channel`, `side-channel-list`, `side-channel-map`, `side-channel-weakmap`, `standardwebhooks`, `statuses`, `toidentifier`, `tr46`, `ts-algebra`, `type-is`, `undici-types`, `unpipe`, `uuid`, `vary`, `web-streams-polyfill`, `whatwg-url`, `zod`
 - **MIT / Apache-2.0:** `@biomejs/cli-darwin-arm64`, `@biomejs/cli-darwin-x64`, `@biomejs/cli-linux-arm64`, `@biomejs/cli-linux-arm64-musl`, `@biomejs/cli-linux-x64`, `@biomejs/cli-linux-x64-musl`, `@biomejs/cli-win32-arm64`, `@biomejs/cli-win32-x64`
 - **MPL-2.0:** `web-push`
+- **Unlicense:** `fast-sha256`
+- **Proprietary (Anthropic):** `@anthropic-ai/claude-agent-sdk-darwin-arm64`, `@anthropic-ai/claude-agent-sdk-darwin-x64`, `@anthropic-ai/claude-agent-sdk-linux-arm64`, `@anthropic-ai/claude-agent-sdk-linux-arm64-musl`, `@anthropic-ai/claude-agent-sdk-linux-x64`, `@anthropic-ai/claude-agent-sdk-linux-x64-musl`, `@anthropic-ai/claude-agent-sdk-win32-arm64`, `@anthropic-ai/claude-agent-sdk-win32-x64`
 
 </details>
 
