@@ -95,6 +95,13 @@ export function buildClaudeEnv(envOverride) {
         ...env,
         DISABLE_AUTOUPDATER: "1",
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+        // 사용 통계, 오류 보고, 세션 설문(대화 기록 업로드 포함), 피드백 전송을 따로도 막음.
+        // 위 설정이 덮는 범위가 CLI 버전마다 달라질 수 있어 명시함.
+        DISABLE_TELEMETRY: "1",
+        DISABLE_ERROR_REPORTING: "1",
+        CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY: "1",
+        DISABLE_FEEDBACK_COMMAND: "1",
+        DISABLE_BUG_COMMAND: "1",
         CLAUDE_AGENT_SDK_CLIENT_APP: "tabybot",
         // 도구 서버 연결이 끝난 뒤에 첫 요청을 보내게 함. 기본값(비동기)이면 도구 정의가 빠질 수 있음.
         MCP_CONNECTION_NONBLOCKING: "0",
