@@ -247,7 +247,7 @@
             if (C.isOpen()) C.build();
             return true;
         }
-        return persistDraft(save, () => {
+        return await persistDraft(save, () => {
             closeEditor();
             leaveEditorUrl();
             T.toast.show("info", t("todosAutoSaved"));
