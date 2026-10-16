@@ -57,6 +57,7 @@
 
         // 1회성 파라미터 적용: 특정 메시지 이동(m)
         if (o.params?.m != null) {
+            C.revealIndex(Number(o.params.m));
             requestAnimationFrame(() => {
                 scrollToMessage(`[data-midx="${Number(o.params.m)}"]`);
             });
@@ -89,6 +90,9 @@
         const sel = `[data-t="${Number(t)}"][data-m="${Number(m)}"]`;
         // 라우트 전환과 대화 로드가 비동기라 행이 생길 때까지 짧게 기다린다.
         for (let i = 0; i < 40; i++) {
+            if (scrollToMessage(sel)) return true;
+            // 오래된 메시지는 아직 그려지지 않았을 수 있음.
+            if (state.state.currentId === String(convId)) C.revealTurnMessage(Number(t), Number(m));
             if (scrollToMessage(sel)) return true;
             await new Promise((r) => setTimeout(r, 100));
         }

@@ -7,6 +7,16 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
     const thread = document.getElementById("thread");
+    const scroller = document.getElementById("scroller");
+
+    // 긴 대화는 최근 메시지부터 나눠 그림. 처음에는 화면을 채울 만큼만 그려 바로 뜨게 하고,
+    // 위로 올리면 PAGE개씩 앞에 덧붙임.
+    const FIRST_PAGE = 30;
+    const PAGE = 100;
+    const LOAD_MORE_PX = 1200;
+    const renderFrom = new Map(); // convId → 그리기 시작하는 보이는 메시지 인덱스
+    let visibleRefs = []; // 마지막으로 그린 대화의 보이는 메시지 [{ t, mi }] (인덱스 = data-midx)
+    let drawn = null; // 마지막으로 그린 대화의 { c, visible, lastOfTurn }: 앞에 덧붙일 때 씀
 
     /* ── 렌더 ───────────────────────────────────────────────── */
     // __SILENT__ 마커가 앞/뒤에 붙은 발화도 침묵 판정으로 본다(서버 toDisplayTurns와 동일 규칙).
@@ -18,17 +28,17 @@
     // mem === undefined: 같은 대화 재렌더. 지금 위치 유지. null: 하단으로. 객체: 그 위치로 복원.
     function renderConversation(mem) {
         const keep = mem === undefined ? C.captureScroll() : mem;
+        const same = C.renderedId === state.state.currentId;
         C.liveEls = null;
         C.renderedId = state.state.currentId;
         if (C.bubbleRo) C.bubbleRo.disconnect();
         thread.textContent = "";
         const c = state.currentConv();
 
-        // 봇 스레드 상단 안내는 항상 표시(새로고침/전환과 무관하게 일관).
-        // 아직 기록을 받는 중이면 비워 둔다. 안내가 떴다가 메시지에 밀려 사라지지 않게.
-        if (!c || c.loaded || state.state.offline) thread.append(C.buildEmptyState());
-
         if (!c) {
+            visibleRefs = [];
+            drawn = null;
+            thread.append(C.buildEmptyState());
             C.refreshHeader();
             C.restoreScroll(keep);
             return;
@@ -69,32 +79,22 @@
         visible.forEach((f, i) => {
             if (f.m.role === "assistant") lastOfTurn.set(f.turn, i);
         });
+        visibleRefs = visible.map((f) => ({ t: f.t, mi: f.mi }));
+        drawn = { c, visible, lastOfTurn };
 
-        let lastDayKey = null;
-        visible.forEach((f, i) => {
-            let el;
-            const msgAt = f.m.at || f.turn.at;
-            const dayKey = C.dayKeyOf(msgAt);
-            if (dayKey && dayKey !== lastDayKey) {
-                lastDayKey = dayKey;
-                thread.append(T.h("div", { class: "date-sep", role: "separator" }, [T.h("span", { text: C.fmtMsgDate(msgAt) })]));
-            }
-            if (f.m.role === "user") {
-                const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
-                el = C.buildUserMessage(text, f.m.imageUrl, false, f.m.attachments, msgAt);
-            } else {
-                el = C.buildAssistant(f.m.content || "", {
-                    stats: lastOfTurn.get(f.turn) === i ? f.stats : null,
-                    attachments: f.attachments,
-                    at: msgAt,
-                });
-            }
-            el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
-            el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
-            el.dataset.m = String(f.mi);
-            thread.append(el);
-            C.watchBubble(el.querySelector(".bubble"));
-        });
+        // 다른 대화로 오면 최근 FIRST_PAGE개부터. 같은 대화를 다시 그리면 그리던 범위를 유지함.
+        // 복원할 위치의 메시지가 범위 밖이면 그 앞까지 넓힘.
+        const id = String(state.state.currentId);
+        let from = same && renderFrom.has(id) ? renderFrom.get(id) : Math.max(0, visible.length - FIRST_PAGE);
+        if (keep?.midx != null) from = Math.min(from, Math.max(0, Number(keep.midx) - 20));
+        from = Math.min(from, Math.max(0, visible.length - FIRST_PAGE));
+        renderFrom.set(id, from);
+
+        // 봇 스레드 상단 안내는 대화 맨 앞까지 그렸을 때만 표시(새로고침/전환과 무관하게 일관).
+        // 아직 기록을 받는 중이면 비워 둔다. 안내가 떴다가 메시지에 밀려 사라지지 않게.
+        if (from === 0 && (c.loaded || state.state.offline)) thread.append(C.buildEmptyState());
+
+        thread.append(buildRows(from, visible.length));
 
         // 아직 정본에 나타나지 않은 내 메시지(낙관적 버블)
         for (const p of c.pending) thread.append(buildPendingRow(p));
@@ -110,6 +110,82 @@
             if (keep?.pinned && C.pinnedBottom) C.scrollToBottom(false);
         });
     }
+
+    // 보이는 메시지 [from, to)의 행과 날짜 구분선을 만듦.
+    function buildRows(from, to) {
+        const { visible, lastOfTurn } = drawn;
+        const frag = document.createDocumentFragment();
+        let lastDayKey = null;
+        for (let i = from; i < to; i++) {
+            const f = visible[i];
+            let el;
+            const msgAt = f.m.at || f.turn.at;
+            const dayKey = C.dayKeyOf(msgAt);
+            if (dayKey && dayKey !== lastDayKey) {
+                lastDayKey = dayKey;
+                frag.append(T.h("div", { class: "date-sep", role: "separator" }, [T.h("span", { text: C.fmtMsgDate(msgAt) })]));
+            }
+            if (f.m.role === "user") {
+                const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
+                el = C.buildUserMessage(text, f.m.imageUrl, false, f.m.attachments, msgAt);
+            } else {
+                el = C.buildAssistant(f.m.content || "", {
+                    stats: lastOfTurn.get(f.turn) === i ? f.stats : null,
+                    attachments: f.attachments,
+                    at: msgAt,
+                });
+            }
+            el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
+            el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
+            el.dataset.m = String(f.mi);
+            frag.append(el);
+            C.watchBubble(el.querySelector(".bubble"));
+        }
+        return frag;
+    }
+
+    // 이전 메시지를 맨 앞에 덧붙임. 이미 그린 행은 다시 만들지 않고, 보던 행은 화면에서 같은 자리에 둠.
+    function prependRows(to) {
+        const id = String(state.state.currentId);
+        const old = renderFrom.get(id) ?? 0;
+        if (!drawn || to >= old) return;
+        const anchor = thread.querySelector(".msg-row[data-midx]");
+        const before = anchor?.getBoundingClientRect().top;
+        // 덧붙인 마지막 메시지와 같은 날이면 기존 맨 위 날짜 구분선은 겹치므로 뺌.
+        const first = thread.firstElementChild;
+        const at = (i) => drawn.visible[i].m.at || drawn.visible[i].turn.at;
+        if (first?.classList.contains("date-sep") && C.dayKeyOf(at(old - 1)) === C.dayKeyOf(at(old))) first.remove();
+        const frag = buildRows(to, old);
+        if (to === 0 && (drawn.c.loaded || state.state.offline)) frag.prepend(C.buildEmptyState());
+        thread.prepend(frag);
+        renderFrom.set(id, to);
+        if (anchor) scroller.scrollTop += anchor.getBoundingClientRect().top - before;
+    }
+
+    // 보이는 메시지 인덱스 i가 그려져 있게 함. 범위 밖이면 그 앞까지 넓혀 다시 그림.
+    function revealIndex(i) {
+        const id = String(state.state.currentId);
+        if (!Number.isInteger(i) || i < 0 || (renderFrom.get(id) ?? 0) <= i) return;
+        prependRows(Math.max(0, i - 20));
+    }
+
+    // 서버 인덱스(턴/메시지)로 찾아 그려지게 함. 검색 결과 이동용.
+    function revealTurnMessage(t, m) {
+        revealIndex(visibleRefs.findIndex((r) => r.t === t && r.mi === m));
+    }
+
+    // 맨 위 가까이 오면 이전 메시지를 PAGE개 더 그림.
+    let loadingMore = false;
+    scroller.addEventListener("scroll", () => {
+        if (loadingMore || scroller.scrollTop > LOAD_MORE_PX || !C.chatVisible() || C.restorePending) return;
+        const from = renderFrom.get(String(state.state.currentId)) ?? 0;
+        if (!from || C.renderedId !== state.state.currentId) return;
+        loadingMore = true;
+        requestAnimationFrame(() => {
+            loadingMore = false;
+            if (C.renderedId === state.state.currentId) prependRows(Math.max(0, from - PAGE));
+        });
+    });
 
     /* ── 라이브 블록 ────────────────────────────────────────── */
     const PHASE_KEY = {
@@ -283,6 +359,8 @@
     }
 
     C.renderConversation = renderConversation;
+    C.revealIndex = revealIndex;
+    C.revealTurnMessage = revealTurnMessage;
     C.applySync = applySync;
     C.requestSync = requestSync;
     C.submitMessage = submitMessage;
