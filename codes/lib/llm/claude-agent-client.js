@@ -501,7 +501,7 @@ function toUsage(usage) {
         prompt_tokens: prompt,
         completion_tokens: completion,
         total_tokens: prompt + completion,
-        prompt_tokens_details: { cached_tokens: cached },
+        prompt_tokens_details: { cached_tokens: cached, cache_write_tokens: usage.cache_creation_input_tokens || 0 },
         ...(ttl ? { cache_ttl_ms: ttl } : {}),
     };
 }

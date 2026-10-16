@@ -9,9 +9,11 @@ import { startProactiveScheduler } from "./lib/proactive.js";
 import { isDockerRuntime } from "./lib/runtime.js";
 import { ensureSession, DISPLAY } from "./lib/computer/display.js";
 import { shutdownComputer } from "./lib/web/computer.js";
+import { flushUsageLog } from "./lib/llm/usage-log.js";
 
 async function shutdown() {
     shutdownComputer();
+    flushUsageLog();
     await shutdownTools();
     process.exit(0);
 }

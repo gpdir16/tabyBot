@@ -14,6 +14,7 @@ import path from "node:path";
 import { CONFIG_DIR, SESSION_DIR, USER_DIR } from "../paths.js";
 import { readJsonFile, writeJsonAtomic } from "../atomic-file.js";
 import { getMergedProvider, loadUserConfig } from "../config-loader.js";
+import { recordUsage } from "./usage-log.js";
 
 const STATS_FILE = path.join(USER_DIR, "cache-keepalive.json");
 const PATTERN_FILE = path.join(CONFIG_DIR, "cache-keepalive-pattern.json");
@@ -490,6 +491,7 @@ async function fire(entry) {
         const gap = result.sentAt - entry.touchedAt;
         entry.touchedAt = result.sentAt;
         entry.pings += 1;
+        recordUsage(entry.provider, result.usage, "ping");
         learn(modelStat(entry.provider, entry.profile), { gap, usage: result.usage });
         const cached = Number(result.usage?.prompt_tokens_details?.cached_tokens ?? result.usage?.input_tokens_details?.cached_tokens);
         const prompt = Number(result.usage?.prompt_tokens ?? result.usage?.input_tokens);
