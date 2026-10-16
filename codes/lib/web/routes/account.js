@@ -106,6 +106,9 @@ function registerLoginRoutes(router) {
             keepToken: ctx.token,
         });
         if (result.error) return ctx.json400(result.error);
+        // 비밀번호를 바꾸면 다른 기기는 로그아웃된다. 그 기기들로 알림이 가지 않게 구독을 모두 지우고,
+        // 이 기기는 응답을 받은 뒤 다시 구독한다.
+        if (typeof body.password === "string" && body.password.length > 0) removeAllSubscriptions();
         ctx.json200({ ok: true, account: result.account });
     });
 }

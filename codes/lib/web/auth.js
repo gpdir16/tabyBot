@@ -137,6 +137,7 @@ export function updateAccount({ currentPassword, username, password, keepToken }
     }
     s.account.updatedAt = iso(Date.now());
     persist();
+    if (changing) notifyRevoked();
     return { account: accountInfo() };
 }
 
@@ -186,6 +187,7 @@ export function revokeSession(token) {
     const before = s.sessions.length;
     s.sessions = s.sessions.filter((x) => x.id !== id);
     if (s.sessions.length !== before) persist();
+    notifyRevoked();
 }
 
 // 이 기기를 포함해 모든 세션을 끊는다.
@@ -194,6 +196,24 @@ export function revokeAllSessions() {
     if (s.sessions.length) {
         s.sessions = [];
         persist();
+    }
+    notifyRevoked();
+}
+
+// 세션이 끊길 때 열려 있는 실시간 연결(SSE, 웹소켓)을 정리하도록 알린다.
+const revokedListeners = new Set();
+
+export function onSessionsRevoked(fn) {
+    revokedListeners.add(fn);
+}
+
+function notifyRevoked() {
+    for (const fn of revokedListeners) {
+        try {
+            fn();
+        } catch (err) {
+            console.error("tabyBot: closing revoked connections failed:", err?.stack || err);
+        }
     }
 }
 
