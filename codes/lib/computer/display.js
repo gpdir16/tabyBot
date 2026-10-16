@@ -225,13 +225,13 @@ let starting = null;
 export async function ensureSession(geometry) {
     const existing = loadSession();
     if (existing) return { sess: existing };
-    if (starting) return starting;
+    if (starting) return await starting;
     ensureDirs();
     const geo = validGeometry(geometry) ? geometry : DEFAULT_GEOMETRY;
     starting = newSession(geo).finally(() => {
         starting = null;
     });
-    return starting;
+    return await starting;
 }
 
 export async function screenshot(sess) {

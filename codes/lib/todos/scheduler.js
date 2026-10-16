@@ -54,7 +54,7 @@ function notifyChanged() {
     }
 }
 
-async function tick() {
+function tick() {
     if (!runAgentTodo && !remindUserTodo) return;
     for (const due of listDueTodos()) {
         const item = due.item;
@@ -122,7 +122,11 @@ export function startTodoScheduler() {
     }
     if (!timer) {
         timer = setInterval(() => {
-            tick().catch((err) => console.error("tabyBot: todo tick failed:", err?.stack || err));
+            try {
+                tick();
+            } catch (err) {
+                console.error("tabyBot: todo tick failed:", err?.stack || err);
+            }
         }, TICK_MS);
         timer.unref?.();
     }
