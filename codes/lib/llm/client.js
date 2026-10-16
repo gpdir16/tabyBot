@@ -5,6 +5,7 @@ import { grokComplete, grokPing } from "./grok-client.js";
 import { githubCopilotComplete } from "./github-copilot-client.js";
 import { claudeAgentComplete, claudeAgentPing } from "./claude-agent-client.js";
 import { withCacheKeepAlive } from "./cache-keepalive.js";
+import { withUsageLog } from "./usage-log.js";
 import { ensureModelMeta, rememberContextWindow } from "./model-meta.js";
 import { getThinkingLevel, getCachedProviderThinkingMeta, normalizeThinkingLevel } from "../user-settings.js";
 
@@ -20,7 +21,12 @@ export function applyAgentOverrides(provider, { model } = {}) {
     return provider;
 }
 
+// 모든 요청의 토큰 사용량을 기록한다(설정 > 효율적인 운영의 사용 기록).
 export async function createLlmClient(overrides = {}) {
+    return withUsageLog(await buildLlmClient(overrides));
+}
+
+async function buildLlmClient(overrides) {
     const userConfig = loadUserConfig();
     const provider = applyAgentOverrides(getMergedProvider(userConfig), overrides);
     const thinkingLevel = overrides.thinkingLevel ? normalizeThinkingLevel(overrides.thinkingLevel, provider.id) : getThinkingLevel(userConfig);
