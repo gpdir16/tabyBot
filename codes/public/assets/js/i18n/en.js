@@ -261,6 +261,7 @@
         authSessions: "Active sessions",
         authSessionCount: "{n}",
         authLogout: "Sign out",
+        authLogoutAll: "Sign out of all devices",
         retry: "Retry",
         statModelCalls: "{n} model calls",
         statToolCalls: "{n} tool calls",
@@ -339,6 +340,10 @@
         todosRejectConfirmText: "A rejected suggestion can't be brought back.",
         authLogoutConfirmTitle: "Sign out?",
         authLogoutConfirmText: "Conversations cached in this browser are removed. You need your password to sign in again.",
+        authLogoutAllConfirm: "Sign out all",
+        authLogoutAllConfirmTitle: "Sign out of all devices?",
+        authLogoutAllConfirmText:
+            "Every device, including this one, is signed out and stops receiving notifications. You need your password to sign in again on each device.",
         oauthReloginConfirmTitle: "Log in again?",
         oauthReloginConfirmText: "The current login is removed as soon as this starts. If you stop midway, the provider stays logged out.",
         notificationsDenied: "Notification permission was denied",

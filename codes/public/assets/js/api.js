@@ -109,6 +109,7 @@
         accountSetup: (b) => request("/api/account/setup", { method: "POST", json: b }),
         accountLogin: (b) => request("/api/account/login", { method: "POST", json: b }),
         accountLogout: () => request("/api/account/logout", { method: "POST", json: {} }),
+        accountLogoutAll: () => request("/api/account/logout-all", { method: "POST", json: {} }),
         accountUpdate: (b) => request("/api/account", { method: "PUT", json: b }),
 
         conversations: () => request("/api/conversations"),

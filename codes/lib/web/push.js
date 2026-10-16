@@ -50,6 +50,24 @@ export function saveSubscription(sub) {
     return true;
 }
 
+// 모든 기기의 알림 구독을 지운다. 다시 로그인한 기기는 알림이 켜져 있으면 다시 구독한다.
+export function removeAllSubscriptions() {
+    let names = [];
+    try {
+        names = fs.readdirSync(SUBS_DIR);
+    } catch {
+        return; // 구독이 하나도 없었음
+    }
+    for (const name of names) {
+        if (!name.endsWith(".json")) continue;
+        try {
+            fs.unlinkSync(path.join(SUBS_DIR, name));
+        } catch {
+            // 이미 없으면 무시
+        }
+    }
+}
+
 export function removeSubscription(sub) {
     const endpoint = typeof sub === "string" ? sub : sub?.endpoint;
     if (!endpoint) return;

@@ -78,32 +78,44 @@
         if (typeof acct.sessionCount === "number") sec.append(C.valueRow(t("authSessions"), t("authSessionCount", { n: acct.sessionCount })));
         sec.append(C.navRow(t("authPassword"), "••••••••", edit("password")));
 
-        const logout = C.actionRow(
-            t("authLogout"),
-            async () => {
-                const ok = await T.confirm({
-                    title: t("authLogoutConfirmTitle"),
-                    text: t("authLogoutConfirmText"),
-                    confirmLabel: t("authLogout"),
-                    danger: true,
-                });
-                if (!ok) return;
-                logout.row.disabled = true;
-                try {
-                    await T.api.accountLogout();
-                } catch {
-                    // 로그아웃 요청이 실패해도 이 브라우저의 로그인 상태는 정리한다
-                }
-                T.api.setToken("");
-                // 로그아웃한 브라우저에 대화 캐시를 남기지 않는다.
-                state.clearSnapshot();
-                T.notifications?.syncAuth?.();
-                state.state.account = { hasAccount: true, authed: false, username: null };
-                T.app?.handleUnauthorized?.();
-            },
-            { danger: true, own: true },
+        // 확인을 받고 서버 세션을 끊은 뒤 이 브라우저의 로그인 상태를 정리한다.
+        const signOutRow = ({ label, title, text, confirmLabel = label }, call) => {
+            const item = C.actionRow(
+                label,
+                async () => {
+                    const ok = await T.confirm({ title, text, confirmLabel, danger: true });
+                    if (!ok) return;
+                    item.row.disabled = true;
+                    try {
+                        await call();
+                    } catch {
+                        // 로그아웃 요청이 실패해도 이 브라우저의 로그인 상태는 정리한다
+                    }
+                    T.api.setToken("");
+                    // 로그아웃한 브라우저에 대화 캐시를 남기지 않는다.
+                    state.clearSnapshot();
+                    T.notifications?.syncAuth?.();
+                    state.state.account = { hasAccount: true, authed: false, username: null };
+                    T.app?.handleUnauthorized?.();
+                },
+                { danger: true, own: true },
+            );
+            return item;
+        };
+        sec.append(
+            signOutRow({ label: t("authLogout"), title: t("authLogoutConfirmTitle"), text: t("authLogoutConfirmText") }, () => T.api.accountLogout()),
         );
-        sec.append(logout);
+        sec.append(
+            signOutRow(
+                {
+                    label: t("authLogoutAll"),
+                    title: t("authLogoutAllConfirmTitle"),
+                    text: t("authLogoutAllConfirmText"),
+                    confirmLabel: t("authLogoutAllConfirm"),
+                },
+                () => T.api.accountLogoutAll(),
+            ),
+        );
     }
 
     // 이름·비밀번호 편집 화면. 둘 다 현재 비밀번호로 본인을 확인한다.
