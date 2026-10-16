@@ -30,6 +30,7 @@ const EMPTY_TEXT = "(no content)";
 const INTERRUPTED_RESULT = "[tool call interrupted: no result recorded]";
 const CLI_VERSION = "0.0.0";
 const TOOLS_READY_TIMEOUT_MS = 15_000;
+const AUTH_REFRESH_TIMEOUT_MS = 15_000;
 // CLI는 MCP 도구 출력이 5만 자를 넘으면(한 메시지 합계로는 20만 자) 파일로 빼고 미리보기만 모델에 줌.
 // 끌 방법이 없으므로 그보다 긴 결과는 살아 있는 프로세스로 돌려주지 않고, 새로 띄워 기록에 넣어 보냄.
 const LIVE_RESULT_CHARS = 40_000;
@@ -951,7 +952,29 @@ async function startLive(conv, { model, system, messages, list, level, resume, e
     return live;
 }
 
-export async function claudeAgentComplete({
+// 대화를 처리하는 CLI는 만료된 토큰을 갱신하지 않고 그대로 보내 인증 오류로 끝날 때가 있음.
+// 계정 정보를 읽는 CLI는 시작할 때 토큰을 갱신하므로, 그걸 한 번 띄운 뒤 새 프로세스로 한 번만 다시 시도함.
+// (오류가 나면 쓰던 프로세스는 닫히고 계정 정보 캐시도 비워진 상태임.)
+export async function claudeAgentComplete(args) {
+    try {
+        return await completeOnce(args);
+    } catch (err) {
+        if (err?.code !== "CLAUDE_AUTH_REQUIRED" || args.signal?.aborted) throw err;
+        await new Promise((resolve) => {
+            const timer = setTimeout(resolve, AUTH_REFRESH_TIMEOUT_MS);
+            const done = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            args.signal?.addEventListener("abort", done, { once: true });
+            claudeInfo(args.envOverride).account.then(done, done);
+        });
+        throwIfAborted(args.signal);
+        return completeOnce(args);
+    }
+}
+
+async function completeOnce({
     model,
     messages,
     tools,
