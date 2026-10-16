@@ -1,9 +1,10 @@
 import { getMergedProvider, loadUserConfig } from "../config-loader.js";
-import { chatCompletions, createOpenAIClient } from "./openai-compatible.js";
-import { codexComplete } from "./codex-client.js";
-import { grokComplete } from "./grok-client.js";
+import { chatCompletions, chatCompletionsPing, createOpenAIClient } from "./openai-compatible.js";
+import { codexComplete, codexPing } from "./codex-client.js";
+import { grokComplete, grokPing } from "./grok-client.js";
 import { githubCopilotComplete } from "./github-copilot-client.js";
-import { claudeAgentComplete } from "./claude-agent-client.js";
+import { claudeAgentComplete, claudeAgentPing } from "./claude-agent-client.js";
+import { withCacheKeepAlive } from "./cache-keepalive.js";
 import { ensureModelMeta, rememberContextWindow } from "./model-meta.js";
 import { getThinkingLevel, getCachedProviderThinkingMeta, normalizeThinkingLevel } from "../user-settings.js";
 
@@ -31,9 +32,22 @@ export async function createLlmClient(overrides = {}) {
 
     if (provider.type === "codex-oauth") {
         const modelMeta = await ensureModelMeta(provider);
-        return {
+        const thinkingParam = () => getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort";
+        return withCacheKeepAlive({
             provider,
             modelMeta,
+            ping({ messages, tools, tool_choice, signal, cacheKey }) {
+                return codexPing({
+                    cacheKey,
+                    model: provider.model,
+                    messages,
+                    tools,
+                    tool_choice,
+                    signal,
+                    thinkingLevel,
+                    thinkingParam: thinkingParam(),
+                });
+            },
             complete({ messages, tools, tool_choice, stream, onTextDelta, signal, cacheKey }) {
                 return codexComplete({
                     cacheKey,
@@ -45,19 +59,33 @@ export async function createLlmClient(overrides = {}) {
                     onTextDelta,
                     signal,
                     thinkingLevel,
-                    thinkingParam: getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort",
+                    thinkingParam: thinkingParam(),
                 });
             },
-        };
+        });
     }
 
     if (provider.type === "grok-oauth") {
         const modelMeta = await ensureModelMeta(provider);
-        return {
+        const thinkingParam = () => getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning";
+        return withCacheKeepAlive({
             provider,
             modelMeta,
-            complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+            ping({ messages, tools, tool_choice, signal, cacheKey }) {
+                return grokPing({
+                    cacheKey,
+                    model: provider.model,
+                    messages,
+                    tools,
+                    tool_choice,
+                    signal,
+                    thinkingLevel,
+                    thinkingParam: thinkingParam(),
+                });
+            },
+            complete({ messages, tools, tool_choice, stream, onTextDelta, signal, cacheKey }) {
                 return grokComplete({
+                    cacheKey,
                     model: provider.model,
                     messages,
                     tools: tools?.length ? tools : undefined,
@@ -66,10 +94,10 @@ export async function createLlmClient(overrides = {}) {
                     onTextDelta,
                     signal,
                     thinkingLevel,
-                    thinkingParam: getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning",
+                    thinkingParam: thinkingParam(),
                 });
             },
-        };
+        });
     }
 
     if (provider.type === "github-copilot-oauth") {
@@ -96,9 +124,12 @@ export async function createLlmClient(overrides = {}) {
 
     if (provider.type === "claude-agent-sdk") {
         const modelMeta = await ensureModelMeta(provider);
-        return {
+        return withCacheKeepAlive({
             provider,
             modelMeta,
+            ping({ messages, tools, signal, cacheKey }) {
+                return claudeAgentPing({ cacheKey, model: provider.model, messages, tools, thinkingLevel, signal });
+            },
             complete({ messages, tools, tool_choice, stream, onTextDelta, signal, cacheKey }) {
                 return claudeAgentComplete({
                     cacheKey,
@@ -113,7 +144,7 @@ export async function createLlmClient(overrides = {}) {
                     onContextWindow: (contextWindow) => rememberContextWindow(modelMeta, contextWindow),
                 });
             },
-        };
+        });
     }
 
     if (provider.type !== "openai-compatible") {
@@ -127,9 +158,22 @@ export async function createLlmClient(overrides = {}) {
         extraHeaders: provider.extraHeaders,
     });
 
-    return {
+    const thinkingParam = () => getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort";
+    return withCacheKeepAlive({
         provider,
         modelMeta,
+        ping({ messages, tools, tool_choice, signal }) {
+            return chatCompletionsPing({
+                client,
+                model: provider.model,
+                messages,
+                tools,
+                tool_choice,
+                signal,
+                thinkingLevel,
+                thinkingParam: thinkingParam(),
+            });
+        },
         complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
             return chatCompletions({
                 client,
@@ -141,8 +185,8 @@ export async function createLlmClient(overrides = {}) {
                 onTextDelta,
                 signal,
                 thinkingLevel,
-                thinkingParam: getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort",
+                thinkingParam: thinkingParam(),
             });
         },
-    };
+    });
 }

@@ -1,7 +1,7 @@
 import { streamWithFallback, throwIfAborted } from "./transport.js";
 import { buildPayload, buildStreamResult } from "./responses-request.js";
 import { loadGrokTokens, ensureFreshToken, getClientVersion } from "./grok-tokens.js";
-import { consumeResponsesStream } from "./responses-stream.js";
+import { consumeResponsesStream, readUntilOutput } from "./responses-stream.js";
 
 // OAuth 세션은 개발자 API(api.x.ai)가 아니라 CLI 프록시를 사용
 const BASE_URL = "https://cli-chat-proxy.grok.com/v1";
@@ -27,6 +27,11 @@ async function buildHeaders(accessToken, options) {
     };
 }
 
+// 프롬프트 캐시는 서버마다 따로 있다. 같은 대화를 같은 서버로 보내야 캐시를 다시 쓴다.
+function convHeader(cacheKey) {
+    return cacheKey ? { "x-grok-conv-id": String(cacheKey) } : {};
+}
+
 function getAuth() {
     const stored = loadGrokTokens();
     return ensureFreshToken(stored);
@@ -42,11 +47,12 @@ export async function grokComplete({
     signal,
     thinkingLevel,
     thinkingParam = "reasoning",
+    cacheKey,
 }) {
     throwIfAborted(signal);
 
     const { accessToken } = await getAuth();
-    const headers = await buildHeaders(accessToken);
+    const headers = { ...(await buildHeaders(accessToken)), ...convHeader(cacheKey) };
     const payload = buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
 
     // 스트리밍 중에도 function_call 이벤트를 조립할 수 있으므로 툴 라운드에서도 스트리밍한다.
@@ -81,7 +87,7 @@ async function fetchGrokResponses(headers, body, requestOptions, { allowRefresh 
         const stored = loadGrokTokens();
         if (stored?.refreshToken) {
             const { accessToken } = await ensureFreshToken(stored, { forceRefresh: true });
-            const retryHeaders = await buildHeaders(accessToken);
+            const retryHeaders = { ...headers, ...(await buildHeaders(accessToken)) };
             return fetchGrokResponses(retryHeaders, body, { ...requestOptions, headers: retryHeaders }, { allowRefresh: false });
         }
     }
@@ -95,6 +101,23 @@ async function fetchGrokResponses(headers, body, requestOptions, { allowRefresh 
         }
     }
     throw new Error(`Grok API error: ${res.status} ${errBody}`);
+}
+
+// 캐시 유지 핑. 같은 요청을 스트리밍으로 보내고 모델이 출력을 시작하면 바로 끊는다.
+export async function grokPing({ model, messages, tools, tool_choice, signal, thinkingLevel, thinkingParam = "reasoning", cacheKey }) {
+    const { accessToken } = await getAuth();
+    const headers = { ...(await buildHeaders(accessToken)), ...convHeader(cacheKey) };
+    const payload = buildPayload({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
+    const abort = new AbortController();
+    const onAbort = () => abort.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+        const res = await fetchGrokResponses(headers, { ...payload, stream: true }, { method: "POST", headers, signal: abort.signal });
+        return await readUntilOutput(res);
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
+        abort.abort();
+    }
 }
 
 async function grokCompleteCollected({ headers, payload, signal }) {

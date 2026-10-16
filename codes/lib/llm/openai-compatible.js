@@ -118,3 +118,36 @@ export function chatCompletions({
     }
     return requestOnce(signal, requestNonStream);
 }
+
+// 모델별로 받아 준 출력 길이 제한 이름. OpenAI 추론 모델은 max_tokens를 거절하고 max_completion_tokens만 받는다.
+const pingCapField = new Map();
+
+// 캐시 유지 핑. 같은 앞부분으로 출력 1토큰만 받아 앞부분을 캐시에서 다시 읽게 한다. usage를 돌려준다.
+export async function chatCompletionsPing({
+    client,
+    model,
+    messages,
+    tools,
+    tool_choice,
+    signal,
+    thinkingLevel,
+    thinkingParam = "reasoning_effort",
+}) {
+    const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
+    const id = `${client.baseURL}|${model}`;
+    const fields =
+        pingCapField.get(id) === "max_completion_tokens" ? ["max_completion_tokens", "max_tokens"] : ["max_tokens", "max_completion_tokens"];
+    let lastErr = null;
+    for (const field of fields) {
+        try {
+            const completion = await client.chat.completions.create({ ...params, stream: false, [field]: 1 }, { signal, maxRetries: 0 });
+            pingCapField.set(id, field);
+            return completion.usage ?? undefined;
+        } catch (err) {
+            // 제한 이름을 거절한 경우(400)에만 다른 이름으로 다시 보낸다.
+            if (signal?.aborted || err?.status !== 400) throw err;
+            lastErr = err;
+        }
+    }
+    throw lastErr;
+}
