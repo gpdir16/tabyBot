@@ -10,32 +10,46 @@
 
     /* ── 빌더 ───────────────────────────────────────────────── */
     // 한 줄이면 pill, 두 줄 이상(또는 블록 요소)이면 radius-l
-    function fitBubbleRadius(el) {
-        if (!el) return;
+    function isTallBubble(el) {
         const cs = getComputedStyle(el);
         let line = parseFloat(cs.lineHeight);
         if (!Number.isFinite(line)) line = (parseFloat(cs.fontSize) || 15) * 1.5;
         const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
         const inner = el.clientHeight - pad;
         const block = el.querySelector("img, pre, table, ul, ol, h1, h2, h3, h4, blockquote, .thumb, .stats-footer, .codeblock");
-        const tall = !!block || inner > line + 2;
-        if (el.classList.contains("tall") === tall) return;
-        el.classList.toggle("tall", tall);
+        return !!block || inner > line + 2;
+    }
+
+    // 모두 잰 뒤에 한꺼번에 바꿈. 재고 바꾸기를 버블마다 번갈아 하면 매번 레이아웃을 새로 계산해
+    // 긴 대화에서는 버블 수의 제곱만큼 느려짐(아이폰에서 화면이 멈춤).
+    function fitBubbles(els) {
+        const list = els.filter(Boolean);
+        const tall = list.map(isTallBubble);
+        list.forEach((el, i) => {
+            if (el.classList.contains("tall") !== tall[i]) el.classList.toggle("tall", tall[i]);
+        });
+    }
+
+    function fitBubbleRadius(el) {
+        fitBubbles([el]);
     }
 
     function fitBubblesIn(root) {
-        (root || thread).querySelectorAll(".bubble").forEach(fitBubbleRadius);
+        fitBubbles([...(root || thread).querySelectorAll(".bubble")]);
     }
 
     C.bubbleRo = null;
 
+    // 처음 크기도 ResizeObserver가 레이아웃 직후(그리기 전)에 한꺼번에 알려 줌. 여기서 바로 재지 않음.
     function watchBubble(el) {
         if (!el) return;
-        fitBubbleRadius(el);
-        if (!window.ResizeObserver) return;
+        if (!window.ResizeObserver) {
+            fitBubbleRadius(el);
+            return;
+        }
         if (!C.bubbleRo) {
             C.bubbleRo = new ResizeObserver((entries) => {
-                for (const entry of entries) fitBubbleRadius(entry.target);
+                fitBubbles(entries.map((entry) => entry.target));
             });
         }
         C.bubbleRo.observe(el);
