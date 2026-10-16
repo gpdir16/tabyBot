@@ -75,8 +75,10 @@ export async function readJsonBody(req, limitBytes = 20 * 1024 * 1024) {
 export function createSse() {
     let sseSubscribe = null;
     let seqNow = () => 0;
+    const open = new Map(); // 연결 닫기 함수 → 연결할 때 낸 세션 토큰
 
-    function openSse(req, res) {
+    // token: 연결을 연 세션. 세션이 끊기면 closeWhere로 이 연결도 닫는다.
+    function openSse(req, res, token) {
         res.writeHead(200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-store",
@@ -108,17 +110,25 @@ export function createSse() {
         const close = () => {
             if (closed) return;
             closed = true;
+            open.delete(close);
             clearInterval(heartbeat);
             unsubscribe();
             if (!res.destroyed) res.end();
         };
         req.on("close", close);
         res.on("close", close);
+        open.set(close, token);
         return close;
+    }
+
+    // drop(token)이 참인 연결을 모두 닫는다.
+    function closeWhere(drop) {
+        for (const [close, token] of [...open]) if (drop(token)) close();
     }
 
     return {
         openSse,
+        closeWhere,
         setSseSubscribe(fn) {
             sseSubscribe = fn;
         },

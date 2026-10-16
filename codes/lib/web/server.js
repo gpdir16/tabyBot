@@ -8,7 +8,7 @@ import { recoverInterruptedTurns } from "./turns.js";
 import { subscribe, currentSeq } from "./bus.js";
 import * as accountAuth from "./auth.js";
 import { createRouter } from "./http.js";
-import { registerComputerRoutes, initComputerWs, handleComputerUpgrade } from "./computer.js";
+import { registerComputerRoutes, initComputerWs, handleComputerUpgrade, dropRevokedComputerConns } from "./computer.js";
 import { registerAccountRoutes } from "./routes/account.js";
 import { registerChatRoutes } from "./routes/chat.js";
 import { registerLibraryRoutes } from "./routes/library.js";
@@ -46,6 +46,11 @@ export function startWebServer() {
 
     const server = http.createServer((req, res) => router.handle(req, res));
     initComputerWs(AUTH);
+    // 로그아웃 등으로 세션이 끊기면 그 세션으로 열린 실시간 연결도 닫는다.
+    accountAuth.onSessionsRevoked(() => {
+        router.dropRevoked();
+        dropRevokedComputerConns();
+    });
     server.on("upgrade", (req, socket, head) => {
         try {
             handleComputerUpgrade(req, socket, head);

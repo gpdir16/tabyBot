@@ -234,6 +234,7 @@
         enabled,
         support,
         syncAuth,
+        dropPush: disablePush,
         canInstall: () => Boolean(deferredInstall) && !isStandalone(),
         promptInstall,
     };

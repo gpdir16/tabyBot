@@ -150,6 +150,10 @@ export function handleComputerUpgrade(req, socket, head) {
     wsServer.handleUpgrade(req, socket, head);
 }
 
+export function dropRevokedComputerConns() {
+    wsServer?.dropRevoked();
+}
+
 export function shutdownComputer() {
     killAllSessions();
 }

@@ -85,7 +85,7 @@ export function createRouter({ publicDir, auth = {} }) {
             json404: () => sendJson(res, 404, { error: "not_found" }),
             json409: (error, extra = {}) => sendJson(res, 409, { error, ...extra }),
             json413: (error, extra = {}) => sendJson(res, 413, { error, ...extra }),
-            sse: () => sse.openSse(req, res),
+            sse: () => sse.openSse(req, res, presentedToken(url, req)),
         };
     }
 
@@ -132,5 +132,10 @@ export function createRouter({ publicDir, auth = {} }) {
         sendJson(res, 404, { error: "not_found" });
     }
 
-    return { add, handle, setSseSubscribe: sse.setSseSubscribe, setSeqNow: sse.setSeqNow };
+    // 끊긴 세션으로 열려 있던 SSE 연결을 닫는다(로그아웃한 기기에 이벤트가 계속 가지 않게).
+    function dropRevoked() {
+        if (typeof auth.enabled === "function" && auth.enabled()) sse.closeWhere((token) => !token || !auth.verify(token));
+    }
+
+    return { add, handle, dropRevoked, setSseSubscribe: sse.setSseSubscribe, setSeqNow: sse.setSeqNow };
 }

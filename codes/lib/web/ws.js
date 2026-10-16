@@ -222,6 +222,7 @@ function authorized(url, req, auth) {
 // 경로 접두사 → 핸들러(conn, req, url). 매칭 안 되면 소켓을 닫는다.
 export function createWsServer({ auth = {} } = {}) {
     const routes = [];
+    const open = new Map(); // 연결 → 연결할 때 낸 세션 토큰
 
     function add(pathPrefix, handler) {
         routes.push({ pathPrefix, handler });
@@ -250,10 +251,18 @@ export function createWsServer({ auth = {} } = {}) {
                 `Sec-WebSocket-Accept: ${acceptKey(key)}\r\n\r\n`,
         );
         const conn = new WsConn(req, socket);
+        open.set(conn, presentedToken(url, req));
+        conn.on("close", () => open.delete(conn));
         // 업그레이드 헤더 뒤에 딸려 온 바이트(head)는 스트림 앞으로 되돌려 data 이벤트로 파싱한다.
         if (head?.length) socket.unshift(head);
         hit.handler(conn, req, url);
     }
 
-    return { add, handleUpgrade };
+    // 끊긴 세션으로 열려 있던 연결을 닫는다(로그아웃한 기기가 화면, 터미널을 계속 쓰지 않게).
+    function dropRevoked() {
+        if (!auth || typeof auth.enabled !== "function" || !auth.enabled()) return;
+        for (const [conn, token] of [...open]) if (!token || !auth.verify(token)) conn.close(1008);
+    }
+
+    return { add, handleUpgrade, dropRevoked };
 }

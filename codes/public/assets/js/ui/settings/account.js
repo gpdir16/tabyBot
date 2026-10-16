@@ -86,6 +86,8 @@
                     const ok = await T.confirm({ title, text, confirmLabel, danger: true });
                     if (!ok) return;
                     item.row.disabled = true;
+                    // 로그아웃한 기기로 알림이 가지 않게 이 기기의 알림 구독을 먼저 해제한다(세션이 살아 있을 때).
+                    await T.notifications?.dropPush?.();
                     try {
                         await call();
                     } catch {
@@ -149,6 +151,8 @@
             }
             try {
                 const r = await T.api.accountUpdate(makePayload());
+                // 비밀번호를 바꾸면 서버가 알림 구독을 모두 지우므로 이 기기는 다시 구독한다.
+                T.notifications?.syncAuth?.();
                 state.state.account = {
                     ...state.state.account,
                     hasAccount: true,
