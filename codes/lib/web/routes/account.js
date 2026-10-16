@@ -16,6 +16,7 @@ import {
 import { getClaudeAuthStatus } from "../../llm/claude-agent-client.js";
 import { cancelClaudeLogin, startClaudeLogin, submitClaudeLoginCode } from "../../llm/claude-login.js";
 import { emit } from "../bus.js";
+import { removeAllSubscriptions } from "../push.js";
 
 // ── 앱 상태 API. ──
 
@@ -86,6 +87,13 @@ function registerLoginRoutes(router) {
 
     router.add("POST", "/api/account/logout", (ctx) => {
         accountAuth.revokeSession(ctx.token);
+        ctx.json200({ ok: true });
+    });
+
+    // 이 기기를 포함한 모든 기기에서 로그아웃. 로그아웃한 기기로 알림이 가지 않게 알림 구독도 지운다.
+    router.add("POST", "/api/account/logout-all", (ctx) => {
+        accountAuth.revokeAllSessions();
+        removeAllSubscriptions();
         ctx.json200({ ok: true });
     });
 

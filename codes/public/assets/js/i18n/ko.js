@@ -262,6 +262,7 @@
         authSessions: "활성 세션",
         authSessionCount: "{n}개",
         authLogout: "로그아웃",
+        authLogoutAll: "모든 기기에서 로그아웃",
         retry: "다시 시도",
         statModelCalls: "모델 호출 {n}회",
         statToolCalls: "도구 호출 {n}회",
@@ -337,6 +338,10 @@
         todosRejectConfirmText: "거절한 제안은 다시 불러올 수 없습니다.",
         authLogoutConfirmTitle: "로그아웃할까요?",
         authLogoutConfirmText: "이 브라우저에 저장된 대화 캐시가 지워집니다. 다시 로그인하려면 비밀번호가 필요합니다.",
+        authLogoutAllConfirm: "모두 로그아웃",
+        authLogoutAllConfirmTitle: "모든 기기에서 로그아웃할까요?",
+        authLogoutAllConfirmText:
+            "이 기기를 포함한 모든 기기가 로그아웃되고 알림도 더 받지 않습니다. 각 기기에서 다시 로그인하려면 비밀번호가 필요합니다.",
         oauthReloginConfirmTitle: "다시 로그인할까요?",
         oauthReloginConfirmText: "시작하는 즉시 지금 로그인이 지워집니다. 중간에 그만두면 로그인이 없는 상태로 남습니다.",
         notificationsDenied: "알림 권한이 거부되었습니다",

@@ -179,6 +179,8 @@
         try {
             const tk = localStorage.getItem("tabybot.web.token") || "";
             if (swReg?.active) swReg.active.postMessage({ type: "auth-token", token: tk });
+            // 모든 기기 로그아웃은 서버의 알림 구독을 지운다. 다시 로그인하면 알림이 켜져 있을 때 다시 구독한다.
+            if (tk && enabled()) void ensurePush();
         } catch {
             // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 저장하지 않고 넘어간다
         }

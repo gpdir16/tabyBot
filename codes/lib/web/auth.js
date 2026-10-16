@@ -188,6 +188,15 @@ export function revokeSession(token) {
     if (s.sessions.length !== before) persist();
 }
 
+// 이 기기를 포함해 모든 세션을 끊는다.
+export function revokeAllSessions() {
+    const s = load();
+    if (s.sessions.length) {
+        s.sessions = [];
+        persist();
+    }
+}
+
 const ATTEMPTS_MAX_KEYS = 10_000;
 
 function attemptEntry(key) {

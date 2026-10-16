@@ -262,6 +262,7 @@
         authSessions: "アクティブセッション",
         authSessionCount: "{n}",
         authLogout: "ログアウト",
+        authLogoutAll: "すべてのデバイスからログアウト",
         retry: "再試行",
         statModelCalls: "モデル呼び出し {n}回",
         statToolCalls: "ツール呼び出し {n}回",
@@ -340,6 +341,10 @@
         todosRejectConfirmText: "拒否した提案は元に戻せません。",
         authLogoutConfirmTitle: "ログアウトしますか？",
         authLogoutConfirmText: "このブラウザに保存された会話キャッシュが削除されます。再度ログインするにはパスワードが必要です。",
+        authLogoutAllConfirm: "すべてログアウト",
+        authLogoutAllConfirmTitle: "すべてのデバイスからログアウトしますか？",
+        authLogoutAllConfirmText:
+            "このデバイスを含むすべてのデバイスがログアウトされ、通知も届かなくなります。各デバイスで再度ログインするにはパスワードが必要です。",
         oauthReloginConfirmTitle: "再ログインしますか？",
         oauthReloginConfirmText: "開始するとすぐに現在のログインが削除されます。途中でやめるとログインのない状態になります。",
         notificationsDenied: "通知の許可が拒否されました",
