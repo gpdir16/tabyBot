@@ -31,12 +31,25 @@
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "folders", "notices", "provider", "model", "account", "selfimprovement", "skills", "mcp", "secrets", "agents"];
+    const TABS = [
+        "general",
+        "folders",
+        "notices",
+        "provider",
+        "model",
+        "account",
+        "efficiency",
+        "selfimprovement",
+        "skills",
+        "mcp",
+        "secrets",
+        "agents",
+    ];
 
     // 현재 경로를 설정 라우트로 해석한다. /s나 /s/…가 아니면 null.
     function routeFromPath() {
         if (/^\/s\/?$/.test(location.pathname || "")) return { tab: "root", agentId: null };
-        const m = /^\/s\/(general|folders|notices|provider|model|account|selfimprovement|skills|mcp|secrets|agents)(?:\/([^/]+))?$/.exec(
+        const m = /^\/s\/(general|folders|notices|provider|model|account|efficiency|selfimprovement|skills|mcp|secrets|agents)(?:\/([^/]+))?$/.exec(
             location.pathname || "",
         );
         if (!m) return null;
@@ -94,6 +107,7 @@
         if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", agentId: o.folderAgent || null };
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
         C.modelSub = null;
+        C.efficiencySub = null;
         C.keyEditing = false;
         C.credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;

@@ -3371,6 +3371,103 @@ body.sb-collapsed .sp-expand {
     white-space: pre;
 }
 
+/* 효율적인 운영 탭(settings/efficiency.js): 첫 화면의 지표 두 칸과 사용 통계의 날짜별 막대 */
+.eff-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+.eff-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--sp-3) var(--sp-4);
+}
+.eff-metric + .eff-metric {
+    border-left: var(--hairline) solid var(--separator);
+}
+.eff-metric-val {
+    font-size: var(--fs-xl);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.eff-metric-label {
+    font-size: var(--fs-m);
+    color: var(--text-secondary);
+}
+.eff-model {
+    gap: var(--sp-3);
+    padding-block: var(--sp-2);
+}
+.eff-model-name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.eff-model-sub {
+    font-size: var(--fs-m);
+    color: var(--text-secondary);
+}
+.eff-model-val {
+    flex: none;
+    font-size: var(--fs-t);
+    color: var(--text-secondary);
+}
+.eff-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: var(--sp-3) var(--sp-4);
+}
+.eff-chart-max,
+.eff-chart-axis {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+.eff-chart-axis {
+    display: flex;
+    justify-content: space-between;
+}
+.eff-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 120px;
+    border-bottom: var(--hairline) solid var(--separator);
+}
+.eff-bar {
+    display: flex;
+    flex: 1;
+    flex-direction: column-reverse;
+    min-width: 0;
+    height: 100%;
+}
+.eff-bar-cached {
+    background: var(--accent);
+}
+.eff-bar-fresh {
+    background: var(--text-tertiary);
+}
+.eff-bar > span:last-child {
+    border-radius: 2px 2px 0 0;
+}
+.eff-legend {
+    display: flex;
+    gap: var(--sp-4);
+    font-size: var(--fs-s);
+    color: var(--text-secondary);
+}
+.eff-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.eff-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+}
+
 /* ── 12. 온보딩(풀페이지) ──────────────────────────────── */
 /* ── 온보딩(모바일): 왼쪽 위에 뒤로, 오른쪽 위에 나중에 하기, 아래에 폭을 채운 다음 버튼 ── */
 .onb-page {
