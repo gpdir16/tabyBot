@@ -28,7 +28,7 @@ export function terminalCwdParamDescription() {
 }
 
 export function fileReadDescription() {
-    return `Read a text file. Absolute paths are allowed; relative paths resolve to \`${USER_DIR}\`. Optional line range; output capped below 50% of remaining context.`;
+    return `Read a text file, or look at an image file (png/jpg/webp/gif, e.g. a screenshot): the image itself is shown to you. Absolute paths are allowed; relative paths resolve to \`${USER_DIR}\`. Optional line range; output capped below 50% of remaining context.`;
 }
 
 export function filePatchDescription() {
