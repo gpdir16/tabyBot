@@ -241,25 +241,24 @@ export function clearFileReadCache() {
     fileReadCache.clear();
 }
 
+// @@ 머리의 줄 번호·줄 수는 위치를 찾는 힌트로만 쓴다. 모델은 줄 수를 자주 틀리게 적으므로 실제 적용은
+// 문맥(" ")·삭제("-") 줄의 내용으로 한다. 공백 없이 적힌 빈 줄은 빈 문맥 줄로 본다(모델이 흔히 이렇게 쓴다).
 function parseUnifiedDiff(diffText) {
     const lines = diffText.replace(/\r\n/g, "\n").split("\n");
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
     const hunks = [];
     let currentHunk = null;
     for (const line of lines) {
         if (line.startsWith("@@")) {
             if (currentHunk) hunks.push(currentHunk);
-            const m = line.match(/@@\s*-(\d+)(?:,(\d+))?\s*\+(\d+)(?:,(\d+))?\s*@@/);
-            if (!m) continue;
-            currentHunk = {
-                oldStart: parseInt(m[1], 10),
-                oldCount: m[2] ? parseInt(m[2], 10) : 1,
-                newStart: parseInt(m[3], 10),
-                newCount: m[4] ? parseInt(m[4], 10) : 1,
-                lines: [],
-            };
+            const m = line.match(/@@\s*-(\d+)(?:,\d+)?\s*\+\d+(?:,\d+)?\s*@@/);
+            currentHunk = { oldStart: m ? parseInt(m[1], 10) : null, lines: [] };
         } else if (currentHunk) {
             if (line === "\\ No newline at end of file") continue;
-            if (line === "") continue;
+            if (line === "") {
+                currentHunk.lines.push(" ");
+                continue;
+            }
             const prefix = line[0];
             if (prefix !== " " && prefix !== "+" && prefix !== "-") continue;
             currentHunk.lines.push(line);
@@ -269,17 +268,68 @@ function parseUnifiedDiff(diffText) {
     return hunks;
 }
 
-function applyHunk(fileLines, hunk, offset = 0) {
-    const result = [...fileLines];
-    const oldLines = hunk.lines.filter((l) => l.startsWith(" ") || l.startsWith("-")).map((l) => l.slice(1));
-    const newLines = hunk.lines.filter((l) => l.startsWith(" ") || l.startsWith("+")).map((l) => l.slice(1));
-    const startPos = hunk.oldStart - 1 + offset;
-    const oldSlice = result.slice(startPos, startPos + hunk.oldCount);
-    if (oldSlice.join("\n") !== oldLines.join("\n")) {
-        return { ok: false, error: "Context mismatch. The file changed since the last read. Re-read the file first." };
+// file_read가 붙이는 "  12|" 접두어. 모델이 diff에 그대로 베껴 오는 일이 있다.
+const LINE_NUMBER_PREFIX = /^\s*\d+\|/;
+
+function findBlock(fileLines, block, sameLine) {
+    const found = [];
+    for (let i = 0; i + block.length <= fileLines.length; i++) {
+        let ok = true;
+        for (let j = 0; j < block.length; j++) {
+            if (!sameLine(fileLines[i + j], block[j])) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) found.push(i);
     }
-    result.splice(startPos, hunk.oldCount, ...newLines);
-    return { ok: true, result, offset: offset + newLines.length - hunk.oldCount };
+    return found;
+}
+
+const exactLine = (a, b) => a === b;
+const looseLine = (a, b) => a.trimEnd() === b.trimEnd();
+
+function previewLines(lines) {
+    const shown = lines.slice(0, 3).map((l) => JSON.stringify(l.length > 120 ? `${l.slice(0, 120)}…` : l));
+    return shown.join(", ") + (lines.length > 3 ? ` … (${lines.length} lines)` : "");
+}
+
+function applyHunk(fileLines, hunk, index, offset) {
+    let oldLines = hunk.lines.filter((l) => l.startsWith(" ") || l.startsWith("-")).map((l) => l.slice(1));
+    let newLines = hunk.lines.filter((l) => l.startsWith(" ") || l.startsWith("+")).map((l) => l.slice(1));
+    const expected = hunk.oldStart == null ? null : Math.max(0, hunk.oldStart - 1 + offset);
+
+    // 삭제·문맥 줄이 없는 순수 추가(빈 파일 채우기 포함)는 머리의 위치에 넣는다.
+    if (!oldLines.length) {
+        const at = Math.min(fileLines.length, expected ?? fileLines.length);
+        return { ok: true, result: [...fileLines.slice(0, at), ...newLines, ...fileLines.slice(at)], offset: offset + newLines.length };
+    }
+
+    let found = findBlock(fileLines, oldLines, exactLine);
+    if (!found.length) found = findBlock(fileLines, oldLines, looseLine);
+    if (!found.length && oldLines.every((l) => l === "" || LINE_NUMBER_PREFIX.test(l))) {
+        const strip = (l) => l.replace(LINE_NUMBER_PREFIX, "");
+        oldLines = oldLines.map(strip);
+        newLines = newLines.map(strip);
+        found = findBlock(fileLines, oldLines, exactLine);
+        if (!found.length) found = findBlock(fileLines, oldLines, looseLine);
+    }
+    if (!found.length) {
+        return {
+            ok: false,
+            error: `Hunk ${index + 1}: its context/removed lines were not found in the file: ${previewLines(oldLines)}. Copy them exactly from the latest file_read, without the "N|" line-number prefix, and include a few unchanged lines around the change.`,
+        };
+    }
+    if (found.length > 1 && expected == null) {
+        return {
+            ok: false,
+            error: `Hunk ${index + 1}: its lines match ${found.length} places in the file. Add more unchanged context lines or a "@@ -LINE" header so the place is unique.`,
+        };
+    }
+    // 같은 내용이 여러 곳에 있으면 머리의 줄 번호에 가장 가까운 곳에 적용한다.
+    const at = expected == null ? found[0] : found.reduce((best, i) => (Math.abs(i - expected) < Math.abs(best - expected) ? i : best));
+    const result = [...fileLines.slice(0, at), ...newLines, ...fileLines.slice(at + oldLines.length)];
+    return { ok: true, result, offset: offset + (at - (expected ?? at)) + newLines.length - oldLines.length };
 }
 
 export function executeFilePatch(args, ctx = {}) {
@@ -291,8 +341,9 @@ export function executeFilePatch(args, ctx = {}) {
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return { error: "not a file", path: resolved };
 
+    // 빈 파일("")도 읽은 기록으로 친다. 예전에는 빈 내용이 거짓으로 걸려, touch로 만든 파일을 채울 수 없었다.
     const snapshot = ctx.fileSnapshots?.get(resolved);
-    if (!snapshot) {
+    if (snapshot === undefined) {
         return { error: "Must file_read this path in this turn before patching." };
     }
 
@@ -307,9 +358,10 @@ export function executeFilePatch(args, ctx = {}) {
     const fileLines = splitLines(currentContent);
     let resultLines = fileLines;
     let offset = 0;
-    const sorted = [...hunks].sort((a, b) => a.oldStart - b.oldStart);
-    for (const hunk of sorted) {
-        const applied = applyHunk(resultLines, hunk, offset);
+    // 줄 번호가 없는 머리(@@ 만 쓴 경우)는 적힌 순서대로 둔다.
+    const sorted = hunks.some((h) => h.oldStart == null) ? hunks : [...hunks].sort((a, b) => a.oldStart - b.oldStart);
+    for (const [index, hunk] of sorted.entries()) {
+        const applied = applyHunk(resultLines, hunk, index, offset);
         if (!applied.ok) return applied;
         resultLines = applied.result;
         offset = applied.offset;

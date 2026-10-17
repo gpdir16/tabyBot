@@ -32,7 +32,7 @@ export function fileReadDescription() {
 }
 
 export function filePatchDescription() {
-    return `Patch a text file (unified diff). Absolute paths are allowed; relative paths resolve to \`${USER_DIR}\`. Call file_read on the same path in this turn first; disk must still match that read.`;
+    return `Patch a text file (unified diff). Absolute paths are allowed; relative paths resolve to \`${USER_DIR}\`. Call file_read on the same path in this turn first; disk must still match that read. Hunks are placed by their context and removed lines, which must match the file exactly (leave out file_read's "N|" line-number prefixes); the @@ line numbers only break ties. Include 2-3 unchanged lines around each change.`;
 }
 
 export function filePathParamDescription() {
