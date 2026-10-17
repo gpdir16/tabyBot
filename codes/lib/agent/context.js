@@ -17,7 +17,7 @@ import {
 } from "../user-settings.js";
 import { formatTodosForPrompt } from "../todos/store.js";
 import { estimateContentTokens } from "../llm/vision.js";
-import { collectFilesFromHistory, formatAttachedFilesPrompt, hydrateUserContent } from "../web/attachments.js";
+import { hydrateUserContent } from "../web/attachments.js";
 import { formatSkillsListForPrompt } from "../skills-catalog.js";
 import { formatSecretsForPrompt } from "../secrets/vault.js";
 import { buildEnvironmentPromptVars, buildFilesystemPromptBlock, buildRuntimeInfoLine, renderSystemPrompt } from "./system-prompt.js";
@@ -117,7 +117,6 @@ function buildSystemMessageContent({ truncateMemory = false, maxMemoryChars = 12
         AGENT_MEMORY: agentMemoryText(rt.agentId, { truncateMemory, maxMemoryChars }),
         PEER_AGENTS: peerAgentsText(rt.agentId),
         PAST_SESSIONS_LIST: pastSessions,
-        ATTACHED_FILES: formatAttachedFilesPrompt(rt.attachedFiles),
         NSFW_LEVEL_LABEL: nsfwPolicyLabel(getNsfwLevel(loadUserConfig())),
         NSFW_POLICY: buildNsfwPolicyText(getNsfwLevel(loadUserConfig())),
         APPROVAL_LEVEL_LABEL: approvalPolicyLabel(getApprovalLevel(loadUserConfig())),
@@ -154,10 +153,10 @@ function toLlmMessage(message) {
     delete cloned.imageUrl;
     if (cloned.role === "user") {
         const text = typeof cloned.content === "string" ? cloned.content : "";
-        // 히스토리 메시지의 첨부 이미지를 매 턴 base64로 다시 싣지 않는다.
-        // 경로는 ATTACHED_FILES 목록에 남는다. 인라인 이미지는 현재 사용자
-        // 메시지에서만 붙인다.
+        // 히스토리 메시지의 첨부 이미지를 매 턴 base64로 다시 싣지 않는다. 인라인 이미지는 현재 사용자
+        // 메시지에서만 붙인다. attachments는 남겨 두면 API로 보낼 때 그 메시지의 첨부 안내 블록이 된다.
         cloned.content = hydrateUserContent(text, cloned.attachments, { visionEnabled: false });
+        return cloned;
     }
     delete cloned.attachments;
     return cloned;
@@ -178,12 +177,7 @@ export function buildInitialMessages(
     const visionEnabled = modelMeta?.supportsVision === true;
     const currentFiles = Array.isArray(attachments) ? attachments : [];
     const historyForPrompt = dropPendingCurrent(dropOwnedPendingTurns(history, excludeMessageIds), userMessage);
-    const attachedFiles = collectFilesFromHistory(historyForPrompt, currentFiles);
-    const systemContent = buildSystemMessageContent({
-        truncateMemory,
-        maxMemoryChars,
-        runtimeInfo: { ...runtimeInfo, attachedFiles },
-    });
+    const systemContent = buildSystemMessageContent({ truncateMemory, maxMemoryChars, runtimeInfo });
 
     const messages = [{ role: "system", content: systemContent }];
 
@@ -195,6 +189,7 @@ export function buildInitialMessages(
     messages.push({
         role: "user",
         content: hydrateUserContent(userMessage, currentFiles, { visionEnabled }),
+        ...(currentFiles.length ? { attachments: currentFiles } : {}),
     });
     return messages;
 }
