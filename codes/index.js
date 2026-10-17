@@ -8,7 +8,7 @@ import { startDreamingScheduler } from "./lib/dreaming/scheduler.js";
 import { startProactiveScheduler } from "./lib/proactive.js";
 import { isDockerRuntime } from "./lib/runtime.js";
 import { ensureSession, DISPLAY } from "./lib/computer/display.js";
-import { shutdownComputer } from "./lib/web/computer.js";
+import { shutdownComputer, upgradeAllProfilesCompat } from "./lib/web/computer.js";
 import { flushUsageLog } from "./lib/llm/usage-log.js";
 
 async function shutdown() {
@@ -34,6 +34,8 @@ function startSharedDisplay() {
 
 async function main() {
     ensureUserDir();
+    // Camoufox가 업데이트된 뒤 첫 부팅이면 기존 브라우저 프로필을 새 버전으로 열 수 있게 맞춘다.
+    upgradeAllProfilesCompat();
     await initTools();
 
     process.on("SIGINT", shutdown);

@@ -1,5 +1,6 @@
 // camofox 브라우저 서버 연동: 프로필·탭 스냅샷·REST 호출.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { writeFileAtomic } from "../../atomic-file.js";
@@ -59,6 +60,74 @@ export function ensureProfilePrefs(user) {
     } catch {
         // 프로필 설정을 쓰지 못해도 기본 설정으로 계속 진행한다
     }
+    upgradeProfileCompat(user);
+}
+
+/* ── 프로필 버전 표시: camofox-browser는 프로필 폴더의 compatibility.json에 만든 Camoufox 버전을
+   적어 두고, 설치된 버전과 다르면 그 프로필(로그인 포함)을 통째로 거부한다. 밖에서는
+   "Internal server error"로만 보여 브라우저 전체가 고장 난 것처럼 된다. 이미지를 다시 빌드하면
+   Camoufox가 최신으로 받아지므로 업데이트할 때마다 이 일이 생긴다. Firefox 프로필은 상위 버전으로는
+   스스로 옮겨 가므로, 올라간 경우에만 표시를 현재 버전으로 고쳐 로그인을 살린다. ── */
+function camoufoxCacheDirs() {
+    const homes = [...new Set([process.env.HOME, os.homedir(), USER_DIR].filter(Boolean))];
+    return homes.map((home) => {
+        if (process.platform === "darwin") return path.join(home, "Library", "Caches", "camoufox");
+        if (process.platform === "win32") return path.join(home, "AppData", "Local", "camoufox", "camoufox", "Cache");
+        return path.join(home, ".cache", "camoufox");
+    });
+}
+
+// camofox-browser가 비교하는 형식("156.0.1-beta.39")과 같게 만든다. 못 읽으면 "".
+function installedCamoufoxVersion() {
+    for (const dir of camoufoxCacheDirs()) {
+        try {
+            const v = JSON.parse(fs.readFileSync(path.join(dir, "version.json"), "utf8"));
+            if (v?.version && v?.release) return `${v.version}-${v.release}`;
+        } catch {
+            // 이 경로에 설치돼 있지 않으면 다음 후보를 본다
+        }
+    }
+    return "";
+}
+
+function isNewerVersion(a, b) {
+    const x = String(a).match(/\d+/g)?.map(Number) || [];
+    const y = String(b).match(/\d+/g)?.map(Number) || [];
+    for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+        if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+    }
+    return false;
+}
+
+export function upgradeProfileCompat(user, current = installedCamoufoxVersion()) {
+    if (!current) return;
+    const file = path.join(camofoxProfilesDir(), user, "compatibility.json");
+    try {
+        const envelope = JSON.parse(fs.readFileSync(file, "utf8"));
+        const from = envelope?.data?.camoufoxVersion;
+        if (envelope?.version !== 1 || !from || !isNewerVersion(current, from)) return;
+        const data = { ...envelope.data, camoufoxVersion: current, upgradedFrom: from, upgradedAt: new Date().toISOString() };
+        writeFileAtomic(file, JSON.stringify({ ...envelope, data }, null, 2));
+        blog("profile compat upgraded", { user, from, to: current });
+    } catch {
+        // 표시 파일이 없으면 camofox가 처음 열 때 만들고, 깨졌으면 camofox가 직접 오류를 낸다
+    }
+}
+
+// 부팅 때 모든 프로필을 맞춘다. 에이전트의 terminal_run은 이 모듈을 거치지 않고 camofox CLI를 바로 부른다.
+export function upgradeAllProfilesCompat() {
+    const current = installedCamoufoxVersion();
+    if (!current) return;
+    let users = [];
+    try {
+        users = fs
+            .readdirSync(camofoxProfilesDir(), { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name);
+    } catch {
+        // 프로필 폴더가 아직 없으면 맞출 것도 없다
+    }
+    for (const user of users) upgradeProfileCompat(user, current);
 }
 
 // 이전 실행에서 남긴 세션 저장 파일이 있는가: 있으면 재기동 시 탭이 복원된다.
