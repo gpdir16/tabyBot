@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { writeFileAtomic } from "../atomic-file.js";
 import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
 import { resolveAgentPath } from "../paths.js";
@@ -22,6 +23,23 @@ const fileReadCache = new Map();
 // file_read는 전체 파일을 메모리에 올리므로 상한을 둔다. 큰 파일은
 // terminal_run(sed/head/tail)으로 페이지 단위 읽기를 안내한다.
 const MAX_READ_BYTES = 8 * 1024 * 1024;
+
+// 이미지 파일은 글자 대신 그림으로 보여 준다. 브라우저(camofox) 스크린샷을 모델이 직접 확인하는 유일한
+// 길이라, 이게 없으면 접근성 스냅샷에 안 잡히는 것(다른 도메인 iframe, 캔버스, 덮개 창)을 못 본다.
+const VIEWABLE_IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+// Claude API가 받는 이미지 한 장의 상한(5MB)에 맞춘다.
+const MAX_VIEW_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function readImageFile(resolved, stat, ctx) {
+    if (ctx?.modelMeta?.supportsVision !== true) return { error: "The current model cannot view images.", path: resolved };
+    if (stat.size > MAX_VIEW_IMAGE_BYTES) {
+        return {
+            error: `image too large to view (${(stat.size / 1048576).toFixed(1)} MB > 5 MB). Take a viewport screenshot instead of a full-page one, or shrink it first.`,
+            path: resolved,
+        };
+    }
+    return { ok: true, path: resolved, imageBytes: stat.size, note: "The image is attached right after this result.", __image: resolved };
+}
 
 function splitLines(text) {
     if (!text) return [];
@@ -134,6 +152,7 @@ export function executeFileRead(args, ctx) {
     if (!fs.existsSync(resolved)) return { error: "file not found", path: resolved };
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return { error: "not a file", path: resolved };
+    if (VIEWABLE_IMAGE_EXTS.has(path.extname(resolved).toLowerCase())) return readImageFile(resolved, stat, ctx);
     if (stat.size > MAX_READ_BYTES) {
         return {
             error: `file too large for file_read (${(stat.size / 1048576).toFixed(1)} MB > 8 MB). Use terminal_run with 'sed -n "START,ENDp" <path>' or head/tail to page through it.`,
