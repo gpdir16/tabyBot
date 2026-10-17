@@ -1,4 +1,5 @@
-// 첨부는 디스크 파일로 둔다. 사용자 메시지에는 원문과 이미지만 넣고, 경로는 시스템 프롬프트에만 둔다.
+// 첨부는 디스크 파일로 둔다. 사용자 메시지에는 원문과 이미지만 넣는다. 파일 이름과 경로는 API로 보낼 때
+// 그 메시지 앞에 별도 블록으로 붙는다(sanitize-messages.js의 userMessageHeader).
 import fs from "node:fs";
 import path from "node:path";
 import { isVisionImageMime, visionImagePart } from "../llm/vision.js";
@@ -41,38 +42,6 @@ function resolveAttachedFile(file) {
         };
     }
     return null;
-}
-
-// ATTACHED_FILES 목록은 매 프롬프트마다 들어간다. 히스토리가 길어져도
-// 무한정 커지지 않게 최신 첨부 위주로 상한을 둔다.
-const MAX_HISTORY_FILES = 16;
-
-export function collectFilesFromHistory(history, extra = []) {
-    const files = [];
-    for (const turn of history || []) {
-        for (const message of turn?.messages || []) {
-            if (Array.isArray(message?.attachments)) files.push(...message.attachments);
-            // 작업 중에 합쳐 넣은 메시지의 첨부는 메시지별 메타에 들어 있다.
-            for (const item of Array.isArray(message?.queued) ? message.queued : []) {
-                if (Array.isArray(item?.attachments)) files.push(...item.attachments);
-            }
-        }
-    }
-    if (Array.isArray(extra)) files.push(...extra);
-    return files.map(resolveAttachedFile).filter(Boolean).slice(-MAX_HISTORY_FILES);
-}
-
-export function formatAttachedFilesPrompt(files) {
-    const lines = [];
-    const seen = new Set();
-    for (const file of files || []) {
-        const resolved = resolveAttachedFile(file);
-        if (!resolved?.filePath || seen.has(resolved.filePath)) continue;
-        seen.add(resolved.filePath);
-        const kind = isVisionImageMime(resolved.mime) ? "image, also sent as vision" : resolved.mime || "file";
-        lines.push(`- \`${resolved.name}\` (${kind})\n  \`${resolved.filePath}\``);
-    }
-    return lines.length ? lines.join("\n") : "- (none)";
 }
 
 function typedUserText(text) {

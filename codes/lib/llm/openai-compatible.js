@@ -24,8 +24,18 @@ function completionPayload(completion) {
     };
 }
 
+// OpenAI 호환 업체 중에는 본문이 텍스트 블록 배열이면 받지 못하는 곳이 있다. 이미지가 없는 메시지는
+// 블록(하네스 블록과 사용자 글)을 빈 줄로 이어 문자열로 보낸다. 이미지가 있으면 원래대로 배열이다.
+function joinTextOnlyContent(messages) {
+    return messages.map((m) =>
+        Array.isArray(m.content) && m.content.every((part) => part?.type === "text")
+            ? { ...m, content: m.content.map((part) => part.text).join("\n\n") }
+            : m,
+    );
+}
+
 function buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam }) {
-    const params = { model, messages: sanitizeMessagesForApi(messages) };
+    const params = { model, messages: joinTextOnlyContent(sanitizeMessagesForApi(messages)) };
 
     const level = String(thinkingLevel || "").toLowerCase();
     if (level && level !== "off") {

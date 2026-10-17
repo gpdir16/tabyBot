@@ -57,12 +57,25 @@ export function formatMessageStamp(at, timeZone = defaultTimeZone()) {
     }
 }
 
-function withMessageStamp(content, stamp) {
-    if (typeof content === "string") return content ? `${stamp}\n${content}` : stamp;
-    if (!Array.isArray(content)) return content;
-    const textIndex = content.findIndex((part) => part?.type === "text" && typeof part.text === "string");
-    if (textIndex === -1) return [{ type: "text", text: stamp }, ...content];
-    return content.map((part, i) => (i === textIndex ? { ...part, text: `${stamp}\n${part.text}` } : part));
+// 하네스가 사용자 메시지에 붙이는 정보(보낸 시각, 함께 온 첨부)를 한 블록으로 만든다. 사용자가 쓴 글에 섞지 않고
+// 그 앞에 따로 둔다. 저장된 at과 첨부 메타로만 만들어 매 턴 같은 문자열이 나오므로 프롬프트 캐시를 깨지 않는다.
+// 첨부 목록을 시스템 프롬프트에 두면 파일을 보낼 때마다 그 뒤 대화 기록 전체의 캐시가 깨진다.
+function userMessageHeader(m) {
+    const lines = [];
+    const stamp = formatMessageStamp(m.at);
+    if (stamp) lines.push(stamp);
+    for (const file of Array.isArray(m.attachments) ? m.attachments : []) {
+        const filePath = file?.filePath || file?.relPath;
+        if (filePath) lines.push(`[attached file: ${file.name || "file"} (${file.mime || "file"}) ${filePath}]`);
+    }
+    return lines.join("\n");
+}
+
+function withHeaderBlock(content, header) {
+    let parts = [];
+    if (typeof content === "string") parts = content ? [{ type: "text", text: content }] : [];
+    else if (Array.isArray(content)) parts = content;
+    return [{ type: "text", text: header }, ...parts];
 }
 
 const MAX_IMAGES = 50; // API limit is 60; keep 50 for safety margin
@@ -72,16 +85,20 @@ function trimImages(messages) {
     for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         if (!Array.isArray(m.content)) continue;
+        let removed = false;
         for (let j = 0; j < m.content.length; j++) {
             const part = m.content[j];
             if (part?.type === "image_url") {
                 imageCount++;
                 if (imageCount > MAX_IMAGES) {
                     m.content[j] = { type: "text", text: "[screenshot removed to stay under API image limit]" };
+                    removed = true;
                 }
             }
         }
-        if (Array.isArray(m.content) && !m.content.some((p) => p.type === "image_url")) {
+        // 이미지를 덜어 낸 메시지만 문자열로 되돌린다. 원래 텍스트 블록만 있던 메시지(하네스 블록 + 사용자 글)는
+        // 블록을 나눈 채 둔다.
+        if (removed && !m.content.some((p) => p.type === "image_url")) {
             const text = m.content.map((p) => p.text || "").join("");
             if (text) m.content = text;
         }
@@ -93,10 +110,12 @@ export function sanitizeMessagesForApi(messages) {
 
     const sanitized = messages.map((m) => {
         const out = { ...m };
-        // 화면 표시·저장용 메타(발화 시각, 메시지 id, 합쳐 넣은 메시지 목록): API 페이로드로는 보내지 않는다.
+        // 화면 표시·저장용 메타(발화 시각, 메시지 id, 합쳐 넣은 메시지 목록, 첨부): API 페이로드로는 보내지 않는다.
+        // 시각·첨부는 아래에서 메시지 앞 블록으로 바뀐다.
         delete out.at;
         delete out.id;
         delete out.queued;
+        delete out.attachments;
 
         if (typeof out.content === "string") {
             out.content = sanitizeTextForLlm(out.content);
@@ -109,9 +128,9 @@ export function sanitizeMessagesForApi(messages) {
             });
         }
 
-        // 사용자 메시지에는 보낸 시각을 붙인다. at이 없는 메시지(내부 지시문, 예전 기록)는 그대로 둔다.
-        const stamp = out.role === "user" ? formatMessageStamp(m.at) : "";
-        if (stamp) out.content = withMessageStamp(out.content, stamp);
+        // 사용자 메시지 앞에 보낸 시각과 첨부를 별도 블록으로 둔다. at도 첨부도 없는 메시지(내부 지시문, 예전 기록)는 그대로 둔다.
+        const header = out.role === "user" ? sanitizeTextForLlm(userMessageHeader(m)) : "";
+        if (header) out.content = withHeaderBlock(out.content, header);
 
         if (out.tool_calls?.length) {
             out.tool_calls = out.tool_calls.map((tc) => ({
