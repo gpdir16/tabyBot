@@ -60,7 +60,12 @@ function writeIndex(index) {
 }
 
 function sanitizeFileName(originalName = "") {
-    const base = path.basename(String(originalName || "").replace(/\\/g, "/"));
+    // macOS·iOS 브라우저는 한글 이름을 자모 분리 형태(NFD)로 보낸다. 모델이 적는 형태(NFC)로 맞춰 저장한다.
+    const base = path.basename(
+        String(originalName || "")
+            .normalize("NFC")
+            .replace(/\\/g, "/"),
+    );
     const cleaned = base
         .replace(/[^\p{L}\p{N}._\- ()[\]]+/gu, "_")
         .replace(/^\.+$/, "")
