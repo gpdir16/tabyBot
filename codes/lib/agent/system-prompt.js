@@ -53,6 +53,8 @@ export function buildFilesystemPromptBlock() {
 export function buildRuntimeInfoLine(info = {}) {
     const safe = info || {};
     const parts = [];
+    // 응답 언어. 규칙에는 "config language"라고만 적혀 있어, 값을 모르면 도구 결과의 영어를 따라간다.
+    if (safe.language) parts.push(`Reply language: ${safe.language}`);
     if (safe.model) parts.push(`Model: ${safe.model}`);
     if (safe.sessionKey) parts.push(`Session: ${safe.sessionKey}`);
     if (safe.agentId) parts.push(`Agent: ${safe.agentId}`);
