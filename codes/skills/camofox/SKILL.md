@@ -20,6 +20,13 @@ camofox snapshot --format json
 
 CamoFox starts its local server automatically when a command needs it. Use `xvfb_gui` only for non-browser Linux GUI programs; it is not the web browsing path.
 
+### Working habits in tabyBot
+
+- **Look when the text is not enough.** `snapshot` is an accessibility tree. It does not show cross-origin iframes (CAPTCHAs, payment and login widgets), canvas, images, or overlays. When a click "succeeds" but nothing changes, a button stays disabled, or the page needs visual judgment, run `camofox screenshot --output /tmp/shot.png` and `file_read` that file. You will see the image.
+- **Wait for a condition, not a clock.** Run `camofox open`/`navigate` in the foreground and follow with `camofox wait navigation`, `camofox wait networkidle --timeout 15000`, or `camofox wait "<selector>"`. Do not chain `sleep 20` before every check.
+- **`Error: Internal server error` hides the real cause.** Read it with `tail -n 30 ~/.camofox/logs/server.log` before trying anything else. Do not stop or restart the server, change `--user`, or delete profiles on a guess.
+- **`pkill -f <pattern>` kills your own `terminal_run` shell** when the pattern also appears in that command line. Find the PID with `pgrep -f` and kill that PID instead.
+
 CamoFox is an anti-detection browser automation system built on Camoufox + Playwright with:
 
 - CLI (`camofox`) for operator workflows
