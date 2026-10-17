@@ -40,7 +40,7 @@ export function filePathParamDescription() {
 }
 
 export function sendFileDescription() {
-    return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`. Optional caption is shown with the attachment.`;
+    return `Deliver a file to the user as a downloadable attachment in the web client. Default \`${USER_DIR}\`. Optional caption is shown with the attachment. Max 1 GB per file: check the size first and split or compress anything larger.`;
 }
 
 export function mcpConfigEditHint(serverName) {

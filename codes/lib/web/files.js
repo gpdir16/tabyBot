@@ -189,7 +189,10 @@ export async function saveUploadStream(req, mimeType, originalName = "", limitBy
 export async function registerProducedFile(filePath, caption = "") {
     const stat = fs.statSync(filePath);
     if (stat.size > MAX_UPLOAD_BYTES) {
-        throw new Error(`file too large to send (${(stat.size / 1073741824).toFixed(1)} GB > 1 GB)`);
+        // 같은 파일을 다시 보내려다 또 실패하지 않게 다음 할 일을 같이 알려 준다.
+        throw new Error(
+            `file too large to send (${(stat.size / 1073741824).toFixed(1)} GB > 1 GB). Retrying will fail again. Split it into parts under 1 GB (e.g. \`split -b 900m <file> <file>.part_\`) and send each part, or compress it first. The user cannot reach files inside this environment, so a path alone is no use to them.`,
+        );
     }
     const id = crypto.randomBytes(8).toString("hex");
     const ext = path.extname(filePath).toLowerCase();
