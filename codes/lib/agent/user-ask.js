@@ -6,6 +6,11 @@ import { placeholderFor } from "../secrets/vault.js";
 
 const pendingAsks = new Map();
 
+// 질문에 답하는 대신 채팅을 보냈을 때의 취소 사유. 그 메시지가 바로 다음에 대화에 들어간다.
+export const ASK_CANCEL_USER_MESSAGE = "user_sent_message";
+const USER_MESSAGE_NOTE =
+    "The user did not answer. They sent a new chat message instead, which follows. Read it and follow it; it may change or cancel what you were doing. Do not re-ask the same question unless that message still needs it.";
+
 function settle(entry, result) {
     if (entry.settled) return false;
     entry.settled = true;
@@ -119,6 +124,7 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
     return promise.then((raw) => {
         if (raw === SECRET_SAVED) return { ok: true, saved: true, name: entry.secret.name, placeholder: placeholderFor(entry.secret.id) };
         if (raw === "__TIMEOUT__") return { error: "timeout", text: null };
+        if (raw === `__CANCELLED__:${ASK_CANCEL_USER_MESSAGE}`) return { error: ASK_CANCEL_USER_MESSAGE, text: null, note: USER_MESSAGE_NOTE };
         if (typeof raw === "string" && raw.startsWith("__CANCELLED__:")) return { error: raw.slice(14), text: null };
         return { text: raw };
     });

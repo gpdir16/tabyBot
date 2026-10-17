@@ -16,6 +16,7 @@ import {
     userMessageIdsOf,
 } from "../agent/chat-history.js";
 import { beginAgentSession, endAgentSession, enqueueAgentMessage, requestAgentStop } from "../agent/session.js";
+import { ASK_CANCEL_USER_MESSAGE, cancelPendingAsk } from "../agent/user-ask.js";
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
 import { setTodoHandlers } from "../todos/scheduler.js";
@@ -366,7 +367,12 @@ export function dispatchMessage({ sessionKey, agentId, id = null, userText, atta
     } catch (err) {
         console.error("Pending user turn save failed:", err?.stack || err);
     }
-    if (enqueueAgentMessage(sessionKey, message)) return { id: message.id, queued: true };
+    if (enqueueAgentMessage(sessionKey, message)) {
+        // user_ask·secret_request가 답을 기다리는 중이면 기다림을 끝낸다. 도구가 바로 돌아와야 다음 라운드에서
+        // 이 메시지를 읽는다. 안 그러면 질문 시간이 끝날 때까지(최대 10분) 메시지가 대기열에만 머문다.
+        cancelPendingAsk(sessionKey, ASK_CANCEL_USER_MESSAGE);
+        return { id: message.id, queued: true };
+    }
     startUserTurn({ sessionKey, agentId, messages: [message] });
     return { id: message.id, queued: false };
 }
