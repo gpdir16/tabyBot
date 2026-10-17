@@ -10,6 +10,7 @@ import { countMessagesTokens } from "./context.js";
 import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
 import { buildQueuedUserMessage } from "./history/messages.js";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
+import { purgeOnceSecrets } from "./user-ask.js";
 
 const SILENT_REPLY_TOKEN = "__SILENT__";
 const TOOL_BUDGET_ERROR = { error: "Tool call budget exceeded for this turn." };
@@ -369,6 +370,16 @@ export async function runAgent(userMessage, options = {}) {
             stats: EMPTY_STATS,
             turnMessages: [],
         };
+    } finally {
+        // 이 턴에서 받은 일회용 시크릿(인증 코드 등)은 턴이 끝나면 쓸 일이 없으니 금고에서 지운다.
+        const sessionKey = options.sessionKey || options.chatId;
+        if (sessionKey) {
+            try {
+                purgeOnceSecrets(sessionKey);
+            } catch (err) {
+                console.warn(`tabyBot: one-time secret cleanup failed: ${err?.message || err}`);
+            }
+        }
     }
 }
 

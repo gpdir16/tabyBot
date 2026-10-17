@@ -133,7 +133,8 @@ export function redactDeep(value, depth = 0) {
 
 // 시스템 프롬프트의 "Stored secrets" 본문. 사용자가 붙인 이름과 id만 싣는다.
 export function formatSecretsForPrompt() {
-    const list = listSecrets();
+    // 일회용 값은 요청한 턴에서 도구 결과로 자리표시자를 받고 턴이 끝나면 지워지므로 목록에 싣지 않는다.
+    const list = listSecrets().filter((s) => !s.once);
     if (!list.length) return "- (none)";
     return list.map((s) => `- ${s.name}: \`${placeholderFor(s.id)}\``).join("\n");
 }

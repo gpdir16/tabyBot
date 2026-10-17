@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { emit } from "../web/bus.js";
 import { clearTodoWaiting, markTodoWaiting } from "../todos/store.js";
-import { createSecret, findSecretIdByName, updateSecret } from "../secrets/store.js";
+import { createSecret, deleteOnceSecrets, findSecretIdByName, updateSecret } from "../secrets/store.js";
 import { placeholderFor } from "../secrets/vault.js";
 
 const pendingAsks = new Map();
@@ -22,6 +22,23 @@ function settle(entry, result) {
 }
 
 const SECRET_SAVED = "__SECRET_SAVED__";
+
+// 일회용 시크릿(인증 코드 등). 세션별로 모아 두었다가 그 턴이 끝나면 금고에서 지운다(loop.js의 runAgent).
+const onceSecretsBySession = new Map();
+const ONCE_SUFFIX = " (one-time)";
+
+// 같은 이름의 오래 쓰는 시크릿을 덮어쓰지 않게 일회용은 이름 뒤에 표시를 붙여 따로 둔다. 금고 이름 상한(60자)에 맞춘다.
+function onceSecretName(name) {
+    return `${name.slice(0, 60 - ONCE_SUFFIX.length).trim()}${ONCE_SUFFIX}`;
+}
+
+export function purgeOnceSecrets(sessionKey) {
+    const key = String(sessionKey);
+    const ids = onceSecretsBySession.get(key);
+    if (!ids?.size) return 0;
+    onceSecretsBySession.delete(key);
+    return deleteOnceSecrets([...ids]);
+}
 const SECRET_MASK = "••••••••";
 
 function settleAndNotify(entry, result) {
@@ -45,9 +62,15 @@ export function resolvePendingAskByAskId(askId, { choiceIndex = null, text = "" 
 function settleSecretAsk(entry, value) {
     if (entry.settled) return null;
     // 같은 이름이 이미 있으면 그 시크릿의 값을 바꾸고, 없으면 새로 만든다.
-    const existing = findSecretIdByName(entry.secret.name);
+    const once = entry.secret.once === true;
+    const name = once ? onceSecretName(entry.secret.name) : entry.secret.name;
+    const existing = findSecretIdByName(name);
     if (existing) updateSecret(existing, { value: String(value ?? "") });
-    entry.secret.id = existing || createSecret({ name: entry.secret.name, value: String(value ?? "") });
+    entry.secret.id = existing || createSecret({ name, value: String(value ?? ""), once });
+    if (once) {
+        if (!onceSecretsBySession.has(entry.key)) onceSecretsBySession.set(entry.key, new Set());
+        onceSecretsBySession.get(entry.key).add(entry.secret.id);
+    }
     return settleAndNotify(entry, SECRET_SAVED) ? SECRET_MASK : null;
 }
 
@@ -94,7 +117,7 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
         options: options.map((o) => String(o)),
         expiresAt: Date.now() + timeoutMs,
         todoId: todoId ? String(todoId) : null,
-        secret: secret ? { name: secret.name, id: null } : null,
+        secret: secret ? { name: secret.name, id: null, once: secret.once === true } : null,
         settled: false,
         resolve: null,
         timer: null,
@@ -122,7 +145,15 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
     });
 
     return promise.then((raw) => {
-        if (raw === SECRET_SAVED) return { ok: true, saved: true, name: entry.secret.name, placeholder: placeholderFor(entry.secret.id) };
+        if (raw === SECRET_SAVED) {
+            return {
+                ok: true,
+                saved: true,
+                name: entry.secret.name,
+                placeholder: placeholderFor(entry.secret.id),
+                ...(entry.secret.once ? { note: "One-time value: usable only until this turn ends, then deleted from the vault." } : {}),
+            };
+        }
         if (raw === "__TIMEOUT__") return { error: "timeout", text: null };
         if (raw === `__CANCELLED__:${ASK_CANCEL_USER_MESSAGE}`) return { error: ASK_CANCEL_USER_MESSAGE, text: null, note: USER_MESSAGE_NOTE };
         if (typeof raw === "string" && raw.startsWith("__CANCELLED__:")) return { error: raw.slice(14), text: null };

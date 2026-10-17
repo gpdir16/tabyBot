@@ -89,7 +89,7 @@ function assertNameFree(store, name, exceptId) {
 // id와 이름만 돌려준다. 값은 절대 포함하지 않는다.
 export function listSecrets() {
     return Object.entries(readStore().secrets)
-        .map(([id, e]) => ({ id, name: e?.name || "", updatedAt: e?.updatedAt || null }))
+        .map(([id, e]) => ({ id, name: e?.name || "", updatedAt: e?.updatedAt || null, ...(e?.once === true ? { once: true } : {}) }))
         .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -101,14 +101,14 @@ export function findSecretIdByName(name) {
     return listSecrets().find((s) => s.name.toLowerCase() === key)?.id || null;
 }
 
-// 새 시크릿을 만든다(id 생성). 만든 id를 돌려준다.
-export function createSecret({ name, value }) {
+// 새 시크릿을 만든다(id 생성). 만든 id를 돌려준다. once는 인증 코드 같은 일회용 값 표시로, 턴이 끝나면 지운다.
+export function createSecret({ name, value, once = false }) {
     const store = readStore();
     const cleanName = normalizeName(name);
     validateValue(value);
     assertNameFree(store, cleanName, null);
     const id = crypto.randomUUID();
-    store.secrets[id] = { name: cleanName, ...encrypt(value), updatedAt: new Date().toISOString() };
+    store.secrets[id] = { name: cleanName, ...encrypt(value), updatedAt: new Date().toISOString(), ...(once ? { once: true } : {}) };
     writeStore(store);
     return id;
 }
@@ -129,6 +129,20 @@ export function updateSecret(id, { name, value }) {
     }
     store.secrets[id] = next;
     writeStore(store);
+}
+
+// 일회용 시크릿을 지운다. ids를 넘기면 그중 일회용인 것만, 안 넘기면(시작할 때 지난 실행이 남긴 것) 전부. 지운 개수를 돌려준다.
+export function deleteOnceSecrets(ids = null) {
+    const store = readStore();
+    const only = ids ? new Set(ids) : null;
+    let removed = 0;
+    for (const [id, e] of Object.entries(store.secrets)) {
+        if (e?.once !== true || (only && !only.has(id))) continue;
+        delete store.secrets[id];
+        removed += 1;
+    }
+    if (removed) writeStore(store);
+    return removed;
 }
 
 export function deleteSecret(id) {

@@ -22,6 +22,11 @@ export const secretToolDefinitions = [
                         description:
                             "Plain-language label the user sees, in the user's language, e.g. 'GitHub token' or 'Netflix password'. If a secret with this label already exists, its value is replaced.",
                     },
+                    once: {
+                        type: "boolean",
+                        description:
+                            "Set true for one-time values such as login or verification codes and OTPs. The value is usable only for the rest of this turn, then deleted from the vault, so it never clutters the Stored secrets list.",
+                    },
                     timeout: { type: "number", description: "Seconds to wait (default 180, max 600)" },
                 },
                 required: ["name"],
@@ -44,7 +49,7 @@ export function executeSecretRequest(_name, args, ctx) {
         question: name,
         timeoutMs: timeoutSec * 1000,
         todoId: ctx.todoId || null,
-        secret: { name },
+        secret: { name, once: args?.once === true },
     });
 
     const signal = ctx?.signal;
