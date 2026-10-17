@@ -108,7 +108,7 @@ function buildSystemMessageContent({ truncateMemory = false, maxMemoryChars = 12
         FILESYSTEM_BLOCK: buildFilesystemPromptBlock(),
         SKILLS_LIST: formatSkillsListForPrompt(),
         SECRETS_LIST: formatSecretsForPrompt(),
-        RUNTIME_INFO: buildRuntimeInfoLine(rt),
+        RUNTIME_INFO: buildRuntimeInfoLine({ ...rt, language: loadUserConfig().language }),
         MEMORY: loadMemoryForPrompt({ truncateMemory, maxMemoryChars }),
         AGENT_MEMORY_PATH: agentMemoryFilePath(rt.agentId || firstAgent()?.id),
         AGENT_MEMORY_DIR: agentMemoryDirPath(rt.agentId || firstAgent()?.id),
