@@ -23,6 +23,7 @@ import { formatSecretsForPrompt } from "../secrets/vault.js";
 import { buildEnvironmentPromptVars, buildFilesystemPromptBlock, buildRuntimeInfoLine, renderSystemPrompt } from "./system-prompt.js";
 import { formatPastSessionsForPrompt, turnToMessages, cloneStoredMessage } from "./chat-history.js";
 import { isStandalonePendingTurn } from "./history/messages.js";
+import { pickVolatileVars, resolvePromptState } from "./prompt-state.js";
 const SYSTEM_PATH = path.join(CODES_DIR, "lib", "prompts", "system.txt");
 
 let encoding;
@@ -98,7 +99,15 @@ function peerAgentsText(agentId) {
     return formatPeerAgentsForPrompt(agentId || firstAgent()?.id) || "- (none)";
 }
 
-function buildSystemMessageContent({ truncateMemory = false, maxMemoryChars = 120000, runtimeInfo = {} } = {}) {
+// 시스템 프롬프트와 이번 사용자 메시지에 실을 갱신(stateUpdate). promptStateChatId가 있으면 세션 중에 바뀔 수 있는
+// 항목은 세션 스냅샷 값으로 넣고, 그 뒤 바뀐 항목만 갱신으로 돌려준다(prompt-state.js).
+function buildSystemMessageContent({
+    truncateMemory = false,
+    maxMemoryChars = 120000,
+    runtimeInfo = {},
+    promptStateChatId = null,
+    historyMessages = [],
+} = {}) {
     const template = loadSystemPromptTemplate();
     const rt = runtimeInfo || {};
     const pastSessions = formatPastSessionsForPrompt(rt.sessionKey);
@@ -117,15 +126,15 @@ function buildSystemMessageContent({ truncateMemory = false, maxMemoryChars = 12
         AGENT_MEMORY: agentMemoryText(rt.agentId, { truncateMemory, maxMemoryChars }),
         PEER_AGENTS: peerAgentsText(rt.agentId),
         PAST_SESSIONS_LIST: pastSessions,
-        NSFW_LEVEL_LABEL: nsfwPolicyLabel(getNsfwLevel(loadUserConfig())),
-        NSFW_POLICY: buildNsfwPolicyText(getNsfwLevel(loadUserConfig())),
-        APPROVAL_LEVEL_LABEL: approvalPolicyLabel(getApprovalLevel(loadUserConfig())),
-        APPROVAL_POLICY: buildApprovalPolicyText(getApprovalLevel(loadUserConfig())),
+        // 단계 이름을 제목 대신 본문 첫 줄에 둔다. 설정을 바꾸면 이 절 전체가 갱신 블록으로 나간다.
+        NSFW_POLICY: `Current: ${nsfwPolicyLabel(getNsfwLevel(loadUserConfig()))}\n${buildNsfwPolicyText(getNsfwLevel(loadUserConfig()))}`,
+        APPROVAL_POLICY: `Current: ${approvalPolicyLabel(getApprovalLevel(loadUserConfig()))}\n${buildApprovalPolicyText(getApprovalLevel(loadUserConfig()))}`,
         TODO_LIST: todoBlocks.list,
         TODO_SUGGEST_LIST: todoBlocks.suggestions,
         SCHEDULE_JOBS: todoBlocks.jobs,
     };
-    return renderSystemPrompt(template, vars).trim();
+    const { systemVars, stateUpdate } = resolvePromptState(promptStateChatId, { ...vars, ...pickVolatileVars(vars) }, historyMessages);
+    return { systemContent: renderSystemPrompt(template, systemVars).trim(), stateUpdate };
 }
 
 // 이번 실행이 직접 다루는 메시지의 대기 턴은 프롬프트에서 뺀다. 지금 메시지는 맨 끝에 다시 붙고,
@@ -172,24 +181,28 @@ export function buildInitialMessages(
         modelMeta = null,
         runtimeInfo = {},
         excludeMessageIds = [],
+        promptStateChatId = null,
     } = {},
 ) {
     const visionEnabled = modelMeta?.supportsVision === true;
     const currentFiles = Array.isArray(attachments) ? attachments : [];
     const historyForPrompt = dropPendingCurrent(dropOwnedPendingTurns(history, excludeMessageIds), userMessage);
-    const systemContent = buildSystemMessageContent({ truncateMemory, maxMemoryChars, runtimeInfo });
+    const historyMessages = historyForPrompt.flatMap((turn) => turnToMessages(turn).map(toLlmMessage));
+    const { systemContent, stateUpdate } = buildSystemMessageContent({
+        truncateMemory,
+        maxMemoryChars,
+        runtimeInfo,
+        promptStateChatId,
+        historyMessages,
+    });
 
-    const messages = [{ role: "system", content: systemContent }];
-
-    for (const turn of historyForPrompt) {
-        for (const message of turnToMessages(turn)) {
-            messages.push(toLlmMessage(message));
-        }
-    }
+    const messages = [{ role: "system", content: systemContent }, ...historyMessages];
+    // stateUpdate는 이 메시지와 함께 저장되어, 다음 턴에 기록을 다시 만들 때도 같은 블록이 같은 자리에 붙는다.
     messages.push({
         role: "user",
         content: hydrateUserContent(userMessage, currentFiles, { visionEnabled }),
         ...(currentFiles.length ? { attachments: currentFiles } : {}),
+        ...(stateUpdate ? { stateUpdate } : {}),
     });
     return messages;
 }
