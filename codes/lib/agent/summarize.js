@@ -161,12 +161,25 @@ function oldItemsToTranscript(oldItems) {
     return `## Earlier conversation (compressed summary)\n\n${summaryPrefix}\n\n---\n\n${transcript}`;
 }
 
+// 새 세션으로 넘기는 최근 턴. 사용자 메시지의 stateUpdate(지난 세션 스냅샷 기준 갱신)는 뺀다. 새 세션은
+// 지금 값으로 스냅샷을 다시 잡으므로, 남겨 두면 시스템 프롬프트보다 오래된 값이 뒤에 보인다.
 function recentItemsToHistory(recentItems) {
     const history = [];
     for (const item of recentItems) {
-        if (item.kind === "turn") {
+        if (item.kind !== "turn") continue;
+        const messages = item.turn?.messages;
+        if (!Array.isArray(messages) || !messages.some((m) => m?.stateUpdate)) {
             history.push(item.turn);
+            continue;
         }
+        history.push({
+            ...item.turn,
+            messages: messages.map((m) => {
+                if (!m?.stateUpdate) return m;
+                const { stateUpdate: _dropped, ...rest } = m;
+                return rest;
+            }),
+        });
     }
     return history;
 }
@@ -268,6 +281,7 @@ async function applyIntelligentCompression(
         attachments,
         runtimeInfo,
         excludeMessageIds,
+        promptStateChatId: chatId,
     });
     return repairToolPairIntegrity(rebuilt);
 }
@@ -282,7 +296,8 @@ export async function ensureWithinContextLimit(
     const trigger = getCompressTriggerTokens(modelMeta);
     const hardLimit = getContextLimit(modelMeta);
 
-    const buildOpts = { attachments, modelMeta, runtimeInfo, excludeMessageIds };
+    // chatId가 없는 실행(드리밍 리뷰처럼 기록을 남기지 않는 실행)은 세션 스냅샷을 쓰지 않는다.
+    const buildOpts = { attachments, modelMeta, runtimeInfo, excludeMessageIds, promptStateChatId: chatId };
     let messages = buildWithHistory(userMessage, fullHistory, buildOpts);
     let tokens = tokenCount(messages);
 

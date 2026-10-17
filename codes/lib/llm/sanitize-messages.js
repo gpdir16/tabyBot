@@ -1,5 +1,6 @@
 import { redactText } from "../secrets/vault.js";
 import { defaultTimeZone } from "../scheduling/time.js";
+import { formatStateUpdate } from "../agent/prompt-sections.js";
 
 const ANGLE_SPECIAL_TOKEN = /<\|[^|\n]{1,128}\|>/g;
 
@@ -57,9 +58,9 @@ export function formatMessageStamp(at, timeZone = defaultTimeZone()) {
     }
 }
 
-// 하네스가 사용자 메시지에 붙이는 정보(보낸 시각, 함께 온 첨부)를 한 블록으로 만든다. 사용자가 쓴 글에 섞지 않고
-// 그 앞에 따로 둔다. 저장된 at과 첨부 메타로만 만들어 매 턴 같은 문자열이 나오므로 프롬프트 캐시를 깨지 않는다.
-// 첨부 목록을 시스템 프롬프트에 두면 파일을 보낼 때마다 그 뒤 대화 기록 전체의 캐시가 깨진다.
+// 하네스가 사용자 메시지에 붙이는 정보(보낸 시각, 함께 온 첨부, 세션 시작 뒤 바뀐 시스템 프롬프트 항목)를 한 블록으로
+// 만든다. 사용자가 쓴 글에 섞지 않고 그 앞에 따로 둔다. 저장된 at·첨부 메타·stateUpdate로만 만들어 매 턴 같은 문자열이
+// 나오므로 프롬프트 캐시를 깨지 않는다. 이 정보를 시스템 프롬프트에 두면 바뀔 때마다 그 뒤 대화 기록 전체의 캐시가 깨진다.
 function userMessageHeader(m) {
     const lines = [];
     const stamp = formatMessageStamp(m.at);
@@ -68,6 +69,8 @@ function userMessageHeader(m) {
         const filePath = file?.filePath || file?.relPath;
         if (filePath) lines.push(`[attached file: ${file.name || "file"} (${file.mime || "file"}) ${filePath}]`);
     }
+    const update = formatStateUpdate(m.stateUpdate);
+    if (update) lines.push(lines.length ? `\n${update}` : update);
     return lines.join("\n");
 }
 
@@ -110,12 +113,13 @@ export function sanitizeMessagesForApi(messages) {
 
     const sanitized = messages.map((m) => {
         const out = { ...m };
-        // 화면 표시·저장용 메타(발화 시각, 메시지 id, 합쳐 넣은 메시지 목록, 첨부): API 페이로드로는 보내지 않는다.
-        // 시각·첨부는 아래에서 메시지 앞 블록으로 바뀐다.
+        // 화면 표시·저장용 메타(발화 시각, 메시지 id, 합쳐 넣은 메시지 목록, 첨부, 항목 갱신): API 페이로드로는 보내지 않는다.
+        // 시각·첨부·항목 갱신은 아래에서 메시지 앞 블록으로 바뀐다.
         delete out.at;
         delete out.id;
         delete out.queued;
         delete out.attachments;
+        delete out.stateUpdate;
 
         if (typeof out.content === "string") {
             out.content = sanitizeTextForLlm(out.content);
@@ -128,7 +132,7 @@ export function sanitizeMessagesForApi(messages) {
             });
         }
 
-        // 사용자 메시지 앞에 보낸 시각과 첨부를 별도 블록으로 둔다. at도 첨부도 없는 메시지(내부 지시문, 예전 기록)는 그대로 둔다.
+        // 사용자 메시지 앞에 보낸 시각·첨부·항목 갱신을 별도 블록으로 둔다. 셋 다 없는 메시지(내부 지시문, 예전 기록)는 그대로 둔다.
         const header = out.role === "user" ? sanitizeTextForLlm(userMessageHeader(m)) : "";
         if (header) out.content = withHeaderBlock(out.content, header);
 

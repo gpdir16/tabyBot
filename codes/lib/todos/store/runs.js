@@ -192,13 +192,13 @@ export function formatTodosForPrompt(agentId) {
         const who = row.agentName || row.agentId || "agent";
         return `- [${row.kind}] ${row.title || row.targetId}, ${who}${row.reason ? `: ${row.reason}` : ""}`;
     });
+    // 실행할 때마다 바뀌는 값(마지막 실행 시각, 실행 중 표시)은 넣지 않는다. 넣으면 자동화가 돌 때마다 이 목록이 바뀌어
+    // 다음 턴에 갱신 블록이 붙는다. 필요하면 todo_list가 돌려준다.
     const jobLines = jobs.map((row) => {
         const when = row.when ? ` · ${row.when}` : "";
         const paused = row.enabled === false ? " · paused" : "";
-        const last = row.lastRunAt ? ` · last run ${row.lastRunAt}` : "";
         const err = row.lastError?.message ? ` · last error: ${String(row.lastError.message).slice(0, 80)}` : "";
-        const running = row.running ? " · running" : "";
-        return `- \`${row.id}\` ${row.title}${when}${paused}${running}${last}${err}`;
+        return `- \`${row.id}\` ${row.title}${when}${paused}${err}`;
     });
     return {
         list: lines.length ? lines.join("\n") : "- (none)",
