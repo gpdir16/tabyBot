@@ -2,12 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeFileAtomic } from "../atomic-file.js";
 import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
-import { resolveAgentPath } from "../paths.js";
+import { resolveExistingAgentPath } from "../paths.js";
 import { filePathParamDescription, filePatchDescription, fileReadDescription } from "../path-labels.js";
 import { isSecretStorePath } from "../secrets/store.js";
 
 function resolveFilePath(rawPath) {
-    return resolveAgentPath(rawPath);
+    return resolveExistingAgentPath(rawPath);
 }
 
 function getMaxFileReadTokens(messages, modelMeta) {

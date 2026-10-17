@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { registerProducedFile, publicAttachment } from "../web/files.js";
-import { resolveAgentPath } from "../paths.js";
+import { resolveExistingAgentPath } from "../paths.js";
 import { sendFileDescription } from "../path-labels.js";
 
 export const sendFileToolDefinitions = [
@@ -24,7 +24,7 @@ export const sendFileToolDefinitions = [
 export async function executeSendFileTool(_name, args, _ctx) {
     const raw = args?.path?.trim();
     if (!raw) return { error: "path is required" };
-    const filePath = resolveAgentPath(raw);
+    const filePath = resolveExistingAgentPath(raw);
     if (!filePath) return { error: "path is required" };
     if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
         return { error: `file not found: ${filePath}` };
