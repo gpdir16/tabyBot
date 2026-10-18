@@ -104,12 +104,24 @@
     function applyAskResolved(id, askId, answer) {
         const c = C.conv(id);
         const live = c.live;
+        const rawAnswer = typeof answer === "object" && answer !== null ? answer.text : answer;
+        const error =
+            rawAnswer === "__TIMEOUT__"
+                ? "timeout"
+                : typeof rawAnswer === "string" && rawAnswer.startsWith("__CANCELLED__:")
+                  ? rawAnswer.slice("__CANCELLED__:".length)
+                  : null;
+        const normalizedAnswer = typeof answer === "object" && answer !== null ? answer : answer != null ? { text: String(answer) } : null;
+        // 이력 카드는 서버 정본이 다시 그려질 때까지 이 값으로 답/상태를 낙관적으로 보여 준다.
+        if (!T.chatCtx.askOverlay) T.chatCtx.askOverlay = new Map();
+        T.chatCtx.askOverlay.set(askId, {
+            resolved: true,
+            ...(error ? { error } : normalizedAnswer ? { answer: normalizedAnswer } : {}),
+        });
         const ask = live?.asks.find((a) => a.askId === askId);
         if (ask) {
             ask.resolved = true;
-            const rawAnswer = typeof answer === "object" && answer !== null ? answer.text : answer;
-            const internal = typeof rawAnswer === "string" && (rawAnswer.startsWith("__TIMEOUT__") || rawAnswer.startsWith("__CANCELLED__:"));
-            if (!internal && answer != null && ask.answer == null) {
+            if (!error && answer != null && ask.answer == null) {
                 ask.answer = typeof answer === "object" ? answer : { text: String(answer) };
             }
         }
@@ -130,7 +142,7 @@
             messages: (turn.messages || []).map((m) => {
                 const isParts = Array.isArray(m.content);
                 const textPart = isParts ? m.content.find((part) => part?.type === "text")?.text || "" : m.content;
-                return {
+                const out = {
                     role: m.role,
                     id: typeof m.id === "string" ? m.id : null,
                     content: T.util.displayUserText(textPart),
@@ -139,6 +151,18 @@
                     imageUrl: m.imageUrl || null,
                     attachments: m.attachments || null,
                 };
+                // 질문 카드는 화면 전용 필드를 그대로 옮겨야 대화를 다시 그려도 질문/답/만료가 남는다.
+                if (m.role === "ask") {
+                    out.askId = typeof m.askId === "string" ? m.askId : null;
+                    out.question = String(m.question || "");
+                    out.options = Array.isArray(m.options) ? m.options : [];
+                    out.expiresAt = typeof m.expiresAt === "string" ? m.expiresAt : null;
+                    out.secret = m.secret || null;
+                    out.answer = m.answer || null;
+                    out.resolved = m.resolved === true;
+                    out.error = m.error || null;
+                }
+                return out;
             }),
         };
     }

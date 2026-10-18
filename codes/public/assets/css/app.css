@@ -1158,6 +1158,21 @@ kbd {
     font-weight: 600;
     line-height: 1.45;
 }
+.ask-q .md {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+.ask-q .md pre,
+.ask-q .md code {
+    font-weight: 400;
+}
+.ask-q .md > :first-child {
+    margin-top: 0;
+}
+.ask-q .md > :last-child {
+    margin-bottom: 0;
+}
 .ask-opts {
     display: flex;
     flex-direction: column;

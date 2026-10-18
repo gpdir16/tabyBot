@@ -168,6 +168,7 @@
         newMessages: "New messages",
         askTimeLeft: "{n}s left",
         askExpired: "Expired",
+        askUnanswered: "Not answered",
         answered: "Answered",
         askInputPlaceholder: "Write an answer…",
         secretAskPlaceholder: "Enter the value…",

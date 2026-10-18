@@ -168,6 +168,7 @@
         newMessages: "新しいメッセージ",
         askTimeLeft: "残り{n}秒",
         askExpired: "期限切れ",
+        askUnanswered: "未回答",
         answered: "回答済み",
         askInputPlaceholder: "回答を入力…",
         secretAskPlaceholder: "値を入力…",

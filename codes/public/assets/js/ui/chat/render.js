@@ -125,7 +125,9 @@
                 lastDayKey = dayKey;
                 frag.append(T.h("div", { class: "date-sep", role: "separator" }, [T.h("span", { text: C.fmtMsgDate(msgAt) })]));
             }
-            if (f.m.role === "user") {
+            if (f.m.role === "ask") {
+                el = T.h("div", { class: "msg-row assistant ask-row" }, [T.h("div", { class: "msg-stack" }, [C.buildAskCard(f.m)])]);
+            } else if (f.m.role === "user") {
                 const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
                 el = C.buildUserMessage(text, f.m.imageUrl, false, f.m.attachments, msgAt);
             } else {

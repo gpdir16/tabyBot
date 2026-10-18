@@ -20,7 +20,7 @@ import {
     stripAttachedFiles,
     userMessageIdsOf,
 } from "../agent/history/messages.js";
-import { isInternalHintText, isSilentMarkedText, sayTextsFromMessage } from "../agent/history/messages.js";
+import { isInternalHintText, isSilentMarkedText } from "../agent/history/messages.js";
 
 // ── 대화 인덱스: 에이전트당 하나의 스레드. 디스크는 user/session/<agent-uuid>/. ──
 
@@ -212,13 +212,81 @@ function isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen) {
     return typeof message.content === "string" && legacyQueuedSeen.has(stripAttachedFiles(message.content).trim());
 }
 
+// 턴 안의 도구 결과를 호출 id로 찾는다. 질문 카드의 답·만료 상태를 되살리는 데 쓴다.
+function toolResultsOf(messages) {
+    const results = new Map();
+    for (const m of messages || []) {
+        if (m?.role !== "tool" || !m.tool_call_id) continue;
+        try {
+            results.set(m.tool_call_id, JSON.parse(m.content));
+        } catch {
+            results.set(m.tool_call_id, null);
+        }
+    }
+    return results;
+}
+
+function parseToolArgs(tc) {
+    try {
+        return JSON.parse(tc?.function?.arguments || "{}");
+    } catch {
+        return null;
+    }
+}
+
+// 저장된 user_ask·secret_request 호출을 질문 카드 메시지로 바꾼다.
+// answer/error/resolved는 뒤따르는 도구 결과에서 나온다. 결과가 아직 없으면 답을 기다리는 카드다.
+function askMessageFromToolCall(tc, result, at) {
+    const name = tc?.function?.name;
+    if (name !== "user_ask" && name !== "secret_request") return null;
+    const args = parseToolArgs(tc);
+    if (!args) return null;
+    const secret = name === "secret_request";
+    const meta = tc.ask && typeof tc.ask === "object" ? tc.ask : {};
+    // 도구 호출 인자에는 모델이 쓴 원문이, ask 메타에는 설명을 분리한 질문이 들어 있다.
+    // 화면 카드는 짧은 질문(meta.question)을 쓰고, 분리된 설명은 앞선 발화로 낸다.
+    const question = String(meta.question || (secret ? args.name : args.question) || "").trim();
+    if (!question) return null;
+    const msg = {
+        role: "ask",
+        askId: typeof meta.askId === "string" ? meta.askId : null,
+        question,
+        preamble: typeof meta.preamble === "string" ? meta.preamble.trim() : "",
+        options: secret ? [] : Array.isArray(args.options) ? args.options.map(String) : [],
+        expiresAt: typeof meta.expiresAt === "string" ? meta.expiresAt : null,
+        secret: secret ? String(args.name || "") : null,
+        answer: null,
+        resolved: result != null,
+        ...(at ? { at } : {}),
+    };
+    if (result) {
+        if (result.saved === true) msg.answer = { secretSaved: true };
+        else if (typeof result.text === "string" && result.text) msg.answer = { text: result.text };
+        else if (result.error) msg.error = String(result.error);
+    }
+    return msg;
+}
+
 // assistant 메시지 → 화면용 메시지 목록(보이지 않으면 빈 배열).
-function displayAssistant(m) {
-    // 툴 호출이 딸린 메시지의 본문은 내부 메모: user_say 호출의 text 인자만 사용자용 발화로 꺼내 버블로 남긴다.
+function displayAssistant(m, toolResults) {
     if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
-        return sayTextsFromMessage(m)
-            .filter((said) => !isSilentMarkedText(said))
-            .map((said) => ({ role: "assistant", content: said, ...withTime(m) }));
+        // 툴 호출이 딸린 메시지의 본문은 내부 메모: user_say 호출의 text 인자만 사용자용 발화로 꺼내 버블로 남긴다.
+        // 질문 카드는 도구 호출 순서 그대로 끼워 넣어 발화와 시간 순서가 섞이지 않게 한다.
+        const out = [];
+        for (const tc of m.tool_calls) {
+            if (tc?.function?.name === "user_say") {
+                const args = parseToolArgs(tc);
+                const said = String(args?.text || "").trim();
+                if (said && !isSilentMarkedText(said)) out.push({ role: "assistant", content: said, ...withTime(m) });
+                continue;
+            }
+            const ask = askMessageFromToolCall(tc, toolResults?.get(tc.id), m.at);
+            if (ask) {
+                if (ask.preamble) out.push({ role: "assistant", content: ask.preamble, ...withTime(m) });
+                out.push(ask);
+            }
+        }
+        return out;
     }
     const text = String(m.content || "").trim();
     if (!text && !m.attachments?.length) return [];
@@ -267,7 +335,7 @@ function displayUser(m, legacyQueuedSeen) {
     return [publicMessage({ ...m, content })];
 }
 
-function displayMessage(m, legacyQueuedSeen) {
+function displayMessage(m, legacyQueuedSeen, toolResults) {
     if (m?.role === "user" && Array.isArray(m.content)) {
         // 비전 도구의 스크린샷 결과는 user role + 배열 본문으로 주입된다.
         // 사용자 발화가 아닌 내부 도구 에코이므로 버블로 만들지 않는다.
@@ -277,7 +345,7 @@ function displayMessage(m, legacyQueuedSeen) {
     }
     // 도구 결과 프레임은 라이브 카드로만 보여준다. 발화 텍스트는 메신저 기록으로 남긴다.
     if (m?.role === "tool") return [];
-    if (m?.role === "assistant") return displayAssistant(m);
+    if (m?.role === "assistant") return displayAssistant(m, toolResults);
     if (m?.role === "user" && typeof m.content === "string") return displayUser(m, legacyQueuedSeen);
     return [m?.attachments ? publicMessage(m) : m];
 }
@@ -293,9 +361,10 @@ export function toDisplayTurns(rawTurns) {
     const legacyQueuedSeen = new Set();
     for (const turn of rawTurns || []) {
         if (isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen)) continue;
-        const messages = (turn?.messages || []).flatMap((m) => displayMessage(m, legacyQueuedSeen));
-        // 도구 프레임 제거로 빈 turn이 되면 아예 생략
-        if (messages.some((m) => m.role === "user" || m.role === "assistant")) turns.push({ ...turn, messages });
+        const toolResults = toolResultsOf(turn?.messages);
+        const messages = (turn?.messages || []).flatMap((m) => displayMessage(m, legacyQueuedSeen, toolResults));
+        // 도구 프레임 제거로 빈 turn이 되면 아예 생략. 질문 카드만 남은 턴도 화면에 남긴다.
+        if (messages.some((m) => m.role === "user" || m.role === "assistant" || m.role === "ask")) turns.push({ ...turn, messages });
     }
     return turns;
 }

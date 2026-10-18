@@ -7,6 +7,15 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
     const thread = document.getElementById("thread");
+    // askId → { answer, error, resolved }: 서버 정본이 다시 그려지기 전까지 이력 카드에 보여 줄 값.
+    C.askOverlay ??= new Map();
+
+    // 질문이 답 없이 끝난 이유. 서버 도구 결과의 error 값을 번역 키로 바꾼다.
+    function askErrorKey(error) {
+        if (error === "timeout") return "askExpired";
+        if (error === "user_sent_message" || error === "aborted" || error === "superseded") return "askUnanswered";
+        return "";
+    }
 
     /* ── 빌더 ───────────────────────────────────────────────── */
     // 한 줄이면 pill, 두 줄 이상(또는 블록 요소)이면 radius-l
@@ -166,7 +175,9 @@
     function appendAnswerSummary(card, ask) {
         let text = "";
         if (ask.answer) {
-            if (ask.answer.choiceIndex != null && ask.options[ask.answer.choiceIndex] != null) {
+            if (ask.answer.secretSaved === true) {
+                text = t("secretSaved");
+            } else if (ask.answer.choiceIndex != null && ask.options[ask.answer.choiceIndex] != null) {
                 text = ask.options[ask.answer.choiceIndex];
             } else if (ask.answer.text != null) {
                 text = ask.answer.text;
@@ -175,14 +186,24 @@
         if (text) card.append(T.h("div", { class: "ask-answer", text }));
     }
 
-    function buildAskCard(ask) {
-        const _convId = state.state.currentId;
+    function buildAskCard(original) {
+        // 서버 정본에는 아직 답이 반영되지 않았을 수 있다. 방금 보낸 답을 우선 보여 준다.
+        const overlay = original.askId ? C.askOverlay.get(original.askId) : null;
+        const ask = overlay ? { ...original, ...overlay } : original;
         const card = T.h("div", { class: "ask-card", dataset: { askId: ask.askId, expires: ask.expiresAt || "" } });
-        card.append(T.h("div", { class: "ask-q", text: ask.question }));
+        const q = T.h("div", { class: "ask-q" });
+        if (ask.secret) {
+            // 시크릿 이름은 라벨이므로 마크다운으로 해석하지 않는다.
+            q.textContent = ask.question;
+        } else {
+            q.append(T.md.render(ask.question, { extraClass: "ask-md" }));
+        }
+        card.append(q);
 
-        const done = () => ask.answer != null || ask.resolved;
+        const done = () => ask.answer != null || ask.resolved || !!ask.error;
 
-        if (!done()) {
+        // askId가 없는 예전 기록은 서버에 답할 대상이 없으므로 입력칸 없이 상태만 남긴다.
+        if (!done() && ask.askId) {
             if (ask.options.length) {
                 const opts = T.h("div", { class: "ask-opts" });
                 ask.options.forEach((label, i) => {
@@ -234,18 +255,32 @@
         const time = T.h("span", { class: "ask-time" });
         card.append(T.h("div", { class: "ask-foot" }, [status, time]));
         card._status = status;
+        card._ask = ask; // 라이브 상태가 없어도(새로고침) 남은 시간을 계속 갱신한다.
 
         async function answer(body) {
             if (done()) return;
-            const prev = ask.answer;
             // 시크릿 값은 요청 본문에만 싣고 화면 상태에는 마스크만 남긴다.
-            ask.answer = ask.secret ? { text: "••••••••" } : body; // 낙관적 반영
+            const optimistic = ask.secret ? { text: "••••••••" } : body;
+            const liveAsk = state.currentConv()?.live?.asks.find((a) => a.askId === ask.askId);
+            if (liveAsk) {
+                liveAsk.answer = optimistic;
+                liveAsk.resolved = true;
+            }
+            C.askOverlay.set(ask.askId, { resolved: true, answer: optimistic });
             C.requestSync();
+            // 라이브 카드/이력 카드 모두 입력칸을 즉시 답변 상태로 바꾼다.
+            card.replaceWith(buildAskCard(original));
             try {
                 await T.api.answerAsk(ask.askId, body);
             } catch (err) {
-                ask.answer = prev; // 롤백
+                // 롤백: 입력칸이 돌아오고 서버 정본과 다시 맞춘다.
+                C.askOverlay.delete(ask.askId);
+                if (liveAsk) {
+                    liveAsk.answer = null;
+                    liveAsk.resolved = false;
+                }
                 C.requestSync();
+                document.querySelector(`.ask-card[data-ask-id="${ask.askId}"]`)?.replaceWith(buildAskCard(original));
                 // 시크릿 값이 금고 규칙에 안 맞으면 사유를 알려 다시 입력하게 한다.
                 const secretKey = {
                     value_too_long: "secretValueTooLong",
@@ -267,15 +302,22 @@
 
     // 남은 시간/만료 갱신(전역 티커가 매초 호출)
     function tickAsk(card, ask, status, time) {
+        // 끝난 질문은 만료 시각이 없어도(예전 기록) 상태를 보여 준다.
+        if (ask.resolved || ask.answer != null || ask.error) {
+            time.textContent = "";
+            const errorKey = askErrorKey(ask.error);
+            status.textContent = errorKey ? t(errorKey) : t("answered");
+            return;
+        }
+        if (!ask.askId) {
+            time.textContent = "";
+            status.textContent = t("askUnanswered");
+            return;
+        }
         const exp = Date.parse(card.dataset.expires || "");
         if (Number.isNaN(exp)) {
             time.textContent = "";
             status.textContent = "";
-            return;
-        }
-        if (ask.resolved || ask.answer != null) {
-            time.textContent = "";
-            status.textContent = t("answered");
             return;
         }
         const left = Math.max(0, Math.round((exp - Date.now()) / 1000));
@@ -297,7 +339,7 @@
         thread.querySelectorAll(".ask-card:not(.done)").forEach((card) => {
             const id = card.dataset.askId;
             const c = state.currentConv();
-            const ask = c?.live?.asks.find((a) => a.askId === id);
+            const ask = c?.live?.asks.find((a) => a.askId === id) || card._ask;
             if (ask) tickAsk(card, ask, card._status, card.querySelector(".ask-time"));
         });
     }, 1000);
