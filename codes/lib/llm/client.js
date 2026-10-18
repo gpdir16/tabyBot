@@ -165,6 +165,8 @@ async function buildLlmClient(overrides) {
     });
 
     const thinkingParam = () => getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort";
+    const pinnedProvider = provider.id === "openrouter" ? provider.openRouterPins?.[provider.model] || "" : "";
+    const providerRouting = pinnedProvider ? { order: [pinnedProvider], allow_fallbacks: false } : null;
     return withCacheKeepAlive({
         provider,
         modelMeta,
@@ -178,6 +180,7 @@ async function buildLlmClient(overrides) {
                 signal,
                 thinkingLevel,
                 thinkingParam: thinkingParam(),
+                providerRouting,
             });
         },
         complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
@@ -192,6 +195,7 @@ async function buildLlmClient(overrides) {
                 signal,
                 thinkingLevel,
                 thinkingParam: thinkingParam(),
+                providerRouting,
             });
         },
     });

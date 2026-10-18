@@ -556,5 +556,16 @@
         computerFilesTruncated: "미리보기가 잘렸어요. 전체 내용은 파일을 내려받으세요.",
         computerFilesDownload: "내려받기",
         openInComputer: "컴퓨터에서 열기",
+        openRouterPin: "프로바이더 고정",
+        openRouterPinDesc: "이 모델을 OpenRouter의 특정 업스트림 프로바이더로만 보냅니다. 고정하면 폴백이 꺼집니다.",
+        openRouterPinAuto: "자동",
+        openRouterPinAutoDesc: "OpenRouter가 고르게 둡니다(폴백 허용)",
+        openRouterPinNoModel: "먼저 모델을 고르세요.",
+        openRouterPinEmpty:
+            "이 모델에는 고정할 수 있는 개별 프로바이더가 없어요. 자동 라우팅 모델이나 엔드포인트가 없는 :free 모델 대신 일반 모델을 고르세요.",
+        openRouterPinLoading: "프로바이더 목록을 불러오는 중…",
+        openRouterPinFailed: "프로바이더 목록을 불러오지 못했어요.",
+        openRouterPinRetry: "다시 시도",
+        openRouterPinUnavailable: "지금 이 모델에서는 사용할 수 없음",
     };
 })(window.Taby);

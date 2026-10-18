@@ -104,7 +104,7 @@ export function normalizeCacheKeepAlive(value) {
 }
 
 function providerKey(provider) {
-    return `${provider.id}|${provider.type}|${provider.baseURL}|${provider.model}`;
+    return `${provider.id}|${provider.type}|${provider.baseURL}|${provider.model}|${provider.openRouterPins?.[provider.model] || ""}`;
 }
 
 // ── 학습한 값(재시작해도 이어 씀) ──

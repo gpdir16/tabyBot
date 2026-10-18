@@ -80,17 +80,32 @@ export function getMergedProvider(userConfig) {
     if (!apiKey && providerFile.apiKeyOptional) {
         apiKey = substituteEnv(providerFile.defaultApiKey || "");
     }
+    const model = userConfig?.provider?.model || "";
+    // OpenRouter 고정은 모델마다 프로바이더 태그가 다르므로 모델별로 보관한다.
+    // 예전 단일 값(openRouterProvider)은 현재 모델의 고정값으로만 승계한다.
+    const pins =
+        userConfig?.provider?.openRouterPins && typeof userConfig.provider.openRouterPins === "object"
+            ? Object.fromEntries(
+                  Object.entries(userConfig.provider.openRouterPins)
+                      .map(([key, value]) => [String(key), String(value || "").trim()])
+                      .filter(([key, value]) => key && value),
+              )
+            : {};
+    const legacyPin = String(userConfig?.provider?.openRouterProvider || "").trim();
+    if (legacyPin && model && !pins[model]) pins[model] = legacyPin;
     return {
         id,
         type: providerFile.type,
         baseURL,
         apiKey,
-        model: userConfig?.provider?.model || "",
+        model,
         extraHeaders: providerFile.extraHeaders || {},
         apiKeyOptional: Boolean(providerFile.apiKeyOptional),
         autoMode: id === "github-copilot" ? userConfig?.provider?.autoMode !== false : false,
         autoModelCandidates: Array.isArray(userConfig?.provider?.autoModelCandidates)
             ? userConfig.provider.autoModelCandidates.map(String).filter(Boolean)
             : [],
+        // OpenRouter 전용: 모델별 업스트림 프로바이더 고정. 에이전트 모델 오버라이드도 이 맵에서 찾는다.
+        openRouterPins: id === "openrouter" ? pins : {},
     };
 }

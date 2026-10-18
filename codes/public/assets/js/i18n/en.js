@@ -558,5 +558,16 @@
         computerFilesTruncated: "Preview truncated. Download the file for the full content.",
         computerFilesDownload: "Download",
         openInComputer: "Open in computer",
+        openRouterPin: "Provider pinning",
+        openRouterPinDesc: "Send this model only to one upstream provider on OpenRouter. While pinned, fallbacks are disabled.",
+        openRouterPinAuto: "Automatic",
+        openRouterPinAutoDesc: "Let OpenRouter choose (fallbacks allowed)",
+        openRouterPinNoModel: "Choose a model first.",
+        openRouterPinEmpty:
+            "This model has no separate providers to pin. Automatic routers and :free variants without endpoints cannot be pinned; choose a regular model.",
+        openRouterPinLoading: "Loading providers…",
+        openRouterPinFailed: "Could not load the provider list.",
+        openRouterPinRetry: "Retry",
+        openRouterPinUnavailable: "Not available for this model right now",
     };
 })(window.Taby);
