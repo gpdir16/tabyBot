@@ -558,5 +558,6 @@
         computerFilesBinary: "バイナリファイルです。ダウンロードして確認してください。",
         computerFilesTruncated: "プレビューは途中までです。全体はダウンロードしてください。",
         computerFilesDownload: "ダウンロード",
+        openInComputer: "コンピューターで開く",
     };
 })(window.Taby);

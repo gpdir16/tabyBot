@@ -127,10 +127,145 @@
         return T.h("div", { class: "stats-footer", text: parts.join(" · ") });
     }
 
+    /* ── 실제 파일 경로 링크 ───────────────────────────────────
+       에이전트가 인라인 코드로 적은 경로 중 실제로 존재하는 것만 눌러서 컴퓨터 파일 탭으로 연다.
+       존재 여부는 서버에 한 번 모아 묻고, 결과를 캐시해 다시 그려도 요청을 반복하지 않는다. */
+    C.filePathCache ??= new Map(); // path → true(존재) | 확인 시각(없음, 30초 뒤 재확인)
+    const FILE_PATH_MISS_TTL_MS = 30_000;
+
+    function pathCandidate(text) {
+        const s = String(text || "").trim();
+        if (!s || s.length > 512 || s.includes("\n") || s.includes("://") || s.startsWith("#")) return null;
+        if (s.includes("{{") || /^\d+(?:\.\d+)+$/.test(s)) return null;
+        const absolute = /^(?:~\/|\/|\.{1,2}\/)/.test(s);
+        const relative = /^[^\s/]+\/[^\s]*$/.test(s) && !/[<>{}$`*?"|]/.test(s);
+        const bare = /^[^\s/]+\.[A-Za-z0-9]{1,16}$/.test(s);
+        return absolute || relative || bare ? s : null;
+    }
+
+    // 본문에 그냥 적힌 절대 경로("/…", "~/…")도 찾는다. 상대 경로와 파일 이름은 인라인 코드일 때만 본다.
+    const ABS_PATH_RE = /(?:~\/|\/)[^\s<>"'`]+/g;
+
+    function plainPathNodes(root) {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+                const p = node.parentElement;
+                if (!p || p.closest("code, a, pre, script, style, .file-path-link")) return NodeFilter.FILTER_REJECT;
+                return node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+            },
+        });
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        return nodes;
+    }
+
+    function cleanPlainPath(text) {
+        return String(text || "").replace(/[.,;:!?)\]}]+$/, "");
+    }
+
+    function collectPlainPaths(root, pending) {
+        for (const node of plainPathNodes(root)) {
+            const text = node.nodeValue;
+            ABS_PATH_RE.lastIndex = 0;
+            let m = ABS_PATH_RE.exec(text);
+            while (m) {
+                const path = cleanPlainPath(m[0]);
+                if (!path || path.length > 512) {
+                    m = ABS_PATH_RE.exec(text);
+                    continue;
+                }
+                const before = text[m.index - 1] || "";
+                if (before === ":" || before === "/") {
+                    m = ABS_PATH_RE.exec(text);
+                    continue; // URL 조각은 건드리지 않는다
+                }
+                const cached = C.filePathCache.get(path);
+                if (cached !== true && (cached == null || Date.now() - cached > FILE_PATH_MISS_TTL_MS)) pending.add(path);
+                m = ABS_PATH_RE.exec(text);
+            }
+        }
+    }
+
+    // 존재가 확인된 절대 경로만 링크로 감싼다. 코드/링크 안의 글자는 건드리지 않는다.
+    function wrapPlainPaths(root) {
+        for (const node of plainPathNodes(root)) {
+            const text = node.nodeValue;
+            let last = 0;
+            let frag = null;
+            ABS_PATH_RE.lastIndex = 0;
+            let m = ABS_PATH_RE.exec(text);
+            while (m) {
+                const path = cleanPlainPath(m[0]);
+                const before = text[m.index - 1] || "";
+                if (!path || path.length > 512 || C.filePathCache.get(path) !== true || before === ":" || before === "/") {
+                    m = ABS_PATH_RE.exec(text);
+                    continue;
+                }
+                frag ??= document.createDocumentFragment();
+                if (m.index > last) frag.append(text.slice(last, m.index));
+                const span = T.h("span", { text: path });
+                markFilePath(span, path);
+                frag.append(span);
+                last = m.index + path.length;
+                m = ABS_PATH_RE.exec(text);
+            }
+            if (!frag) continue;
+            frag.append(text.slice(last));
+            node.replaceWith(frag);
+        }
+    }
+
+    function markFilePath(el, path) {
+        if (el.classList.contains("file-path-link")) return;
+        el.classList.add("file-path-link");
+        el.setAttribute("role", "link");
+        el.tabIndex = 0;
+        el.title = t("openInComputer");
+        const open = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            T.computerUI?.openFile?.(path);
+        };
+        el.addEventListener("click", open);
+        el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") open(e);
+        });
+    }
+
+    function enhanceFileLinks(root) {
+        if (!root) return;
+        const els = [...root.querySelectorAll("code:not([data-file-link])")].filter((el) => !el.closest("pre"));
+        const pending = new Set();
+        for (const el of els) {
+            const path = pathCandidate(el.textContent);
+            if (!path) continue;
+            el.dataset.fileLink = path;
+            const cached = C.filePathCache.get(path);
+            if (cached === true) markFilePath(el, path);
+            else if (cached == null || Date.now() - cached > FILE_PATH_MISS_TTL_MS) pending.add(path);
+        }
+        collectPlainPaths(root, pending);
+        wrapPlainPaths(root);
+        if (!pending.size) return;
+        void T.api
+            .resolveContainerPaths([...pending])
+            .then((r) => {
+                for (const item of r?.results || []) C.filePathCache.set(item.path, item.exists === true ? true : Date.now());
+                for (const el of root.querySelectorAll("code[data-file-link]")) {
+                    if (el.isConnected && C.filePathCache.get(el.dataset.fileLink) === true) markFilePath(el, el.dataset.fileLink);
+                }
+                wrapPlainPaths(root);
+            })
+            .catch(() => {
+                /* 해석에 실패하면 링크 없이 둔다 */
+            });
+    }
+
     function buildAssistant(text, opt) {
         const o = opt || {};
         const bubble = T.h("div", { class: "bubble" });
         if (text) bubble.append(T.md.render(text));
+        enhanceFileLinks(bubble);
         bubble.querySelectorAll("img").forEach((img) => {
             img.addEventListener("load", () => fitBubbleRadius(bubble));
         });
@@ -197,6 +332,7 @@
             q.textContent = ask.question;
         } else {
             q.append(T.md.render(ask.question, { extraClass: "ask-md" }));
+            enhanceFileLinks(q);
         }
         card.append(q);
 
@@ -360,4 +496,5 @@
     C.buildToolCard = buildToolCard;
     C.buildAskCard = buildAskCard;
     C.buildEmptyState = buildEmptyState;
+    C.enhanceFileLinks = enhanceFileLinks;
 })(window.Taby);

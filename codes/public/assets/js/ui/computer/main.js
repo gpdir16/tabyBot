@@ -63,6 +63,12 @@
             C.setMsg(C.termMsg, t("computerNoBot"));
         }
         C.checkStatus();
+        if (o.filePath) {
+            C.activeTab = "files";
+            C.pendingFilePath = String(o.filePath);
+        } else if (o.tab === "files" || o.tab === "terminal" || o.tab === "screen") {
+            C.activeTab = o.tab;
+        }
         C.setTab(C.activeTab || "screen");
         // 이미 페이지 안의 입력 요소(터미널/URL 입력)에 포커스가 있으면 뺏지 않는다.
         // 빼앗으면 모바일에서 열린 가상 키보드가 닫힌다.
@@ -122,6 +128,20 @@
         }
     }
 
+    // 대화에서 파일 경로를 눌렀을 때: 이 봇의 컴퓨터를 파일 탭으로 열고 그 경로를 보여 준다.
+    function openFile(path) {
+        const uuid = state.state.currentId || C.openUuid;
+        if (!uuid) {
+            T.toast.show("error", t("computerNoBot"));
+            return;
+        }
+        if (C.isOpen()) {
+            C.openFilesAt(path);
+            return;
+        }
+        open({ uuid, tab: "files", filePath: path });
+    }
+
     function init() {
         C.page = document.getElementById("computerPage");
         if (!C.page) return;
@@ -136,7 +156,16 @@
         }
     }
 
-    T.computerUI = { init, open, close, hide, isOpen: C.isOpen, routeFromPath: C.routeFromPath, navigate: C.navigate };
+    T.computerUI = {
+        init,
+        open,
+        close,
+        hide,
+        openFile,
+        isOpen: C.isOpen,
+        routeFromPath: C.routeFromPath,
+        navigate: C.navigate,
+    };
 
     C.open = open;
     C.close = close;

@@ -555,5 +555,6 @@
         computerFilesBinary: "바이너리 파일이에요. 내려받아 확인하세요.",
         computerFilesTruncated: "미리보기가 잘렸어요. 전체 내용은 파일을 내려받으세요.",
         computerFilesDownload: "내려받기",
+        openInComputer: "컴퓨터에서 열기",
     };
 })(window.Taby);

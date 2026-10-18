@@ -954,6 +954,28 @@ kbd {
 .msg-row.assistant .md :not(pre) > code {
     background: var(--bg);
 }
+/* 실제로 존재하는 컨테이너 경로: 눌러서 컴퓨터 파일 탭에서 연다. */
+.md :not(pre) > code.file-path-link {
+    cursor: pointer;
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+.md :not(pre) > code.file-path-link:hover {
+    background: var(--hover);
+}
+.md span.file-path-link {
+    cursor: pointer;
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+.md span.file-path-link:hover {
+    background: var(--hover);
+    border-radius: 3px;
+}
 .msg-row.assistant .bubble .codeblock,
 .msg-row.assistant .bubble .md img,
 .msg-row.assistant .bubble .md table {
