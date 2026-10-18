@@ -8,7 +8,7 @@ import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
 import { countMessagesTokens } from "./context.js";
 import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
-import { buildQueuedUserMessage } from "./history/messages.js";
+import { buildPendingUserMessages } from "./history/messages.js";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
 import { purgeOnceSecrets } from "./user-ask.js";
 
@@ -151,12 +151,14 @@ class AgentTurn {
         this.onCheckpoint?.(extractTurnMessages(this.messages, this.contextBaseLength));
     }
 
-    // 작업 중에 사용자가 보낸 메시지를 대화에 합친다. 합쳤으면 true.
+    // 작업 중에 사용자가 보낸 메시지를 각각의 user 메시지로 대화에 합친다. 합쳤으면 true.
     injectPendingUserMessages() {
         if (!this.session) return false;
         const pending = this.session.drainPendingMessages();
         if (!pending.length) return false;
-        this.messages.push(buildQueuedUserMessage(pending));
+        const messages = buildPendingUserMessages(pending);
+        if (!messages.length) return false;
+        this.messages.push(...messages);
         return true;
     }
 
