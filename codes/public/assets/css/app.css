@@ -1170,7 +1170,7 @@ kbd {
     flex-direction: column;
     gap: var(--sp-3);
     background: var(--surface-2);
-    animation: riseIn 180ms var(--ease);
+    /* animation: riseIn 180ms var(--ease); */
     width: 100%;
     padding: 14px;
     border-radius: 18px;
