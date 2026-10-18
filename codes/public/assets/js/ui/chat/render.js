@@ -38,6 +38,7 @@
         if (!c) {
             visibleRefs = [];
             drawn = null;
+            C.askedIds = new Set();
             thread.append(C.buildEmptyState());
             C.refreshHeader();
             C.restoreScroll(keep);
@@ -80,6 +81,8 @@
             if (f.m.role === "assistant") lastOfTurn.set(f.turn, i);
         });
         visibleRefs = visible.map((f) => ({ t: f.t, mi: f.mi }));
+        // 이력에 이미 자리 잡은 질문은 라이브 블록에 중복으로 띄우지 않는다.
+        C.askedIds = new Set(visible.filter((f) => f.m.role === "ask" && f.m.askId).map((f) => f.m.askId));
         drawn = { c, visible, lastOfTurn };
 
         // 다른 대화로 오면 최근 FIRST_PAGE개부터. 같은 대화를 다시 그리면 그리던 범위를 유지함.
@@ -249,12 +252,13 @@
             C.liveEls.toolsEl.classList.toggle("hidden", !live.tools.length);
         }
 
-        // ask 카드(답변/해제 상태 변화도 재구성)
-        const sig = live.asks.map((a) => `${a.askId}:${a.answer != null}:${a.resolved}`).join("|");
+        // ask 카드(답변/해제 상태 변화도 재구성). 이력에 이미 저장된 질문은 제자리 카드가 맡는다.
+        const liveAsks = live.asks.filter((a) => !C.askedIds?.has(a.askId));
+        const sig = liveAsks.map((a) => `${a.askId}:${a.answer != null}:${a.resolved}`).join("|");
         if (sig !== C.liveEls.askSig) {
             C.liveEls.askSig = sig;
-            C.liveEls.asksEl.replaceChildren(...live.asks.map(C.buildAskCard));
-            C.liveEls.asksEl.classList.toggle("hidden", !live.asks.length);
+            C.liveEls.asksEl.replaceChildren(...liveAsks.map(C.buildAskCard));
+            C.liveEls.asksEl.classList.toggle("hidden", !liveAsks.length);
         }
 
         if (C.pinnedBottom) C.scrollToBottom(false);
