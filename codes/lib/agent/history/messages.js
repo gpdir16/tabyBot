@@ -91,7 +91,7 @@ export const ATTACHED_FILES_MARK = "[User attached files]";
 // 예약·능동 실행이 시작할 때 붙이는 표식. 사용자가 보낸 말이 아님을 뜻한다.
 export const SCHEDULED_TURN_MARKER = "[tabybot-scheduled]";
 
-// 작업 중에 사용자가 추가로 보낸 메시지를 합쳐 넣을 때의 머리말.
+// 예전 버전이 작업 중에 온 메시지들을 한 건으로 합칠 때 붙이던 머리말. 옛 기록을 읽을 때만 쓴다.
 export const PENDING_USER_PREFIX = "The user sent additional message(s) while you were working:";
 
 // 첨부 안내가 덧붙은 사용자 메시지에서 사람이 쓴 본문만 남긴다.
@@ -119,31 +119,18 @@ export function isStandalonePendingTurn(turn) {
     return turn?.status === "pending" && messages.length === 1 && messages[0]?.role === "user";
 }
 
-function queuedBodyForModel(item) {
-    const text = String(item.text || "").trim();
-    // 첨부 경로는 턴을 시작할 때 만든 시스템 프롬프트에 없으므로 본문에 직접 적어 준다.
-    const files = (item.attachments || [])
-        .filter((file) => file?.filePath)
-        .map((file) => `[attached file: ${file.name || "file"} (${file.filePath})]`)
-        .join("\n");
-    return [text, files].filter(Boolean).join("\n");
-}
-
-// 작업 중에 들어온 메시지들을 모델에 줄 user 메시지 하나로 만든다.
-// content는 모델용이고, 화면 표시와 저장은 queued(메시지별 id·원문·시각·첨부)를 정본으로 쓴다.
-export function buildQueuedUserMessage(items) {
-    return {
-        role: "user",
-        content: `${PENDING_USER_PREFIX}\n\n${items.map(queuedBodyForModel).filter(Boolean).join("\n\n")}`,
-        // 모델에 보내는 시각 표기는 at에서 나온다. 첫 요청부터 붙어 있어야 라운드 사이에 본문이 달라지지 않는다.
-        at: new Date().toISOString(),
-        queued: items.map((item) => ({
-            id: item.id,
-            text: String(item.text || "").trim(),
+// 작업 중에 들어온 메시지를 모델에 줄 user 메시지 여러 건으로 만든다.
+// 저장·화면과 같은 모양(id·원문·시각·첨부)을 그대로 쓰고, 시각·첨부 안내는 API 직전에 붙는다.
+export function buildPendingUserMessages(items) {
+    return (items || [])
+        .map((item) => ({
+            role: "user",
+            ...(item.id ? { id: item.id } : {}),
+            content: String(item.text || "").trim(),
             ...(item.at ? { at: item.at } : {}),
             ...(item.attachments?.length ? { attachments: item.attachments } : {}),
-        })),
-    };
+        }))
+        .filter((message) => message.content || message.attachments?.length);
 }
 
 // 메시지들에 담긴 사용자 메시지 id(자기 id와, 합쳐 넣은 메시지들의 id).
