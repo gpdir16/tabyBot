@@ -557,5 +557,6 @@
         computerFilesBinary: "Binary file. Download it to view.",
         computerFilesTruncated: "Preview truncated. Download the file for the full content.",
         computerFilesDownload: "Download",
+        openInComputer: "Open in computer",
     };
 })(window.Taby);

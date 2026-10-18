@@ -241,7 +241,13 @@
         // 중간 라운드 텍스트(툴 호출 전 코멘트): 새로고침 시 히스토리에 남는 것과 동일하게 표시
         if (live.intermediate.length !== C.liveEls.interN) {
             C.liveEls.interN = live.intermediate.length;
-            C.liveEls.interEl.replaceChildren(...live.intermediate.map((t) => T.h("div", { class: "bubble inter" }, [T.md.render(t)])));
+            C.liveEls.interEl.replaceChildren(
+                ...live.intermediate.map((text) => {
+                    const bubble = T.h("div", { class: "bubble inter" }, [T.md.render(text)]);
+                    C.enhanceFileLinks(bubble);
+                    return bubble;
+                }),
+            );
             C.liveEls.interEl.classList.toggle("hidden", !live.intermediate.length);
         }
 
