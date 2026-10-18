@@ -559,5 +559,16 @@
         computerFilesTruncated: "プレビューは途中までです。全体はダウンロードしてください。",
         computerFilesDownload: "ダウンロード",
         openInComputer: "コンピューターで開く",
+        openRouterPin: "プロバイダーの固定",
+        openRouterPinDesc: "このモデルを OpenRouter の特定のアップストリームプロバイダーにのみ送ります。固定中はフォールバックが無効になります。",
+        openRouterPinAuto: "自動",
+        openRouterPinAutoDesc: "OpenRouter に任せる(フォールバック許可)",
+        openRouterPinNoModel: "先にモデルを選んでください。",
+        openRouterPinEmpty:
+            "このモデルには固定できる個別プロバイダーがありません。自動ルーティングモデルやエンドポイントのない :free モデルではなく、通常のモデルを選んでください。",
+        openRouterPinLoading: "プロバイダー一覧を読み込み中…",
+        openRouterPinFailed: "プロバイダー一覧を読み込めませんでした。",
+        openRouterPinRetry: "再試行",
+        openRouterPinUnavailable: "現在このモデルでは利用できません",
     };
 })(window.Taby);

@@ -23,7 +23,7 @@ import { applySelfImprovementPatch, getDreamingConfig, getProactiveConfig, getRe
 import { emit } from "../bus.js";
 import { t as i18nT } from "../../i18n.js";
 import { isValidTimeZone } from "../../scheduling/time.js";
-import { fetchProviderModels } from "../../llm/models.js";
+import { fetchOpenRouterProviders, fetchProviderModels } from "../../llm/models.js";
 import { cacheKeepAliveSummary, normalizeCacheKeepAlive } from "../../llm/cache-keepalive.js";
 import { usageSummary } from "../../llm/usage-log.js";
 import { fetchGithubCopilotRoutingModels } from "../../llm/github-copilot-client.js";
@@ -195,6 +195,7 @@ export function buildSettingsPayload() {
             apiKeySet: Boolean(merged?.apiKey),
             autoMode: Boolean(merged?.autoMode),
             autoModelCandidates: merged?.autoModelCandidates || [],
+            openRouterProvider: merged?.openRouterPins?.[merged.model] || "",
         },
         // 효율적인 운영 탭: 지금 프로바이더의 캐시 유지 설정과 예상. 핑이 이득이 없는 프로바이더(요청 수 과금, 로컬)는 null.
         cacheKeepAlive: merged ? cacheKeepAliveSummary(merged, config) : null,
@@ -303,6 +304,19 @@ function applyProviderPatch(config, providerPatch, prevProviderId) {
         else if (providerPatch.clearApiKey === true) delete provider.apiKey;
     }
     if (providerPatch.autoMode !== undefined) provider.autoMode = Boolean(providerPatch.autoMode);
+    if (providerPatch.openRouterProvider !== undefined) {
+        const tag = String(providerPatch.openRouterProvider || "")
+            .trim()
+            .slice(0, 64);
+        const model = String(provider.model || "").trim();
+        const pins = provider.openRouterPins && typeof provider.openRouterPins === "object" ? { ...provider.openRouterPins } : {};
+        if (tag && model) pins[model] = tag;
+        else if (model) delete pins[model];
+        if (Object.keys(pins).length) provider.openRouterPins = pins;
+        else delete provider.openRouterPins;
+        // 예전 단일 값이 남아 있으면 모델을 바꾼 뒤에도 되살아난다. 첫 변경에서 지운다.
+        delete provider.openRouterProvider;
+    }
     if (providerPatch.autoModelCandidates !== undefined) {
         if (!Array.isArray(providerPatch.autoModelCandidates)) return { error: "invalid_auto_model_candidates" };
         provider.autoModelCandidates = normalizeCandidates(providerPatch.autoModelCandidates);
@@ -388,6 +402,20 @@ export function registerSettingsRoutes(router) {
         if (isSessionCompressing()) return ctx.json409("already_running");
         try {
             ctx.json200(await runSessionCompression(chatIds));
+        } catch (err) {
+            ctx.json400(err?.message || String(err));
+        }
+    });
+
+    // OpenRouter 모델을 실제로 서빙하는 업스트림 프로바이더 목록(고정 선택지).
+    router.add("GET", "/api/providers/openrouter/endpoints", async (ctx) => {
+        const config = loadUserConfig();
+        try {
+            const provider = getMergedProvider(config);
+            if (provider.id !== "openrouter") return ctx.json400("not_openrouter");
+            const model = String(ctx.query.model || provider.model || "").trim();
+            const providers = await fetchOpenRouterProviders(provider, model);
+            ctx.json200({ providers });
         } catch (err) {
             ctx.json400(err?.message || String(err));
         }

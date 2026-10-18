@@ -135,6 +135,7 @@
             }),
 
         models: (payload) => request("/api/models/fetch", { method: "POST", json: payload || {} }),
+        openRouterProviders: (model) => request(`/api/providers/openrouter/endpoints?model=${enc(model || "")}`),
 
         getSettings: () => request("/api/settings"),
         putSettings: (patch) => request("/api/settings", { method: "PUT", json: patch }),

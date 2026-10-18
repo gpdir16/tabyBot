@@ -107,6 +107,41 @@ export async function fetchProviderModels(provider, { useCache = true } = {}) {
     return models;
 }
 
+// OpenRouter 모델의 업스트림 프로바이더 목록. 고정(pin) 선택지로 쓴다.
+export async function fetchOpenRouterProviders(provider, model) {
+    const modelId = String(model || "").trim();
+    if (!modelId) throw new Error("model required");
+    const base = String(provider.baseURL || "https://openrouter.ai/api/v1").replace(/\/$/, "");
+    // OpenRouter 경로는 author/slug 형태라 슬래시를 남긴 채 각 조각만 인코딩한다.
+    const modelPath = modelId
+        .split("/")
+        .filter(Boolean)
+        .map((part) => encodeURIComponent(part))
+        .join("/");
+    const url = `${base}/models/${modelPath}/endpoints`;
+    // 엔드포인트 목록은 공개 API다. 만료된 키를 실어 401이 나는 일을 피하고,
+    // 키가 필요한 커스텀 프록시일 때만 한 번 더 인증 헤더를 붙여 재시도한다.
+    const baseHeaders = { Accept: "application/json", ...(provider.extraHeaders || {}) };
+    let res = await fetch(url, { headers: baseHeaders });
+    if ((res.status === 401 || res.status === 403) && provider.apiKey?.trim()) {
+        res = await fetch(url, { headers: { ...baseHeaders, ...buildHeaders(provider) } });
+    }
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload.error?.message || res.statusText || "Failed to fetch providers");
+    const list = payload?.data?.endpoints || payload?.endpoints;
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const endpoint of list) {
+        const tag = String(endpoint?.tag || endpoint?.provider_name || "").trim();
+        if (!tag || seen.has(tag)) continue;
+        seen.add(tag);
+        out.push({ tag, name: String(endpoint?.provider_name || endpoint?.name || tag) });
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name, "en"));
+    return out;
+}
+
 export function findModelContextWindow(models, modelId) {
     const found = models?.find((m) => m.id === modelId);
     return found?.contextWindow || null;

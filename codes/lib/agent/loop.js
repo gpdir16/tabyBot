@@ -25,7 +25,15 @@ function parseToolArgs(raw) {
 }
 
 function providerKey(provider) {
-    return [provider.id, provider.type, provider.baseURL, provider.model, provider.autoMode, ...(provider.autoModelCandidates || [])].join("\u0000");
+    return [
+        provider.id,
+        provider.type,
+        provider.baseURL,
+        provider.model,
+        provider.autoMode,
+        provider.openRouterPins?.[provider.model] || "",
+        ...(provider.autoModelCandidates || []),
+    ].join("\u0000");
 }
 
 function deliveredAttachmentsFromMessages(messages) {

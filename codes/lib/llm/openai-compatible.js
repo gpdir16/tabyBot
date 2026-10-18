@@ -34,13 +34,16 @@ function joinTextOnlyContent(messages) {
     );
 }
 
-function buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam }) {
+function buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam, providerRouting }) {
     const params = { model, messages: joinTextOnlyContent(sanitizeMessagesForApi(messages)) };
 
     const level = String(thinkingLevel || "").toLowerCase();
     if (level && level !== "off") {
         params[thinkingParam || "reasoning_effort"] = level;
     }
+
+    // OpenRouter: 지정한 업스트림 프로바이더만 쓰고 폴백을 끈다.
+    if (providerRouting) params.provider = providerRouting;
 
     if (tools?.length && tool_choice !== "none") {
         params.tools = tools;
@@ -104,8 +107,9 @@ export function chatCompletions({
     signal,
     thinkingLevel,
     thinkingParam = "reasoning_effort",
+    providerRouting,
 }) {
-    const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
+    const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam, providerRouting });
     throwIfAborted(signal);
 
     const requestOptions = signal ? { signal } : undefined;
@@ -142,8 +146,9 @@ export async function chatCompletionsPing({
     signal,
     thinkingLevel,
     thinkingParam = "reasoning_effort",
+    providerRouting,
 }) {
-    const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam });
+    const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam, providerRouting });
     const id = `${client.baseURL}|${model}`;
     const fields =
         pingCapField.get(id) === "max_completion_tokens" ? ["max_completion_tokens", "max_tokens"] : ["max_tokens", "max_completion_tokens"];

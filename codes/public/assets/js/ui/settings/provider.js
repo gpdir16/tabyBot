@@ -95,8 +95,108 @@
             );
         }
         sec.append(plist);
+        if (selectedProviderId === "openrouter") sec.append(T.h("hr", { class: "divider" }), openRouterPinSection(provider));
 
         body.append(sec);
+    }
+
+    /* ── OpenRouter 업스트림 프로바이더 고정 ─────────────────
+       모델을 실제로 서빙하는 프로바이더 중 하나를 골라 고정한다. 고정하면 폴백이 꺼진다. */
+    C.orProvidersCache = null; // { key, providers }
+    C.orProvidersLoading = false;
+    C.orProvidersFailed = false;
+    C.orProvidersError = "";
+
+    function loadOpenRouterProviders(provider, key) {
+        C.orProvidersLoading = true;
+        C.orProvidersFailed = false;
+        C.orProvidersError = "";
+        C.orProvidersCache = null;
+        T.api
+            .openRouterProviders(provider.model)
+            .then((r) => {
+                C.orProvidersLoading = false;
+                C.orProvidersCache = { key, providers: Array.isArray(r?.providers) ? r.providers : [] };
+                if (C.openTab === "provider") C.build();
+            })
+            .catch((err) => {
+                C.orProvidersLoading = false;
+                C.orProvidersFailed = true;
+                C.orProvidersError = T.api.errorDetail(err);
+                if (C.openTab === "provider") C.build();
+            });
+    }
+
+    function openRouterPinSection(provider) {
+        const box = T.h("div", { class: "set-section" });
+        box.append(C.fieldLabel(t("openRouterPin")), T.h("div", { class: "set-desc", text: t("openRouterPinDesc") }));
+
+        const model = String(provider.model || "").trim();
+        if (!model) {
+            box.append(T.h("div", { class: "empty-note", text: t("openRouterPinNoModel") }));
+            return box;
+        }
+        const key = `${model}|${provider.baseURL || ""}`;
+        const cached = C.orProvidersCache?.key === key;
+        // 모델이나 엔드포인트가 바뀌면 이전 목록을 그대로 쓰지 않고 다시 받는다.
+        if (!cached && !C.orProvidersLoading && !C.orProvidersFailed) void loadOpenRouterProviders(provider, key);
+        if (C.orProvidersLoading) {
+            box.append(T.h("div", { class: "empty-note", text: t("openRouterPinLoading") }));
+            return box;
+        }
+        if (C.orProvidersFailed) {
+            box.append(T.h("div", { class: "empty-note", text: t("openRouterPinFailed") }));
+            if (C.orProvidersError) box.append(T.h("div", { class: "set-desc", text: C.orProvidersError }));
+            box.append(
+                T.h("div", { class: "set-group act-group" }, [
+                    C.actionRow(t("openRouterPinRetry"), () => {
+                        C.orProvidersFailed = false;
+                        C.orProvidersError = "";
+                        C.build();
+                    }),
+                ]),
+            );
+            return box;
+        }
+
+        const providers = cached ? C.orProvidersCache.providers : [];
+        const current = String(provider.openRouterProvider || "");
+        const rows = T.h("div", { class: "models-list", role: "radiogroup", "aria-label": t("openRouterPin") });
+
+        const addRow = (tag, name, sub) => {
+            const selected = current === tag;
+            rows.append(
+                T.h(
+                    "button",
+                    {
+                        class: `radio-row${selected ? " selected" : ""}`,
+                        role: "radio",
+                        "aria-checked": String(selected),
+                        onclick() {
+                            if (selected) return;
+                            C.put({ provider: { openRouterProvider: tag } }).then(() => C.build());
+                        },
+                    },
+                    [
+                        T.h("div", { class: "model-main" }, [
+                            T.h("div", { class: "model-label", text: name }),
+                            T.h("div", { class: "model-sub" }, [T.h("span", { class: "model-id", text: sub })]),
+                        ]),
+                        selected ? T.icon("check", "sel-check") : null,
+                    ],
+                ),
+            );
+        };
+
+        addRow("", t("openRouterPinAuto"), t("openRouterPinAutoDesc"));
+        if (current && !providers.some((p) => p.tag === current)) addRow(current, current, t("openRouterPinUnavailable"));
+        for (const p of providers) addRow(p.tag, p.name || p.tag, p.tag);
+        box.append(rows);
+        if (!providers.length) {
+            // openrouter/auto와 일부 :free 항목은 자체 엔드포인트가 없다. 고정할 대상이 없다는 사실을 알린다.
+            box.append(T.h("div", { class: "empty-note", text: t("openRouterPinEmpty") }));
+        }
+        return box;
     }
 
     function autoSessionSettings(provider) {
