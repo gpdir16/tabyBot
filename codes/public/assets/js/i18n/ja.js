@@ -548,5 +548,15 @@
         computerModeTrackpad: "トラックパッドモード",
         computerModeTouch: "直接タッチモード",
         computerTermDisabled: "エージェント設定でターミナルが無効です",
+        computerFiles: "ファイル",
+        computerFilesPath: "コンテナのパス",
+        computerFilesUp: "上のフォルダー",
+        computerFilesRefresh: "更新",
+        computerFilesEmpty: "空のフォルダー",
+        computerFilesLoading: "読み込み中…",
+        computerFilesFailed: "フォルダーを読み込めませんでした",
+        computerFilesBinary: "バイナリファイルです。ダウンロードして確認してください。",
+        computerFilesTruncated: "プレビューは途中までです。全体はダウンロードしてください。",
+        computerFilesDownload: "ダウンロード",
     };
 })(window.Taby);

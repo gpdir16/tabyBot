@@ -545,5 +545,15 @@
         computerKeyboard: "키보드 입력",
         computerModeTrackpad: "트랙패드 모드",
         computerModeTouch: "직접 터치 모드",
+        computerFiles: "파일",
+        computerFilesPath: "컨테이너 경로",
+        computerFilesUp: "상위 폴더",
+        computerFilesRefresh: "새로고침",
+        computerFilesEmpty: "빈 폴더",
+        computerFilesLoading: "불러오는 중…",
+        computerFilesFailed: "폴더를 읽지 못했어요",
+        computerFilesBinary: "바이너리 파일이에요. 내려받아 확인하세요.",
+        computerFilesTruncated: "미리보기가 잘렸어요. 전체 내용은 파일을 내려받으세요.",
+        computerFilesDownload: "내려받기",
     };
 })(window.Taby);

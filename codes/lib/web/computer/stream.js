@@ -7,6 +7,7 @@ import { isDockerRuntime } from "../../runtime.js";
 import { getAgent, getAgentByUuid } from "../../agents-store.js";
 import { ensureBrowserWindow, openBrowser } from "./browser.js";
 import { startTabSnapshotter } from "./camofox.js";
+import { registerComputerFileRoutes } from "./files.js";
 
 // ── 화면 스트림과 터미널 WebSocket 연결. ──
 
@@ -172,6 +173,7 @@ function statusPayload() {
 
 export function registerComputerRoutes(router) {
     startTabSnapshotter();
+    registerComputerFileRoutes(router);
     router.add("GET", "/api/computer/status", (ctx) => {
         ctx.json200(statusPayload());
     });

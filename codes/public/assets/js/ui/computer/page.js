@@ -65,13 +65,19 @@
             text: "Firefox",
             onclick: () => setTab("screen"),
         });
+        const tabFiles = T.h("button", {
+            class: "cp-tab",
+            role: "tab",
+            text: t("computerFiles"),
+            onclick: () => setTab("files"),
+        });
         const tabTerm = T.h("button", {
             class: "cp-tab",
             role: "tab",
             text: "Terminal",
             onclick: () => setTab("terminal"),
         });
-        const tabs = T.h("div", { class: "cp-tabs", role: "tablist" }, [tabScreen, tabTerm]);
+        const tabs = T.h("div", { class: "cp-tabs", role: "tablist" }, [tabScreen, tabFiles, tabTerm]);
 
         /* 화면 탭: 화면 안에 브라우저 주소창이 있으므로 별도 URL 바는 두지 않는다 */
         // 모바일용: 공유 화면에 키를 보낼 가상 키보드 입력기. canvas는 tabindex라
@@ -128,6 +134,50 @@
         const screenStage = T.h("div", { class: "cp-stage" }, [C.canvas, C.screenMsg, kbdInput, cursorEl, tools]);
         const screenPane = T.h("div", { class: "cp-pane cp-screen" }, [screenStage]);
 
+        /* 파일 탭: 컨테이너 안의 폴더·파일 목록과 미리보기 */
+        const fileUp = T.h(
+            "button",
+            {
+                class: "btn-icon cp-tool",
+                "data-tip": t("computerFilesUp"),
+                "aria-label": t("computerFilesUp"),
+                onclick: () => {
+                    if (C.fileParent) void loadFiles(C.fileParent);
+                },
+            },
+            [T.icon("arrow-left")],
+        );
+        const filePathInput = T.h("input", {
+            class: "cp-filepath",
+            type: "text",
+            spellcheck: "false",
+            autocomplete: "off",
+            "aria-label": t("computerFilesPath"),
+            placeholder: t("computerFilesPath"),
+            onkeydown(e) {
+                e.stopPropagation();
+                if (e.key === "Enter") void loadFiles(e.target.value);
+            },
+        });
+        const fileRefresh = T.h(
+            "button",
+            {
+                class: "btn-icon cp-tool",
+                "data-tip": t("computerFilesRefresh"),
+                "aria-label": t("computerFilesRefresh"),
+                onclick: () => void loadFiles(filePathInput.value || C.fileDir || ""),
+            },
+            [T.icon("refresh")],
+        );
+        const fileList = T.h("div", { class: "cp-filelist", role: "list" });
+        const fileView = T.h("div", { class: "cp-fileview hidden" });
+        const fileMsg = T.h("div", { class: "cp-msg hidden" });
+        const filePane = T.h("div", { class: "cp-pane cp-files" }, [
+            T.h("div", { class: "cp-filebar" }, [fileUp, filePathInput, fileRefresh]),
+            T.h("div", { class: "cp-filebody" }, [fileList, fileView]),
+            fileMsg,
+        ]);
+
         /* 터미널 탭 */
         const restartBtn = T.h("button", { class: "btn-icon cp-tool", title: t("computerRestart"), onclick: () => C.restartTerminal() }, [
             T.icon("refresh"),
@@ -141,15 +191,22 @@
         ]);
 
         /* 헤더는 채팅과 같은 #header 요소를 쓴다. open()에서 backBtn/status/tabs를 주입한다 */
-        C.page.append(screenPane, termPane);
+        C.page.append(screenPane, filePane, termPane);
         C.els = {
             backBtn,
             status,
             tabs,
             tabScreen,
+            tabFiles,
             tabTerm,
             screenPane,
+            filePane,
             termPane,
+            fileList,
+            fileView,
+            fileMsg,
+            filePathInput,
+            fileUp,
             termHost,
             startBtn,
             kbdInput,
@@ -186,17 +243,133 @@
         C.setTouchMode(C.touchMode); // 아이콘·커서 표시 초기화
     }
 
+    /* ── 파일 탭 ──────────────────────────────────────────── */
+    let fileSeq = 0;
+    let previewSeq = 0;
+
+    C.fileDir = null;
+    C.fileParent = null;
+    C.pendingFilePath = null;
+
+    function renderFileRows(entries) {
+        const list = C.els.fileList;
+        list.replaceChildren();
+        if (!entries.length) {
+            list.append(T.h("div", { class: "cp-fileempty", text: t("computerFilesEmpty") }));
+            return;
+        }
+        for (const e of entries) {
+            const row = T.h(
+                "button",
+                {
+                    type: "button",
+                    class: "cp-file-row",
+                    role: "listitem",
+                    dataset: { path: e.path },
+                    onclick() {
+                        if (e.kind === "dir") void loadFiles(e.path);
+                        else void showFile(e);
+                    },
+                },
+                [
+                    T.icon(e.kind === "dir" ? "folder" : "file", "icon-sm"),
+                    T.h("span", { class: "cp-file-name", text: e.name }),
+                    e.kind === "file" ? T.h("span", { class: "cp-file-size", text: T.util.formatSize(e.size) }) : null,
+                ],
+            );
+            list.append(row);
+        }
+    }
+
+    async function showFile(entry) {
+        const seq = ++previewSeq;
+        const view = C.els.fileView;
+        view.classList.remove("hidden");
+        for (const el of C.els.fileList.children) el.classList.toggle("on", el.dataset?.path === entry.path);
+        view.replaceChildren(
+            T.h("div", { class: "cp-fileview-head" }, [
+                T.h("span", { class: "cp-file-name", text: entry.name || entry.path }),
+                T.h("a", {
+                    class: "cp-filedl",
+                    href: T.api.containerFileHref(entry.path),
+                    download: entry.name || "",
+                    text: t("computerFilesDownload"),
+                }),
+            ]),
+        );
+        if (/\.(png|jpe?g|gif|webp)$/i.test(entry.name || "")) {
+            view.append(T.h("img", { class: "cp-fileimage", src: T.api.containerFileHref(entry.path, true), alt: entry.name || "" }));
+            return;
+        }
+        const note = T.h("div", { class: "cp-filenote", text: t("computerFilesLoading") });
+        view.append(note);
+        try {
+            const r = await T.api.containerFileText(entry.path);
+            if (seq !== previewSeq) return;
+            if (r?.binary) {
+                note.textContent = t("computerFilesBinary");
+                return;
+            }
+            note.remove();
+            view.append(T.h("pre", { class: "cp-filetext", text: String(r?.text ?? "") }));
+            if (r?.truncated) view.append(T.h("div", { class: "cp-filenote", text: t("computerFilesTruncated") }));
+        } catch (err) {
+            if (seq !== previewSeq) return;
+            note.textContent = T.api.errorText(err, t("computerFilesFailed"));
+        }
+    }
+
+    async function loadFiles(rawPath) {
+        if (!C.els.fileList) return;
+        const seq = ++fileSeq;
+        previewSeq++;
+        C.setMsg(C.els.fileMsg, t("computerFilesLoading"));
+        try {
+            const r = await T.api.containerFiles(rawPath);
+            if (seq !== fileSeq) return;
+            C.fileDir = r?.path || null;
+            C.fileParent = r?.parent || null;
+            C.els.filePathInput.value = r?.path || "";
+            C.els.fileView.classList.add("hidden");
+            C.els.fileView.replaceChildren();
+            if (r?.kind === "file") {
+                C.els.fileList.replaceChildren();
+                C.setMsg(C.els.fileMsg, "");
+                await showFile({ path: r.path, name: r.name, size: r.size, kind: "file" });
+                return;
+            }
+            renderFileRows(Array.isArray(r?.entries) ? r.entries : []);
+            C.setMsg(C.els.fileMsg, "");
+        } catch (err) {
+            if (seq !== fileSeq) return;
+            C.setMsg(C.els.fileMsg, T.api.errorText(err, t("computerFilesFailed")));
+        }
+    }
+
+    function openFilesAt(path) {
+        C.pendingFilePath = String(path || "");
+        setTab("files");
+    }
+
     function setTab(tab) {
         C.activeTab = tab;
         C.els.tabScreen.classList.toggle("active", tab === "screen");
+        C.els.tabFiles.classList.toggle("active", tab === "files");
         C.els.tabTerm.classList.toggle("active", tab === "terminal");
         C.els.tabScreen.setAttribute("aria-selected", tab === "screen" ? "true" : "false");
+        C.els.tabFiles.setAttribute("aria-selected", tab === "files" ? "true" : "false");
         C.els.tabTerm.setAttribute("aria-selected", tab === "terminal" ? "true" : "false");
         C.els.screenPane.classList.toggle("hidden", tab !== "screen");
+        C.els.filePane.classList.toggle("hidden", tab !== "files");
         C.els.termPane.classList.toggle("hidden", tab !== "terminal");
         if (!C.openBot && !C.openUuid) return;
-        if (tab === "screen") C.connectScreen();
-        else {
+        if (tab === "screen") {
+            C.connectScreen();
+        } else if (tab === "files") {
+            const pending = C.pendingFilePath;
+            C.pendingFilePath = null;
+            if (pending || !C.fileDir) void loadFiles(pending ?? "");
+        } else {
             C.focusTermOnReady = true;
             C.connectTerminal();
         }
@@ -248,6 +421,8 @@
     C.navigate = navigate;
     C.build = build;
     C.setTab = setTab;
+    C.openFilesAt = openFilesAt;
+    C.loadFiles = loadFiles;
     C.wsUrl = wsUrl;
     C.setMsg = setMsg;
     C.errorText = errorText;
