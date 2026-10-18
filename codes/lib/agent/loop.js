@@ -275,6 +275,10 @@ class AgentTurn {
             const result = await executeTool(tc.function.name, parsed.args, {
                 ...toolContext,
                 messages: this.messages,
+                toolCall: tc,
+                // user_ask·secret_request가 질문을 만들면(답을 기다리기 전에) 체크포인트를 남긴다.
+                // 그래야 질문 카드가 저장된 메시지 순서의 제자리에서 바로 그려지고 새로고침에도 살아남는다.
+                onAskCreated: () => this.checkpoint(),
                 model: this.llm.provider.model,
                 modelMeta: this.llm.modelMeta,
                 signal: this.session?.signal,

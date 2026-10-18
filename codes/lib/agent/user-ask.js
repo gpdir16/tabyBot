@@ -100,13 +100,20 @@ export function listPendingAsks() {
         }));
 }
 
+// 질문 메타데이터를 지금 실행 중인 도구 호출에 붙이고 체크포인트를 요청한다.
+// 저장된 도구 호출에 askId가 있어야 화면이 질문 카드를 메시지 순서의 제자리에 그리고, 새로고침 뒤에도 답할 수 있다.
+export function attachAskToToolCall(ctx, ask) {
+    if (ctx?.toolCall) ctx.toolCall.ask = ask;
+    ctx?.onAskCreated?.();
+}
+
 export function cancelPendingAsk(sessionKey, reason = "aborted") {
     const entry = pendingAsks.get(String(sessionKey));
     if (!entry) return false;
     return settleAndNotify(entry, `__CANCELLED__:${reason}`);
 }
 
-export function askUser({ sessionKey, question, options = [], timeoutMs = 120_000, todoId = null, secret = null }) {
+export function askUser({ sessionKey, question, options = [], timeoutMs = 120_000, todoId = null, secret = null, onCreate = null }) {
     const key = String(sessionKey);
     cancelPendingAsk(key, "superseded");
 
@@ -142,6 +149,14 @@ export function askUser({ sessionKey, question, options = [], timeoutMs = 120_00
         expiresAt: new Date(entry.expiresAt).toISOString(),
         todoId: entry.todoId || undefined,
         secret: entry.secret?.name,
+    });
+    // 화면 이력에 질문 카드를 남길 수 있게 생성 직후 메타데이터를 알린다. 답을 기다리기 전에 호출된다.
+    onCreate?.({
+        askId: entry.id,
+        question: entry.question,
+        options: entry.options,
+        expiresAt: new Date(entry.expiresAt).toISOString(),
+        secret: entry.secret?.name || null,
     });
 
     return promise.then((raw) => {

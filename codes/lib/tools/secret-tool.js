@@ -1,6 +1,6 @@
 // secret_request 도구: 에이전트가 필요한 시크릿을 사용자에게 요청한다.
 // 사용자는 마스킹된 입력칸에 값을 넣고, 값은 금고에만 저장된다. 모델은 저장 여부와 자리표시자만 받는다.
-import { askUser, cancelPendingAsk } from "../agent/user-ask.js";
+import { askUser, attachAskToToolCall, cancelPendingAsk } from "../agent/user-ask.js";
 
 const SECRET_REQUEST_DESCRIPTION = [
     "Ask the user to provide a secret (password, API key, token) that you need but is not in the Stored secrets list.",
@@ -50,6 +50,7 @@ export function executeSecretRequest(_name, args, ctx) {
         timeoutMs: timeoutSec * 1000,
         todoId: ctx.todoId || null,
         secret: { name, once: args?.once === true },
+        onCreate: (ask) => attachAskToToolCall(ctx, ask),
     });
 
     const signal = ctx?.signal;

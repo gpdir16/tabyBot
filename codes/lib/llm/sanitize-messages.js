@@ -137,15 +137,21 @@ export function sanitizeMessagesForApi(messages) {
         if (header) out.content = withHeaderBlock(out.content, header);
 
         if (out.tool_calls?.length) {
-            out.tool_calls = out.tool_calls.map((tc) => ({
-                ...tc,
-                function: tc.function
-                    ? {
-                          ...tc.function,
-                          arguments: typeof tc.function.arguments === "string" ? sanitizeTextForLlm(tc.function.arguments) : tc.function.arguments,
-                      }
-                    : tc.function,
-            }));
+            out.tool_calls = out.tool_calls.map((tc) => {
+                // ask는 화면 이력용 메타데이터다. 모델에는 보내지 않는다(provider가 모르는 필드).
+                const clean = { ...tc };
+                delete clean.ask;
+                return {
+                    ...clean,
+                    function: tc.function
+                        ? {
+                              ...tc.function,
+                              arguments:
+                                  typeof tc.function.arguments === "string" ? sanitizeTextForLlm(tc.function.arguments) : tc.function.arguments,
+                          }
+                        : tc.function,
+                };
+            });
         }
 
         return out;

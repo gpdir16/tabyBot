@@ -168,6 +168,7 @@
         newMessages: "새 메시지",
         askTimeLeft: "{n}초 남음",
         askExpired: "만료됨",
+        askUnanswered: "답변하지 않음",
         answered: "답변 완료",
         askInputPlaceholder: "답변 입력…",
         secretAskPlaceholder: "값 입력…",
