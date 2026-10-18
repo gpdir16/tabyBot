@@ -5394,32 +5394,6 @@ body.sb-collapsed .btn-menu {
     body.gest-settle #main {
         transition: transform var(--nav-dur) var(--nav-ease) !important;
     }
-    /* 컴퓨터 화면에서 뒤로: 밑에 깔린 채팅을 다시 보이게 하고, 컴퓨터 화면만 그 위에서 밀려 나간다.
-       헤더는 채팅과 같이 쓰므로 컴퓨터 화면이 얹어 둔 버튼들은 밀리는 만큼(--gest-p) 흐려진다. */
-    body.gest-inner.computer-route #scroller,
-    body.gest-inner.computer-route #composerWrap {
-        display: block;
-    }
-    body.gest-inner .computer-page {
-        /* 헤더(같이 쓰는 영역) 아래부터 덮고, 채팅의 입력창보다는 위에 놓인다 */
-        position: absolute;
-        inset: var(--hdr-h) 0 0;
-        z-index: 7;
-        padding-top: 0;
-        background: var(--bg);
-        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
-    }
-    body.gest-settle.gest-inner .computer-page {
-        transition: transform var(--nav-dur) var(--nav-ease);
-    }
-    body.gest-inner .cp-tabs,
-    body.gest-inner .cp-status {
-        opacity: calc(1 - var(--gest-p, 0));
-    }
-    body.gest-settle.gest-inner .cp-tabs,
-    body.gest-settle.gest-inner .cp-status {
-        transition: opacity var(--nav-dur) var(--nav-ease);
-    }
     #sidebar {
         --sb-w: 100%;
         z-index: 20;
@@ -5785,26 +5759,11 @@ body.computer-route #jumpLatest {
     background: var(--surface-3);
     color: var(--text);
 }
-/* 모바일의 컴퓨터 화면: 채팅 위에 한 겹 올라오는 화면이다.
-   - 헤더 가운데의 이름 자리에 화면/터미널 전환 탭이 놓인다. 화면이 밀려 들어오고 나가는 동안 이름과 탭이
-     그 자리에서 서로 바뀌어 보인다(--gest-p: 화면이 밀려 나간 정도). 이름이 옆으로 튀지 않는다.
-   - 밑에 깔린 채팅은 보이지 않게만 해 둔다(display를 끄면 스크롤 위치를 잃어 돌아올 때 화면이 튄다). */
+/* 모바일의 컴퓨터 화면: 다른 라우트와 같이 채팅 뷰를 대체하는 한 페이지다.
+   헤더 가운데의 이름 자리에 화면/파일/터미널 전환 탭이 놓인다. */
 @media (max-width: 860px) {
-    body.computer-route #scroller {
-        display: block;
-        visibility: hidden;
-    }
-    body.gest-inner.computer-route #scroller {
-        visibility: visible;
-    }
     body.computer-route #hdrName {
         opacity: 0;
-    }
-    body.gest-inner.computer-route #hdrName {
-        opacity: var(--gest-p, 0);
-    }
-    body.gest-settle.gest-inner #hdrName {
-        transition: opacity var(--nav-dur) var(--nav-ease);
     }
     body.computer-route .hdr-avatar {
         margin-left: auto;

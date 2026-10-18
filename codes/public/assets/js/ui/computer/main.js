@@ -132,8 +132,6 @@
                 const uuid = state.state.currentId;
                 if (!uuid || T.todosUI?.isOpen?.() || T.settingsUI?.isOpen?.()) return;
                 C.navigate(uuid);
-                // 모바일에서는 채팅 위로 오른쪽에서 밀려 들어온다.
-                T.gestures?.openInner?.();
             });
         }
     }

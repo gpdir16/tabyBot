@@ -54,10 +54,7 @@
                 class: "btn-icon cp-back",
                 "data-tip": t("back"),
                 "aria-label": t("back"),
-                // 모바일에서는 밀어서 닫을 때와 같은 모양으로 밀려 나간 뒤 닫힌다.
-                onclick: () => {
-                    if (!T.gestures?.closeInner?.()) C.close();
-                },
+                onclick: () => C.close(),
             },
             [T.icon("chevron-left")],
         );

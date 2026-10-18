@@ -5,11 +5,8 @@
    - 뒤로: 채팅·설정 등 메인 화면에서 오른쪽으로 민다(왼쪽 가장자리에서든, 화면 어디서든).
      메인 화면이 손가락을 따라 밀려 나가고 그 밑에서 목록이 드러난다. 충분히 밀거나 튕기면
      목록으로 돌아가고, 아니면 제자리로 돌아온다.
-   - 컴퓨터 화면은 채팅 위에 한 겹 더 올라온 화면이다. 여기서 뒤로 밀면 컴퓨터 화면만 밀려 나가고
-     그 밑의 채팅이 드러난다.
    - 설정의 상세 화면과 편집 폼도 한 겹씩 더 올라온 화면이다. 뒤로 밀면 맨 위 화면만 밀려 나가고 그 밑의 화면이 드러난다.
    - 할 일의 상세 화면도 같다. 맨 앞 상세를 밀어내면 그 밑의 할 일 목록이 드러난다.
-   - 컴퓨터 화면은 버튼으로 열고 닫을 때도 같은 모양으로 밀려 들어오고 나간다(openInner/closeInner).
    - 앞으로: 목록에서 오른쪽 가장자리를 잡고 왼쪽으로 밀면 방금 보던 화면이 따라 들어온다.
 
    데스크톱에는 화면을 밀어 넘기는 개념이 없어 아무것도 하지 않는다. */
@@ -75,12 +72,6 @@
         requestAnimationFrame(() => document.body.classList.remove("mobile-route-sync"));
     }
 
-    // 컴퓨터 화면이 떠 있는가(채팅 위에 한 겹 더 올라온 화면).
-    function innerPage() {
-        const page = document.getElementById("computerPage");
-        return page && !page.hidden && document.body.classList.contains("computer-route") ? page : null;
-    }
-
     function pickMode(cur, dx) {
         if (!isMobile() || blocked()) return null;
         // 할 일 상세 화면은 메인 화면 밖(맨 위 층)에 떠 있다. 그 위에서의 밀기는 그 화면을 밀어낸다.
@@ -93,8 +84,8 @@
         }
         if (chatOpen()) {
             if (dx <= 0) return null;
-            let back = innerPage() ? "inner" : "back";
-            if (back === "back" && T.settingsUI?.gesture?.canPop()) {
+            let back = "back";
+            if (T.settingsUI?.gesture?.canPop()) {
                 back = "panel";
                 cur.api = T.settingsUI.gesture;
             }
@@ -111,11 +102,6 @@
         clearTimeout(settleTimer);
         document.body.classList.remove("gest-settle");
         document.body.classList.add("gest-drag");
-        if (cur.mode === "inner") {
-            // 밑에 깔린 채팅을 다시 보이게 한다(.gest-inner). 채팅은 보이지 않게만 해 두었으므로 보던 위치 그대로다.
-            cur.page = innerPage();
-            document.body.classList.add("gest-inner");
-        }
         if (cur.mode === "panel") cur.views = cur.api.begin();
         if (cur.mode === "forward") {
             // 들어올 화면을 미리 준비한다: 위치는 인라인 변형이 쥐고 있어 화면은 아직 오른쪽 밖에 있다.
@@ -129,12 +115,7 @@
 
     function update(cur, dx) {
         cur.dx = dx;
-        if (cur.mode === "inner") {
-            const x = Math.max(0, dx);
-            cur.page.style.transform = `translateX(${x}px)`;
-            // 헤더는 채팅과 같이 쓴다. 컴퓨터 화면이 얹어 둔 버튼들은 밀려 나가는 만큼 흐려진다.
-            document.body.style.setProperty("--gest-p", String(Math.min(1, x / cur.w)));
-        } else if (cur.mode === "panel") {
+        if (cur.mode === "panel") {
             const x = Math.max(0, dx);
             setViews(cur.views, x, -PARALLAX_PCT * (1 - x / cur.w), false);
         } else if (cur.mode === "back") {
@@ -151,10 +132,6 @@
         const speed = dist / Math.max(1, e.timeStamp - cur.at);
         const moved = cur.mode === "forward" ? cur.dx < 0 : cur.dx > 0;
         const commit = e.type === "touchend" && moved && (dist > cur.w * COMMIT_RATIO || (speed > FLICK_PX_MS && dist > FLICK_MIN_PX));
-        if (cur.mode === "inner") {
-            finishInner(cur, commit);
-            return;
-        }
         if (cur.mode === "panel") {
             finishPanel(cur, commit);
             return;
@@ -168,35 +145,6 @@
             // 다 자리 잡은 뒤에 실제 화면 상태를 바꾼다(변형은 이미 그 모양이라 눈에 띄는 변화가 없다).
             if (!mainShown) T.sidebar?.showList?.();
             clearPanels();
-        }, SETTLE_MS);
-    }
-
-    // 컴퓨터 화면을 끝까지 밀어내거나(닫기) 제자리로 돌려놓는다.
-    function finishInner(cur, commit) {
-        const page = cur.page;
-        const done = () => {
-            document.body.classList.remove("gest-drag", "gest-settle", "gest-inner");
-            document.body.style.removeProperty("--gest-p");
-            page.style.transform = "";
-        };
-        document.body.classList.remove("gest-drag");
-        document.body.classList.add("gest-settle");
-        page.style.transform = commit ? `translateX(${cur.w}px)` : "";
-        document.body.style.setProperty("--gest-p", commit ? "1" : "0");
-        settleTimer = setTimeout(() => {
-            if (!commit) {
-                done();
-                return;
-            }
-            // 컴퓨터 화면의 뒤로 버튼과 같은 동작. 히스토리를 거쳐 닫히는 경우 한 박자 늦으므로,
-            // 실제로 닫힌 뒤에 정리한다(그 전에 풀면 화면이 잠깐 되돌아와 보인다).
-            T.computerUI?.close?.();
-            const startedAt = Date.now();
-            const waitClosed = () => {
-                if (!innerPage() || Date.now() - startedAt > 600) done();
-                else requestAnimationFrame(waitClosed);
-            };
-            waitClosed();
         }, SETTLE_MS);
     }
 
@@ -224,40 +172,6 @@
             cur.api.end(commit, cur.views);
         };
         settleTimer = setTimeout(() => settleDone?.(), SETTLE_MS);
-    }
-
-    /* 컴퓨터 화면을 버튼으로 열고 닫을 때의 전환. 손가락으로 밀 때와 같은 층 구조(.gest-inner)를 써서
-       채팅 위로 밀려 들어오고, 밀려 나가며 채팅이 드러난다. 전환을 하지 않았으면 false. */
-    function canAnimateInner() {
-        return isMobile() && !!innerPage() && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    }
-    function openInner() {
-        if (!canAnimateInner()) return false;
-        const page = innerPage();
-        clearTimeout(settleTimer);
-        document.body.classList.remove("gest-drag", "gest-settle");
-        document.body.classList.add("gest-inner");
-        page.style.transform = `translateX(${window.innerWidth}px)`;
-        document.body.style.setProperty("--gest-p", "1");
-        void page.offsetWidth; // 시작 위치를 반영한 뒤 전환을 건다
-        document.body.classList.add("gest-settle");
-        page.style.transform = "";
-        document.body.style.setProperty("--gest-p", "0");
-        settleTimer = setTimeout(() => {
-            document.body.classList.remove("gest-settle", "gest-inner");
-            document.body.style.removeProperty("--gest-p");
-        }, SETTLE_MS);
-        return true;
-    }
-    function closeInner() {
-        if (!canAnimateInner()) return false;
-        clearTimeout(settleTimer);
-        document.body.classList.remove("gest-settle");
-        document.body.classList.add("gest-inner");
-        document.body.style.setProperty("--gest-p", "0");
-        void innerPage().offsetWidth;
-        finishInner({ page: innerPage(), w: window.innerWidth }, true);
-        return true;
     }
 
     // 가장자리 터치는 시스템 제스처를 막느라 기본 동작(클릭 포함)까지 막혔다. 탭이었으면 대신 눌러 준다.
@@ -345,5 +259,5 @@
         initTouch();
     }
 
-    T.gestures = { init, openInner, closeInner };
+    T.gestures = { init };
 })(window.Taby);
