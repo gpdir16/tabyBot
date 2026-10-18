@@ -5804,6 +5804,152 @@ body.computer-route #jumpLatest {
     display: none;
 }
 
+/* 파일 탭: 경로 바 + 목록 + 미리보기 */
+.cp-files {
+    position: relative;
+}
+.cp-filebar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+.cp-filebar .cp-tool {
+    background: var(--surface-2);
+    border: 0;
+    color: var(--text-secondary);
+    backdrop-filter: none;
+}
+.cp-filepath {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    padding: 0 var(--sp-3);
+    border: 1px solid transparent;
+    border-radius: var(--radius-m);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.cp-filepath:focus {
+    border-color: var(--accent);
+    box-shadow: var(--focus-ring);
+    outline: none;
+}
+.cp-filebody {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+.cp-filelist {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 6px;
+    -webkit-overflow-scrolling: touch;
+}
+.cp-file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--radius-s);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-m);
+    text-align: left;
+    cursor: default;
+}
+.cp-file-row:hover,
+.cp-file-row.on {
+    background: var(--hover);
+}
+.cp-file-row .icon {
+    flex: none;
+    color: var(--text-secondary);
+}
+.cp-file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cp-file-size {
+    flex: none;
+    color: var(--text-tertiary);
+    font-size: var(--fs-xs);
+}
+.cp-fileview {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: auto;
+    padding: 10px;
+    border-left: 1px solid var(--border);
+}
+.cp-fileview.hidden {
+    display: none;
+}
+.cp-fileview-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    font-size: var(--fs-s);
+}
+.cp-fileview-head .cp-file-name {
+    flex: 0 1 auto;
+}
+.cp-filedl {
+    flex: none;
+    color: var(--accent);
+    text-decoration: none;
+}
+.cp-filetext {
+    flex: 1;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.cp-fileimage {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    align-self: center;
+}
+.cp-fileempty,
+.cp-filenote {
+    padding: 14px;
+    color: var(--text-tertiary);
+    font-size: var(--fs-s);
+    text-align: center;
+}
+@media (max-width: 860px) {
+    .cp-filebody {
+        flex-direction: column;
+    }
+    .cp-fileview {
+        flex: none;
+        max-height: 45%;
+        border-top: 1px solid var(--border);
+        border-left: 0;
+    }
+}
+
 .cp-start {
     border: 0;
     border-radius: var(--radius-s);

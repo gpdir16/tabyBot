@@ -547,5 +547,15 @@
         computerKeyboard: "Keyboard input",
         computerModeTrackpad: "Trackpad mode",
         computerModeTouch: "Direct touch mode",
+        computerFiles: "Files",
+        computerFilesPath: "Container path",
+        computerFilesUp: "Up",
+        computerFilesRefresh: "Refresh",
+        computerFilesEmpty: "Empty folder",
+        computerFilesLoading: "Loading…",
+        computerFilesFailed: "Could not read the folder",
+        computerFilesBinary: "Binary file. Download it to view.",
+        computerFilesTruncated: "Preview truncated. Download the file for the full content.",
+        computerFilesDownload: "Download",
     };
 })(window.Taby);

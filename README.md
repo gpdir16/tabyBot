@@ -25,25 +25,25 @@ Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI 
 
 - Differences between tabyBot and tabyAgent: (1) tabyBot runs in its own web UI while tabyAgent runs on Telegram. (2) Many features, like improved self-improvement and dreaming, are only in tabyBot for now and will be ported to tabyAgent later. (3) tabyBot is not tied to a specific platform, so it gets new features faster.
 
-| Feature                 | tabyBot              | Grok Bot             | OpenClaw         | Hermes           | ChatGPT (Chat)  |
-| ----------------------- | -------------------- | -------------------- | ---------------- | ---------------- | --------------- |
-| Everyday chat           | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
-| Multiple agents         | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
-| Search                  | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
-| Multiple providers      | ✅ Yes               | ❌ No                | ✅ Yes           | ✅ Yes           | ❌ No           |
-| Smart todo list         | ✅ User + agents     | ❌ No                | ❌ No            | ❌ No            | ❌ No           |
-| Remote computer control | ✅ Browser, terminal | ✅ Browser, terminal | ❌ No            | ❌ No            | ❌ No           |
-| Proactive outreach      | ✅ Yes               | ❌ No                | ❌ No            | ❌ No            | ❌ No           |
-| Skills                  | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
-| MCP                     | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Dev mode     |
-| Scheduled tasks         | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
-| Self-improvement        | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
-| Terminal                | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ Sandbox only |
-| Browser                 | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
-| GUI apps                | ✅ Yes               | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
-| Local execution         | ✅ Yes               | ❌ No                | ✅ Yes           | ✅ Yes           | ❌ No           |
-| NSFW level              | ✅ Allow, block      | ❌ Not available     | ❌ Not available | ❌ Not available | ❌ Block        |
-| License                 | ✅ AGPL-3.0          | ❌ Proprietary       | ✅ MIT           | ✅ MIT           | ❌ Proprietary  |
+| Feature                 | tabyBot                     | Grok Bot             | OpenClaw         | Hermes           | ChatGPT (Chat)  |
+| ----------------------- | --------------------------- | -------------------- | ---------------- | ---------------- | --------------- |
+| Everyday chat           | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
+| Multiple agents         | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Search                  | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
+| Multiple providers      | ✅ Yes                      | ❌ No                | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Smart todo list         | ✅ User + agents            | ❌ No                | ❌ No            | ❌ No            | ❌ No           |
+| Remote computer control | ✅ Browser, files, terminal | ✅ Browser, terminal | ❌ No            | ❌ No            | ❌ No           |
+| Proactive outreach      | ✅ Yes                      | ❌ No                | ❌ No            | ❌ No            | ❌ No           |
+| Skills                  | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| MCP                     | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Dev mode     |
+| Scheduled tasks         | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ✅ Yes          |
+| Self-improvement        | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Terminal                | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ Sandbox only |
+| Browser                 | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| GUI apps                | ✅ Yes                      | ✅ Yes               | ✅ Yes           | ✅ Yes           | ❌ No           |
+| Local execution         | ✅ Yes                      | ❌ No                | ✅ Yes           | ✅ Yes           | ❌ No           |
+| NSFW level              | ✅ Allow, block             | ❌ Not available     | ❌ Not available | ❌ Not available | ❌ Block        |
+| License                 | ✅ AGPL-3.0                 | ❌ Proprietary       | ✅ MIT           | ✅ MIT           | ❌ Proprietary  |
 
 > Tests used the Grok OAuth provider and the Grok 4.6 model.
 

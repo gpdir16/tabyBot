@@ -190,6 +190,16 @@
         computerScreenStart: (geometry) => request("/api/computer/screen/start", { method: "POST", json: geometry ? { geometry } : {} }),
         computerScreenStop: () => request("/api/computer/screen/stop", { method: "POST", json: {} }),
         computerBrowserOpen: (agentId, url) => request("/api/computer/browser/open", { method: "POST", json: { agentId, url } }),
+        containerFiles: (path) => request(`/api/computer/files?path=${enc(path || "")}`),
+        containerFileText: (path) => request(`/api/computer/files/text?path=${enc(path || "")}`),
+        resolveContainerPaths: (paths) => request("/api/computer/files/resolve", { method: "POST", json: { paths: paths || [] } }),
+        containerFileHref: (path, inline) => {
+            const qs = new URLSearchParams({ path: String(path || "") });
+            if (inline) qs.set("inline", "1");
+            const tk = getToken();
+            if (tk) qs.set("token", tk);
+            return `/api/computer/files/raw?${qs.toString()}`;
+        },
 
         authStatus: () => request("/api/auth/status"),
         claudeAuthStatus: () => request("/api/auth/claude/status"),
