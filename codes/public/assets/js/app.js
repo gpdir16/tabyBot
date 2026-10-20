@@ -502,6 +502,8 @@
         const uuid = botUuidFromPath();
         const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
         if (bot && bot.uuid !== state.state.currentId) T.chat.open(bot.uuid, { replaceState: true });
+        // 이미 열린 대화로 다시 들어온 경우(알림을 누르거나 목록에서 다시 고름): 그사이 놓친 내용이 있을 수 있어 정본을 다시 받는다.
+        else if (bot) T.chat.refreshCurrent?.();
         // 사이드바 선택 표시(설정 행/봇 행)를 라우트에 맞춘다.
         T.sidebar?.syncRoute?.();
     }

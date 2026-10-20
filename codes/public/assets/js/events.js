@@ -464,12 +464,26 @@
         clearTimeout(timer);
     }
 
-    // 숨김 해제 시: 끊긴 상태면 즉시 재접속 시도 + 누락 목록 갱신
+    // 숨김 해제 시: 놓친 내용을 되살린다.
+    // 모바일은 백그라운드에서 연결이 겉으로는 열린 채 이벤트만 끊기기도 한다(감시 타이머는 40초 뒤에야 안다).
+    // 그동안 목록만 새로 받으면 미리보기에는 답이 뜨는데 열려 있던 대화에는 없다.
+    // 잠깐 이상 숨겨져 있었으면 다시 접속해 hello의 전체 재동기화와 놓친 이벤트 재생을 받는다.
+    const HIDDEN_RECONNECT_MS = 10_000;
+    let hiddenAt = 0;
     document.addEventListener("visibilitychange", () => {
-        if (document.hidden) return;
+        if (document.hidden) {
+            hiddenAt = Date.now();
+            return;
+        }
+        const longHidden = hiddenAt > 0 && Date.now() - hiddenAt >= HIDDEN_RECONNECT_MS;
+        hiddenAt = 0;
+        if (!state.state.offline && (longHidden || state.state.conn === "disconnected")) {
+            connect();
+            return;
+        }
         refreshConversations();
         refreshTodos();
-        if (!state.state.offline && state.state.conn === "disconnected") connect();
+        T.chat?.refreshCurrent?.();
     });
 
     window.addEventListener("pagehide", stopInternal);
