@@ -209,9 +209,24 @@
         const interEl = T.h("div", { class: "live-inter hidden" });
         const toolsEl = T.h("div", { class: "tool-stack hidden" });
         const asksEl = T.h("div", { class: "asks hidden" });
-        const bubble = T.h("div", { class: "bubble" }, [statusEl]);
+        const textEl = T.h("div", { class: "live-text" });
+        const bubble = T.h("div", { class: "bubble" }, [statusEl, textEl]);
         root.append(T.h("div", { class: "msg-stack" }, [interEl, toolsEl, asksEl, bubble]));
         thread.append(root);
+        // 생성 중인 답변. 다시 그려 붙여도 이미 보여 준 부분부터 이어서 푼다(live.streamShown).
+        const stream = T.mdStream.create(textEl, {
+            shown: live.streamShown || 0,
+            onProgress(n) {
+                live.streamShown = n;
+            },
+            onRender() {
+                const shown = Boolean(stream?.text.trim());
+                statusEl.classList.toggle("hidden", shown);
+                if (C.pinnedBottom) C.scrollToBottom(false);
+                C.updateJump();
+                C.fitBubbleRadius(bubble);
+            },
+        });
         C.liveEls = {
             root,
             bubble,
@@ -219,6 +234,7 @@
             toolsEl,
             asksEl,
             interEl,
+            stream,
             toolN: -1,
             interN: -1,
             askSig: "",
@@ -237,6 +253,11 @@
             C.liveEls.labelKey = key;
             C.liveEls.statusEl.setAttribute("aria-label", t(key));
         }
+
+        // 생성 중인 본문. 자동 실행은 침묵으로 끝날 수 있어 답이 확정되기 전에는 보이지 않는다(목록 미리보기와 같다).
+        const text = live.automated ? "" : live.text;
+        C.liveEls.stream.update(text);
+        if (!text) C.liveEls.statusEl.classList.remove("hidden");
 
         // 중간 라운드 텍스트(툴 호출 전 코멘트): 새로고침 시 히스토리에 남는 것과 동일하게 표시
         if (live.intermediate.length !== C.liveEls.interN) {

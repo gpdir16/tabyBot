@@ -168,6 +168,7 @@
         };
 
         state.on("status", routeIfCurrent);
+        state.on("delta", routeIfCurrent);
         state.on("tool", routeIfCurrent);
         state.on("ask", routeIfCurrent);
         state.on("ask_resolved", routeIfCurrent);

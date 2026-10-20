@@ -840,6 +840,19 @@ kbd {
     display: none;
 }
 
+/* 생성 중인 답변: 새로 나온 글자가 서서히 나타난다(stream.js FADE_MS와 같은 시간) */
+.live-text:empty {
+    display: none;
+}
+.stream-in {
+    animation: stream-in 280ms ease-out both;
+}
+@keyframes stream-in {
+    from {
+        opacity: 0;
+    }
+}
+
 /* ── 상태 라벨 (shimmer) ───────────────────────────────── */
 .gen-label {
     display: flex;
