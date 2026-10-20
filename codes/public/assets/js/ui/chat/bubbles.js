@@ -109,7 +109,12 @@
         const atts = buildMessageAttachments(items);
         if (atts) stack.append(atts);
         if (visibleText) {
-            const bubble = T.h("div", { class: "bubble" }, [T.h("div", { class: "bubble-text", text: visibleText })]);
+            // 받은 글과 같은 경로로 그린다: 마크다운 전체, 링크, 실제 파일 경로 링크.
+            const bubble = T.h("div", { class: "bubble" }, [T.md.render(visibleText)]);
+            enhanceFileLinks(bubble);
+            bubble.querySelectorAll("img").forEach((img) => {
+                img.addEventListener("load", () => fitBubbleRadius(bubble));
+            });
             stack.append(bubble);
         }
         C.placeTime(C.msgTimeEl(at), stack, stack.querySelector(".bubble"));

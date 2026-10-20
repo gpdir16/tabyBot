@@ -999,6 +999,44 @@ kbd {
     font-size: 16px;
     line-height: 1.45;
 }
+/* 내가 보낸 글도 받은 글과 같은 마크다운으로 그린다. 강조색 바탕 위라 링크, 코드, 표, 인용은 흰색 계열로 맞춘다. */
+.msg-row.user .bubble .md {
+    overflow-x: auto;
+    font-size: 16px;
+    line-height: 1.45;
+}
+.msg-row.user .bubble .codeblock,
+.msg-row.user .bubble .md img,
+.msg-row.user .bubble .md table {
+    max-width: 100%;
+}
+.msg-row.user .md a,
+.msg-row.user .md span.file-path-link,
+.msg-row.user .md :not(pre) > code.file-path-link {
+    color: #fff;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+.msg-row.user .md :not(pre) > code {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+.msg-row.user .md blockquote {
+    border-left-color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.86);
+}
+.msg-row.user .md hr {
+    border-top-color: rgba(255, 255, 255, 0.35);
+}
+.msg-row.user .md th,
+.msg-row.user .md td {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+.msg-row.user .md th {
+    background: rgba(255, 255, 255, 0.14);
+}
 .md table {
     border-collapse: collapse;
     font-size: var(--fs-m);
