@@ -45,6 +45,15 @@
         return s.startsWith("__SILENT__") || s.endsWith("__SILENT__");
     }
 
+    // 그룹 대화방: 이벤트를 낸 에이전트(speaker)가 바뀌면 앞 에이전트의 라이브를 접고 새로 연다.
+    // 앞 에이전트의 발화는 정본(turns_changed)으로 기록에 들어간다.
+    function applySpeaker(id, speaker, automated = false) {
+        if (!speaker) return;
+        const c = C.conv(id);
+        if (c.live?.speaker && c.live.speaker !== speaker) c.live = freshLive(automated);
+        ensureLive(id, automated).live.speaker = speaker;
+    }
+
     function applyStatus(id, phase, detail, elapsedMs, automated = false) {
         const c = ensureLive(id, automated);
         if (phase) c.live.phase = phase;
@@ -139,6 +148,8 @@
             status: turn.status || null,
             stats: turn.stats || null,
             attachments: turn.attachments || [],
+            // 그룹 대화방: 이 턴을 말한 에이전트 uuid(사용자 턴은 없다).
+            speaker: typeof turn.speaker === "string" ? turn.speaker : null,
             messages: (turn.messages || []).map((m) => {
                 const isParts = Array.isArray(m.content);
                 const textPart = isParts ? m.content.find((part) => part?.type === "text")?.text || "" : m.content;
@@ -359,6 +370,7 @@
         c.meta = Object.assign({}, c.meta, { updatedAt: new Date().toISOString(), ...(snippet && !silent ? { preview: snippet } : {}) });
     }
 
+    C.applySpeaker = applySpeaker;
     C.applyStatus = applyStatus;
     C.applyDelta = applyDelta;
     C.applySay = applySay;

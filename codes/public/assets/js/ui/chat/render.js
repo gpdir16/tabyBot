@@ -114,6 +114,14 @@
         });
     }
 
+    // 그룹 대화방: 에이전트가 바뀌는 첫 발화에만 이름표를 단다. 이름표를 달 에이전트 uuid, 아니면 null.
+    function speakerLabelAt(visible, i) {
+        const f = visible[i];
+        const speaker = f.m.role !== "user" ? f.turn.speaker || null : null;
+        const prev = i > 0 ? visible[i - 1] : null;
+        return speaker && !(prev && prev.m.role !== "user" && prev.turn.speaker === speaker) ? speaker : null;
+    }
+
     // 보이는 메시지 [from, to)의 행과 날짜 구분선을 만듦.
     function buildRows(from, to) {
         const { visible, lastOfTurn } = drawn;
@@ -128,8 +136,11 @@
                 lastDayKey = dayKey;
                 frag.append(T.h("div", { class: "date-sep", role: "separator" }, [T.h("span", { text: C.fmtMsgDate(msgAt) })]));
             }
+            const label = speakerLabelAt(visible, i);
             if (f.m.role === "ask") {
-                el = T.h("div", { class: "msg-row assistant ask-row" }, [T.h("div", { class: "msg-stack" }, [C.buildAskCard(f.m)])]);
+                const stack = T.h("div", { class: "msg-stack" }, [C.buildAskCard(f.m)]);
+                if (label) stack.prepend(C.buildSpeakerLabel(label));
+                el = T.h("div", { class: "msg-row assistant ask-row" }, [stack]);
             } else if (f.m.role === "user") {
                 const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
                 el = C.buildUserMessage(text, f.m.imageUrl, false, f.m.attachments, msgAt);
@@ -138,8 +149,10 @@
                     stats: lastOfTurn.get(f.turn) === i ? f.stats : null,
                     attachments: f.attachments,
                     at: msgAt,
+                    speaker: label,
                 });
             }
+            if (f.m.role !== "user" && f.turn.speaker) el.dataset.speaker = f.turn.speaker;
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
             el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
             el.dataset.m = String(f.mi);
@@ -211,7 +224,8 @@
         const asksEl = T.h("div", { class: "asks hidden" });
         const textEl = T.h("div", { class: "live-text" });
         const bubble = T.h("div", { class: "bubble" }, [statusEl, textEl]);
-        root.append(T.h("div", { class: "msg-stack" }, [interEl, toolsEl, asksEl, bubble]));
+        const speakerEl = T.h("div", { class: "live-speaker" });
+        root.append(T.h("div", { class: "msg-stack" }, [speakerEl, interEl, toolsEl, asksEl, bubble]));
         thread.append(root);
         // 생성 중인 답변. 다시 그려 붙여도 이미 보여 준 부분부터 이어서 푼다(live.streamShown).
         const stream = T.mdStream.create(textEl, {
@@ -228,8 +242,11 @@
             },
         });
         C.liveEls = {
+            live,
             root,
             bubble,
+            speakerEl,
+            speaker: null,
             statusEl,
             toolsEl,
             asksEl,
@@ -246,6 +263,14 @@
 
     function syncLive(live) {
         if (!C.liveEls) return;
+
+        // 그룹 대화방: 지금 답하는 에이전트의 이름표. 바로 위 기록이 같은 에이전트의 발화면 생략한다.
+        if (live.speaker !== C.liveEls.speaker) {
+            C.liveEls.speaker = live.speaker || null;
+            const prev = C.liveEls.root.previousElementSibling;
+            const same = prev?.classList.contains("assistant") && prev.dataset.speaker === live.speaker;
+            C.liveEls.speakerEl.replaceChildren(...(live.speaker && !same ? [C.buildSpeakerLabel(live.speaker)] : []));
+        }
 
         // 원은 고정. 글자를 갈아끼우면 shimmer가 끊긴다.
         const key = PHASE_KEY[live.phase] || "generating";
@@ -297,6 +322,11 @@
         const c = state.currentConv();
         if (!c?.live) return;
         // 스트리밍이 렌더 이후 이벤트로 시작된 경우: 라이브 블록을 여기서 마운트
+        // 그룹 대화방에서 다음 에이전트가 이어 받으면 라이브가 새것으로 바뀐다. 블록을 새로 붙인다.
+        if (C.liveEls && C.liveEls.live !== c.live) {
+            C.liveEls.root.remove();
+            C.liveEls = null;
+        }
         if (!C.liveEls) {
             mountLive(c.live);
             return;

@@ -10,6 +10,7 @@
         settings: null, // GET /api/settings 응답
         bots: [], // GET /api/agents 응답(메신저 라스터)
         folders: [], // GET /api/agents 응답의 에이전트 폴더(순서 = 표시 순서)
+        groups: [], // GET /api/agents 응답의 그룹 대화방 { id, name, members:[에이전트 uuid] }
         botQuery: "", // 봇 검색 필터
         conversations: [], // 스레드 메타(봇 uuid + 스케줄 결과 등)
         convs: new Map(), // uuid → { meta, loaded, turns, pending, live }
@@ -88,9 +89,10 @@
         emit("folders", {});
     }
 
-    // /api/agents 계열 응답 {agents, folders}를 한 번에 반영한다.
-    // folders가 없는 예전 응답이면 기존 폴더 상태를 유지한다.
+    // /api/agents 계열 응답 {agents, folders, groups}를 한 번에 반영한다.
+    // folders나 groups가 없는 예전 응답이면 기존 상태를 유지한다.
     function applyAgents(payload) {
+        if (Array.isArray(payload?.groups)) state.groups = payload.groups;
         setBots(payload?.agents || []);
         if (Array.isArray(payload?.folders)) setFolders(payload.folders);
     }
@@ -103,12 +105,34 @@
         return state.currentId ? botByUuid(state.currentId) : null;
     }
 
-    // 가장 최근에 대화한 봇: 경로 없이 앱을 열었을 때의 기본 대화.
+    // 그룹 대화방을 봇 목록과 같은 모양의 대화 상대로 만든다(uuid = 방 id).
+    function groupChat(g) {
+        return { uuid: g.id, id: null, name: g.name, members: g.members || [], isGroup: true };
+    }
+
+    // 목록에 보이는 대화 상대 전체: 에이전트와 그룹 대화방.
+    function chats() {
+        return [...state.bots, ...state.groups.map(groupChat)];
+    }
+
+    // 에이전트 스레드나 그룹 대화방. 둘 다 아니면 null.
+    function chatByUuid(uuid) {
+        const bot = botByUuid(uuid);
+        if (bot) return bot;
+        const g = state.groups.find((x) => x.id === uuid);
+        return g ? groupChat(g) : null;
+    }
+
+    function currentChat() {
+        return state.currentId ? chatByUuid(state.currentId) : null;
+    }
+
+    // 가장 최근에 대화한 상대: 경로 없이 앱을 열었을 때의 기본 대화.
     // 기록이 하나도 없으면 에이전트 순서의 첫 봇으로 폴백한다.
     function mostRecentBot() {
         let best = null;
         let bestAt = "";
-        for (const bot of state.bots) {
+        for (const bot of chats()) {
             const at = String(state.convs.get(bot.uuid)?.meta?.updatedAt || "");
             if (at && at > bestAt) {
                 best = bot;
@@ -271,6 +295,9 @@
     C.applyAgents = applyAgents;
     C.botByUuid = botByUuid;
     C.currentBot = currentBot;
+    C.chats = chats;
+    C.chatByUuid = chatByUuid;
+    C.currentChat = currentChat;
     C.mostRecentBot = mostRecentBot;
     C.replaceConversations = replaceConversations;
     C.upsertMeta = upsertMeta;

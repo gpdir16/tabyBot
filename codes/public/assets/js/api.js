@@ -171,6 +171,9 @@
         updateFolder: (id, b) => request(`/api/folders/${enc(id)}`, { method: "PATCH", json: b }),
         deleteFolder: (id) => request(`/api/folders/${enc(id)}`, { method: "DELETE" }),
         orderFolders: (ids) => request("/api/folders/order", { method: "POST", json: { ids } }),
+        createGroup: (b) => request("/api/groups", { method: "POST", json: b }),
+        updateGroup: (id, b) => request(`/api/groups/${enc(id)}`, { method: "PATCH", json: b }),
+        deleteGroup: (id) => request(`/api/groups/${enc(id)}`, { method: "DELETE" }),
 
         todos: () => request("/api/todos"),
         createTodo: (b) => request("/api/todos", { method: "POST", json: b }),

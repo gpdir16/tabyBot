@@ -33,9 +33,17 @@
         }
     }
 
-    function notifyIncoming(conversationId, body, tag, url) {
+    // 알림 제목: 에이전트 이름. 그룹 방이면 "말한 에이전트 (방 이름)".
+    function chatTitle(conversationId, speaker) {
+        const chat = conversationId ? state.chatByUuid(conversationId) : null;
+        const who = speaker ? state.botByUuid(speaker)?.name : null;
+        if (chat?.isGroup && who) return `${who} (${chat.name})`;
+        return chat?.name || null;
+    }
+
+    function notifyIncoming(conversationId, body, tag, url, speaker) {
         if (!T.notifications) return;
-        const title = (conversationId && state.botByUuid(conversationId)?.name) || "tabyBot";
+        const title = chatTitle(conversationId, speaker) || "tabyBot";
         // 대화 알림은 눌렀을 때 그 에이전트 스레드로 바로 연다.
         T.notifications.show(title, body, tag, url || (conversationId ? `/a/${conversationId}` : ""));
     }
@@ -144,17 +152,21 @@
             T.notices?.refresh();
         },
         status(msg) {
+            state.applySpeaker(msg.conversationId, msg.speaker, Boolean(msg.automated));
             state.applyStatus(msg.conversationId, msg.phase, msg.detail || "", msg.elapsedMs != null ? msg.elapsedMs : null, Boolean(msg.automated));
         },
         delta(msg) {
+            state.applySpeaker(msg.conversationId, msg.speaker, Boolean(msg.automated));
             state.applyDelta(msg.conversationId, Number(msg.offset) || 0, msg.text || "", Boolean(msg.automated));
         },
         say(msg) {
+            state.applySpeaker(msg.conversationId, msg.speaker, Boolean(msg.automated));
             const sayText = String(msg.text || "").trim();
             state.applySay(msg.conversationId, sayText);
-            if (sayText) notifyIncoming(msg.conversationId, sayText.slice(0, 180), `turn-${msg.conversationId || ""}`);
+            if (sayText) notifyIncoming(msg.conversationId, sayText.slice(0, 180), `turn-${msg.conversationId || ""}`, "", msg.speaker);
         },
         tool(msg) {
+            state.applySpeaker(msg.conversationId, msg.speaker, Boolean(msg.automated));
             const call = msg.call || {};
             state.applyTool(msg.conversationId, call.name, call.argsSummary);
         },
@@ -171,13 +183,13 @@
                 // 에이전트가 답하지 못했다. 지나가는 표시로는 놓치기 쉬워 경고창으로 알린다.
                 const detail = errorDetailOf(msg.error);
                 T.notices.alert({
-                    title: state.botByUuid(msg.conversationId)?.name,
+                    title: chatTitle(msg.conversationId, msg.speaker),
                     text: T.i18n.t("errorPrefix") + (detail ? `: ${detail}` : ""),
                 });
             }
             if (!msg.stopped && !msg.silent) {
                 const body = (msg.text || "").trim() || (msg.error && (msg.error.detail || msg.error.code)) || "";
-                if (body) notifyIncoming(msg.conversationId, body, `turn-${msg.conversationId || ""}`);
+                if (body) notifyIncoming(msg.conversationId, body, `turn-${msg.conversationId || ""}`, "", msg.speaker);
             }
         },
         user_message(msg) {
@@ -187,6 +199,7 @@
             state.touchTurns(msg.conversationId);
         },
         ask(msg) {
+            state.applySpeaker(msg.conversationId, msg.speaker, Boolean(msg.automated));
             state.applyAsk(msg.conversationId, {
                 askId: msg.askId,
                 question: msg.question,
@@ -194,7 +207,7 @@
                 expiresAt: msg.expiresAt,
                 secret: msg.secret,
             });
-            notifyIncoming(msg.conversationId, msg.question || "", `ask-${msg.askId || ""}`);
+            notifyIncoming(msg.conversationId, msg.question || "", `ask-${msg.askId || ""}`, "", msg.speaker);
         },
         ask_resolved(msg) {
             state.applyAskResolved(msg.conversationId, msg.askId, msg.answer);

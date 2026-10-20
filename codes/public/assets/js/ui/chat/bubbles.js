@@ -266,6 +266,21 @@
             });
     }
 
+    // 그룹 대화방에서 말한 에이전트의 이름표. 지워진 에이전트면 이름 없이 둔다.
+    function buildSpeakerLabel(uuid) {
+        const bot = T.state.botByUuid(uuid);
+        const name = bot?.name || "";
+        return T.h("div", { class: "msg-speaker" }, [
+            T.h("span", {
+                class: "msg-speaker-avatar",
+                text: ([...name.trim()][0] || "?").toUpperCase(),
+                style: `background-color:${T.util.safeColor(bot?.color)}`,
+                "aria-hidden": "true",
+            }),
+            T.h("span", { class: "msg-speaker-name", text: name }),
+        ]);
+    }
+
     function buildAssistant(text, opt) {
         const o = opt || {};
         const bubble = T.h("div", { class: "bubble" });
@@ -279,6 +294,8 @@
         if (sf) bubble.append(sf);
 
         const stack = T.h("div", { class: "msg-stack" }, [bubble]);
+        // 그룹 대화방: 누가 말했는지 버블 위에 이름을 단다.
+        if (o.speaker) stack.prepend(buildSpeakerLabel(o.speaker));
         const atts = buildMessageAttachments(o.attachments);
         if (atts) stack.append(atts);
         C.placeTime(C.msgTimeEl(o.at), stack, bubble);
@@ -488,7 +505,11 @@
     /* ── 빈 상태 ────────────────────────────────────────────── */
     // 메신저 톤: 거대 인사/제안칩 대신 한 줄 안내
     function buildEmptyState() {
-        const bot = T.state.currentBot();
+        const bot = T.state.currentChat();
+        if (bot?.isGroup) {
+            const names = bot.members.map((uuid) => T.state.botByUuid(uuid)?.name).filter(Boolean);
+            return T.h("div", { class: "thread-intro" }, [T.h("span", { text: t("groupThreadIntro", { names: names.join(", ") }) })]);
+        }
         const name = bot?.name || "tabyBot";
         return T.h("div", { class: "thread-intro" }, [T.h("span", { text: t("botThreadIntro", { name }) })]);
     }
@@ -498,6 +519,7 @@
     C.watchBubble = watchBubble;
     C.buildUserMessage = buildUserMessage;
     C.buildAssistant = buildAssistant;
+    C.buildSpeakerLabel = buildSpeakerLabel;
     C.buildToolCard = buildToolCard;
     C.buildAskCard = buildAskCard;
     C.buildEmptyState = buildEmptyState;

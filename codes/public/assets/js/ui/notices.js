@@ -139,7 +139,7 @@
         if (n.action?.kind === "compress_sessions")
             out.push({ label: t("noticeCompress"), confirm: compressConfirm, run: () => runCompress(n.action) });
         if (n.type === "todo_due" && n.url) out.push({ label: t("noticeOpenTodo"), run: () => go(n.url) });
-        if (n.conversationId && state.botByUuid(n.conversationId)) {
+        if (n.conversationId && state.chatByUuid(n.conversationId)) {
             out.push({ label: t("noticeOpenChat"), run: () => go(`/a/${n.conversationId}`) });
         }
         return out;
@@ -210,7 +210,7 @@
     // 제목: 어디서 온 알림인지. 에이전트 이름, "할 일", 그 밖은 앱 이름.
     function titleOf(n) {
         if (n.type === "todo_due") return t("todos");
-        return (n.conversationId && state.botByUuid(n.conversationId)?.name) || "tabyBot";
+        return (n.conversationId && state.chatByUuid(n.conversationId)?.name) || "tabyBot";
     }
 
     function closeModal() {

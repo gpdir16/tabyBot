@@ -1,7 +1,7 @@
 import { addSuggestion, addTodo, completeTodo, getTodo, listTodos, offerHandoff, removeTodo, updateTodo, withdrawHandoff } from "../todos/store.js";
 import { queueTodoNow } from "../todos/scheduler.js";
 import { getAgent } from "../agents-store.js";
-import { isValidId } from "../web/conversations.js";
+import { isAgentThreadId } from "../web/conversations.js";
 import { defaultTimeZone } from "../scheduling/time.js";
 import { emit } from "../web/bus.js";
 
@@ -165,9 +165,9 @@ export const todoToolDefinitions = [
 
 function defaultConversationId(args, ctx) {
     const requested = String(args?.conversationId || "").trim();
-    if (isValidId(requested)) return requested;
+    if (isAgentThreadId(requested)) return requested;
     const current = String(ctx?.sessionKey || ctx?.chatId || "").trim();
-    if (isValidId(current)) return current;
+    if (isAgentThreadId(current)) return current;
     return "";
 }
 
@@ -197,7 +197,7 @@ function conversationIdForUpdate(args) {
     if (args?.conversationId == null) return undefined;
     const value = String(args.conversationId).trim();
     if (!value) return "";
-    return isValidId(value) ? value : undefined;
+    return isAgentThreadId(value) ? value : undefined;
 }
 
 // 항목을 바꾼 도구 결과: 오류가 없으면 변경 이벤트를 내보낸다.

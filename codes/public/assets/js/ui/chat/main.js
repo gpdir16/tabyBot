@@ -19,7 +19,7 @@
     // 주소를 /a/<uuid>?m=&q= 로 맞춘다. 다른 페이지가 열려 있으면 건드리지 않는다.
     function syncUrlForChat(id, params) {
         if (OTHER_ROUTE_RE.test(location.pathname)) return;
-        const bot = id ? state.botByUuid(String(id)) : null;
+        const bot = id ? state.chatByUuid(String(id)) : null;
         const qs = new URLSearchParams();
         if (params?.q) qs.set("q", params.q);
         if (params?.m != null) qs.set("m", String(params.m));
@@ -152,11 +152,19 @@
             hdrName.textContent = name;
             return;
         }
-        const bot = T.state.currentBot();
+        const bot = T.state.currentChat();
         const name = bot ? bot.name : "";
+        // 그룹 대화방에는 봇 컴퓨터가 없다. 헤더의 컴퓨터 버튼을 자리는 둔 채 감춘다.
+        document.body.classList.toggle("group-chat", Boolean(bot?.isGroup));
         document.title = name ? `${name} · tabyBot` : "tabyBot";
-        hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
-        hdrAvatar.style.backgroundColor = bot?.color || "var(--surface-2)";
+        if (bot?.isGroup) {
+            // 그룹 대화방: 이니셜 대신 여러 사람 아이콘.
+            hdrAvatar.append(T.icon("users", "icon-sm"));
+            hdrAvatar.style.backgroundColor = "var(--accent)";
+        } else {
+            hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
+            hdrAvatar.style.backgroundColor = bot?.color || "var(--surface-2)";
+        }
         hdrAvatar.style.color = "#fff";
         hdrName.textContent = name;
     }

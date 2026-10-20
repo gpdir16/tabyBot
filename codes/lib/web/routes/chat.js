@@ -4,6 +4,8 @@ import * as conversationsStore from "../conversations.js";
 import { EmptyUploadError, MAX_UPLOAD_BYTES, UploadTooLargeError, getFile, publicAttachment, saveUploadStream, storedAttachment } from "../files.js";
 import { emit, eventsSince } from "../bus.js";
 import { dispatchMessage, stopConversation } from "../turns.js";
+import { dispatchGroupMessage, stopGroup } from "../group-turns.js";
+import { isGroupId } from "../../groups-store.js";
 import { listPendingAsks, resolvePendingAskByAskId } from "../../agent/user-ask.js";
 import { SecretError } from "../../secrets/store.js";
 import { clearNotices, listNotices, markNoticesRead } from "../notices.js";
@@ -56,13 +58,15 @@ function registerConversationsRoutes(router) {
         const published = stored.map(publicAttachment);
         // 클라이언트가 붙인 id: 낙관적으로 그린 버블과 기록의 메시지를 같은 것으로 맞추고, 재전송을 걸러 낸다.
         const clientId = typeof body.clientId === "string" && CLIENT_ID_RE.test(body.clientId) ? body.clientId : null;
-        const dispatched = dispatchMessage({
-            sessionKey: id,
-            agentId: meta.agentId,
-            id: clientId,
-            userText: text,
-            attachments: stored,
-        });
+        const dispatched = isGroupId(id)
+            ? dispatchGroupMessage({ groupId: id, id: clientId, userText: text, attachments: stored })
+            : dispatchMessage({
+                  sessionKey: id,
+                  agentId: meta.agentId,
+                  id: clientId,
+                  userText: text,
+                  attachments: stored,
+              });
         // 멀티탭 동기화: 다른 클라이언트에도 사용자 메시지를 즉시 반영
         if (!dispatched.duplicate) {
             emit({
@@ -84,7 +88,7 @@ function registerConversationsRoutes(router) {
     });
 
     router.add("POST", "/api/conversations/:id/stop", (ctx) => {
-        ctx.json200({ ok: stopConversation(ctx.params.id) });
+        ctx.json200({ ok: isGroupId(ctx.params.id) ? stopGroup(ctx.params.id) : stopConversation(ctx.params.id) });
     });
 
     router.add("GET", "/api/search/messages", (ctx) => {

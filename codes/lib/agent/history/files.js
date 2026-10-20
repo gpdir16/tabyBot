@@ -3,16 +3,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { SESSION_DIR } from "../../paths.js";
 import { getAgentByUuid } from "../../agents-store.js";
+import { groupDir, isGroupId, memberDir, parseMemberKey } from "../../groups-store.js";
 import { readJsonFile, writeJsonAtomic } from "../../atomic-file.js";
 
 const HISTORY_VERSION = 3;
 
 const MANIFEST_VERSION = 1;
 
+// 대화 폴더: 에이전트 uuid면 그 에이전트의 스레드, 그룹 id면 그 방의 화면 기록,
+// 그룹 안의 에이전트 세션 키면 그 에이전트가 그 방에서 쓰는 자기 세션이다.
 export function conversationDir(chatId) {
     const agent = getAgentByUuid(chatId);
-    if (!agent?.uuid) return null;
-    return path.join(SESSION_DIR, agent.uuid);
+    if (agent?.uuid) return path.join(SESSION_DIR, agent.uuid);
+    if (isGroupId(chatId)) return groupDir(chatId);
+    const member = parseMemberKey(chatId);
+    return member ? memberDir(member.groupId, member.agentUuid) : null;
 }
 
 function manifestPath(chatId) {
