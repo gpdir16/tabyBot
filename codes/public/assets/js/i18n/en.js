@@ -137,6 +137,7 @@
         apiKey: "API key",
         apiKeyOptional: "Key optional",
         apiKeySaved: "Saved",
+        apiKeySavedToast: "API key saved",
         getApiKey: "Get an API key",
         oauthOpenPage: "Open page",
         loadingModels: "Loading models…",

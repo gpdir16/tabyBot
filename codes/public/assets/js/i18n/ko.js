@@ -137,6 +137,7 @@
         apiKey: "API 키",
         apiKeyOptional: "키 선택사항",
         apiKeySaved: "저장됨",
+        apiKeySavedToast: "API 키를 저장했습니다",
         getApiKey: "API 키 발급받기",
         oauthOpenPage: "페이지 열기",
         loadingModels: "모델 불러오는 중…",
