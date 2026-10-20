@@ -80,7 +80,6 @@
     function open(opt) {
         // open({tab, agentId}) 또는 open("model") 형태 모두 지원
         const o = typeof opt === "object" && opt ? opt : { tab: opt };
-        C.providerChoice = null;
         let tab, agent;
         if (o.agentId != null && o.agentId !== "" && (!o.tab || o.tab === "agents")) {
             tab = "agents";
@@ -108,6 +107,7 @@
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
         C.modelSub = null;
         C.efficiencySub = null;
+        C.providerSub = null;
         C.keyEditing = false;
         C.credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;
@@ -157,7 +157,6 @@
         C.modelsLoading = false;
         C.modelsFailedKey = null;
         C.modelsReq++;
-        C.providerChoice = null;
         C.skillsCache = null;
         C.skillsLoading = false;
         C.skillsFailed = false;

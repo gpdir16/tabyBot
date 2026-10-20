@@ -34,7 +34,7 @@
     ];
 
     // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
-    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub"];
+    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub", "providerSub"];
 
     function formOpen() {
         return FORM_KEYS.some((k) => C[k]);
@@ -94,6 +94,7 @@
         if (C.credsEditing) return t(C.credsEditing === "password" ? "authPassword" : "authUsername");
         if (C.modelSub) return t(C.modelSub === "adv" ? "advanced" : "model");
         if (C.efficiencySub) return t(C.efficiencySub === "stats" ? "usageStats" : "cacheKeepAlive");
+        if (C.providerSub) return t("addProvider");
         return "";
     }
 

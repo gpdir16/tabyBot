@@ -17,41 +17,73 @@
 
     let modelFilter = "";
 
-    C.providerChoice = null;
-
     C.keyEditing = false; // 저장된 API 키를 다시 입력하는 중인지
 
     C.cliLoginPending = null; // 진행 중 CLI 로그인 { url }
     C.oauthPending = null; // 진행 중 OAuth 디바이스 플로우 { kind, userCode, deviceUrl }
 
-    /* ── 프로바이더 페이지 ──────────────────────────────────── */
+    /* ── 프로바이더 페이지 ──────────────────────────────────
+       저장해 둔 프로필(같은 프로바이더나 커스텀 주소를 여러 개 둘 수 있다) 가운데 하나를 골라 쓴다.
+       목록 아래에는 고른 프로필의 이름, 주소, 키가 있다. */
+    C.providerSub = null; // 프로바이더 탭에서 한 단계 더 들어간 화면: "add"(프로바이더 추가) | null
+
+    // 프로필을 바꾸면 모델 목록과 키 입력 상태가 이전 프로필의 것으로 남지 않게 비운다.
+    function forgetProviderState() {
+        C.keyEditing = false;
+        C.orProvidersCache = null;
+        C.orProvidersFailed = false;
+        resetModels();
+    }
+
+    // 프로필 요청을 보내고 돌아온 설정으로 화면을 다시 그린다. 성공하면 true.
+    async function profileRequest(run) {
+        try {
+            const s = await run();
+            if (s) state.setSettings(s);
+            return true;
+        } catch (err) {
+            T.toast.show("error", T.api.errorText(err, t("saveFailed")));
+            return false;
+        }
+    }
+
     function buildProvider(body) {
         const s = state.state.settings;
-        if (!s) {
+        const providers = s?.providers || [];
+        if (!s || !providers.length) {
             body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
             return;
         }
         const sec = T.h("div", { class: "set-section" });
-        const provider = s.provider || {};
-        const providers = s.providers || [];
-        const defaultPreset = providers.find((p) => p.id === "default");
-        const customActive =
-            C.providerChoice === "custom" || (provider.id === "default" && defaultPreset && provider.baseURL !== defaultPreset.baseURL);
-        const selectedProviderId = customActive ? "custom" : provider.id;
-        if (!providers.length) {
-            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+        body.append(sec);
+        if (C.providerSub === "add") {
+            buildProviderAdd(sec, providers);
             return;
         }
+        const provider = s.provider || {};
+        const profiles = Array.isArray(s.profiles) ? s.profiles : [];
+        const defaultPreset = providers.find((p) => p.id === "default");
+        const customActive = provider.custom === true || (provider.id === "default" && defaultPreset && provider.baseURL !== defaultPreset.baseURL);
 
+        sec.append(profileList(profiles));
+        sec.append(
+            C.actionRow(
+                t("addProvider"),
+                () =>
+                    C.openForm(() => {
+                        C.providerSub = "add";
+                    }),
+                { icon: "plus", own: true },
+            ),
+        );
+
+        const active = profiles.find((p) => p.active);
         const meta = providers.find((p) => p.id === (customActive ? "custom" : provider.id));
+        sec.append(T.h("hr", { class: "divider" }), C.fieldLabel(active?.name || meta?.label || provider.label || ""));
+        if (active) sec.append(C.labeledRow(t("profileName"), profileNameInput(active)));
         if (meta) {
             if (customActive || meta.needsBaseURL) {
-                sec.append(
-                    T.h("div", { class: "set-row" }, [
-                        T.h("div", { class: "set-label", text: t("baseURL") }),
-                        T.h("div", { class: "set-control" }, [baseURLInput(provider, customActive && provider.baseURL === defaultPreset?.baseURL)]),
-                    ]),
-                );
+                sec.append(C.labeledRow(t("baseURL"), baseURLInput(provider, customActive && provider.baseURL === defaultPreset?.baseURL)));
             }
             if (isOauthProvider(meta)) {
                 sec.append(oauthSection(provider.id));
@@ -60,44 +92,111 @@
             } else {
                 sec.append(...apiKeyRows(provider, meta));
             }
-            sec.append(T.h("hr", { class: "divider" }));
         }
+        if (provider.id === "openrouter") sec.append(T.h("hr", { class: "divider" }), openRouterPinSection(provider));
+        if (active && profiles.length > 1) {
+            sec.append(
+                T.h("hr", { class: "divider" }),
+                C.actionRow(t("deleteProfile"), () => deleteProfile(active), { danger: true, own: true }),
+            );
+        }
+    }
 
-        const plist = T.h("div", { class: "provider-list", role: "radiogroup", "aria-label": t("provider") });
+    // 저장해 둔 프로필 목록. 고른 프로필 오른쪽에 체크가 붙고, 누르면 그 프로필로 바꾼다.
+    function profileList(profiles) {
+        const list = T.h("div", { class: "models-list", role: "radiogroup", "aria-label": t("provider") });
+        for (const p of profiles) {
+            // 이름 아래에는 프로바이더와 모델을 적는다. 커스텀 주소는 주소의 호스트를 적는다.
+            let where = p.label;
+            if (p.providerId === "custom" && p.baseURL) {
+                try {
+                    where = new URL(p.baseURL).host;
+                } catch {
+                    where = p.baseURL;
+                }
+            }
+            const sub = [where === p.name ? "" : where, p.model].filter(Boolean).join(", ");
+            list.append(
+                T.h(
+                    "button",
+                    {
+                        class: `radio-row${p.active ? " selected" : ""}`,
+                        role: "radio",
+                        "aria-checked": String(p.active),
+                        async onclick() {
+                            if (p.active) return;
+                            if (!(await C.confirmLeave())) return;
+                            forgetProviderState();
+                            if (await profileRequest(() => T.api.activateProviderProfile(p.uid))) C.build();
+                        },
+                    },
+                    [
+                        T.h("div", { class: "model-main" }, [
+                            T.h("div", { class: "model-label", text: p.name }),
+                            sub ? T.h("div", { class: "model-sub" }, [T.h("span", { class: "model-id", text: sub })]) : null,
+                        ]),
+                        p.active ? T.icon("check", "sel-check") : null,
+                    ],
+                ),
+            );
+        }
+        return list;
+    }
+
+    function profileNameInput(profile) {
+        const input = T.h("input", {
+            class: "input",
+            type: "text",
+            value: profile.name,
+            "aria-label": t("profileName"),
+            spellcheck: "false",
+            maxlength: "60",
+        });
+        input.addEventListener("blur", async () => {
+            const name = input.value.trim();
+            if (name === profile.name) return;
+            // 비우면 서버가 프로바이더 이름으로 되돌린다.
+            if (await profileRequest(() => T.api.renameProviderProfile(profile.uid, name))) C.build();
+        });
+        input.addEventListener("keydown", (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter" && !e.isComposing) input.blur();
+        });
+        return input;
+    }
+
+    async function deleteProfile(profile) {
+        if (!(await C.confirmDelete(profile.name))) return;
+        forgetProviderState();
+        if (await profileRequest(() => T.api.deleteProviderProfile(profile.uid))) C.build();
+    }
+
+    // 프로바이더 추가 화면: 고르면 그 프로바이더로 새 프로필을 만들고 바로 그 프로필로 바꾼다.
+    function buildProviderAdd(sec, providers) {
+        sec.append(T.h("div", { class: "set-desc", text: t("addProviderDesc") }));
+        const plist = T.h("div", { class: "provider-list" });
         for (const p of providers) {
-            const selected = selectedProviderId === p.id;
             plist.append(
                 T.h(
                     "button",
                     {
-                        class: `provider-card${selected ? " selected" : ""}`,
-                        role: "radio",
-                        "aria-checked": String(selected),
-                        onclick() {
-                            if (selected) return;
-                            C.providerChoice = p.id;
-                            C.keyEditing = false;
-                            C.modelsReq++;
-                            C.modelsLoading = false;
-                            C.modelsCache = null;
-                            C.modelsFailedKey = null;
-                            const patch =
-                                p.id === "github-copilot"
-                                    ? { id: p.id, model: "auto", autoMode: true }
-                                    : p.id === "custom" || p.id === "default"
-                                      ? { id: p.id, baseURL: "", model: "" }
-                                      : { id: p.id, model: "" };
-                            C.put({ provider: patch }).then(() => C.build());
+                        class: "provider-card",
+                        async onclick() {
+                            if (plist.busy) return;
+                            plist.busy = true;
+                            forgetProviderState();
+                            const ok = await profileRequest(() => T.api.addProviderProfile(p.id));
+                            plist.busy = false;
+                            if (!ok) return;
+                            C.providerSub = null;
+                            C.build();
                         },
                     },
-                    [T.h("div", { class: "provider-name", text: p.label || p.id }), selected ? T.icon("check") : null],
+                    [T.h("div", { class: "provider-name", text: p.label || p.id }), T.icon("chevron", "nav-chev")],
                 ),
             );
         }
         sec.append(plist);
-        if (selectedProviderId === "openrouter") sec.append(T.h("hr", { class: "divider" }), openRouterPinSection(provider));
-
-        body.append(sec);
     }
 
     /* ── OpenRouter 업스트림 프로바이더 고정 ─────────────────
@@ -180,7 +279,7 @@
                     [
                         T.h("div", { class: "model-main" }, [
                             T.h("div", { class: "model-label", text: name }),
-                            T.h("div", { class: "model-sub" }, [T.h("span", { class: "model-id", text: sub })]),
+                            sub ? T.h("div", { class: "model-sub" }, [T.h("span", { class: "model-id", text: sub })]) : null,
                         ]),
                         selected ? T.icon("check", "sel-check") : null,
                     ],

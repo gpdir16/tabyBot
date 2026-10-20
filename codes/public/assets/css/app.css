@@ -3131,6 +3131,10 @@ body.sb-collapsed .sp-expand {
     flex: none;
     color: var(--accent);
 }
+/* 프로바이더 추가 화면의 행은 들어가는 행이다: 꺾쇠는 다른 설정 행과 같은 색 */
+.provider-card .icon.nav-chev {
+    color: var(--text-tertiary);
+}
 .provider-list {
     display: flex;
     flex-direction: column;

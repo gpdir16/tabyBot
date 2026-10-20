@@ -139,6 +139,10 @@
 
         getSettings: () => request("/api/settings"),
         putSettings: (patch) => request("/api/settings", { method: "PUT", json: patch }),
+        addProviderProfile: (providerId) => request("/api/provider-profiles", { method: "POST", json: { providerId } }),
+        renameProviderProfile: (uid, name) => request(`/api/provider-profiles/${enc(uid)}`, { method: "PUT", json: { name } }),
+        activateProviderProfile: (uid) => request(`/api/provider-profiles/${enc(uid)}/activate`, { method: "POST", json: {} }),
+        deleteProviderProfile: (uid) => request(`/api/provider-profiles/${enc(uid)}`, { method: "DELETE" }),
         compressAllSessions: (chatIds) =>
             request("/api/sessions/compress-all", { method: "POST", json: Array.isArray(chatIds) && chatIds.length ? { chatIds } : {} }),
 
