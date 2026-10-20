@@ -213,7 +213,8 @@
     }
 
     // 봇 행: 아바타 + (이름 · 시각) + (대화 미리보기 · 안읽음 배지)
-    function buildRow(bot) {
+    // inGroup: 목록 안의 폴더 묶음에 든 행. 폴더 밖의 행과 구별되게 들여 쓴다.
+    function buildRow(bot, inGroup = false) {
         const live = state.conv(bot.uuid)?.live;
         const preview = previewOf(bot);
         const unread = unreadOf(bot);
@@ -223,7 +224,7 @@
         const row = T.h(
             "div",
             {
-                class: `bot-row${state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""}`,
+                class: `bot-row${inGroup ? " in-group" : ""}${state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""}`,
                 "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? "true" : null,
                 role: "button",
                 "aria-label": `${bot.name}. ${T.md.previewPlain(previewText)}`.trim(),
@@ -398,6 +399,23 @@
         render();
     }
 
+    // 에이전트 행들. 폴더를 목록 안에 보이는 설정이면 폴더 묶음을 위에, 폴더에 없는 에이전트를 그 아래에 둔다.
+    function botRows(bots, active) {
+        if (!active && !C.query && C.foldersInList()) {
+            const rows = [];
+            // 묶음 안도 최근 메시지 순이다.
+            for (const f of state.state.folders || []) {
+                const members = bots.filter((b) => C.folderOf(b) === f.id);
+                rows.push(C.buildFolderHeader(f, members));
+                if (!C.isFolderCollapsed(f.id)) for (const bot of members) rows.push(buildRow(bot, true));
+            }
+            for (const bot of bots) if (!C.folderOf(bot)) rows.push(buildRow(bot));
+            return rows;
+        }
+        const shown = active ? bots.filter((b) => C.folderOf(b) === active) : C.allExcludesFoldered() ? bots.filter((b) => !C.folderOf(b)) : bots;
+        return shown.map((bot) => buildRow(bot));
+    }
+
     /* ── 렌더 ───────────────────────────────────────────────── */
     // 한 폴더("": 전체)의 목록 행들. 폴더를 미는 동안 옆 폴더를 미리 그릴 때도 쓴다.
     function listRows(active) {
@@ -405,8 +423,7 @@
         // 최근 메시지 순: 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
         const bots = state.state.bots.filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
-        const shown = active ? bots.filter((b) => C.folderOf(b) === active) : C.allExcludesFoldered() ? bots.filter((b) => !C.folderOf(b)) : bots;
-        for (const bot of shown) rows.push(buildRow(bot));
+        rows.push(...botRows(bots, active));
         if ((!active || C.query) && todosVisible()) rows.push(buildTodosRow());
         if (C.query && C.msgResults?.length) {
             rows.push(T.h("div", { class: "sb-sec", text: t("searchMsgs") }));

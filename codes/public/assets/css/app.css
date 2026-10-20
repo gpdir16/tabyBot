@@ -4934,6 +4934,57 @@ body.resizing {
 .folder-agent input:focus-visible ~ .folder-check {
     box-shadow: var(--focus-ring);
 }
+/* 목록 안의 폴더 묶음: 머리 행을 누르면 그 아래 에이전트 행이 접히고 펼쳐진다 */
+.sb-group {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: 40px;
+    padding: 0 var(--sp-3);
+    color: var(--text-secondary);
+    font-size: var(--fs-s);
+    font-weight: 600;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: background-color 320ms var(--ease);
+}
+.sb-group:focus-visible {
+    outline: none;
+    background: var(--hover);
+}
+.sb-group-icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: var(--text-tertiary);
+}
+.sb-group-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sb-group-count {
+    flex: 1;
+    font-weight: 400;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+.sb-group-chev {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    color: var(--text-tertiary);
+    transition: transform 200ms var(--ease);
+}
+.sb-group.collapsed .sb-group-chev {
+    transform: rotate(-90deg);
+}
+.bot-row.in-group {
+    padding-left: calc(var(--sp-3) + 20px);
+}
 /* 메시지 검색 섹션 라벨 + 히트 행 */
 .sb-sec {
     padding: var(--sp-3) 10px var(--sp-1);
@@ -6423,6 +6474,7 @@ body.viewer-open {
     .bot-row {
         transition: background-color var(--dur-1) var(--ease);
     }
+    .sb-group:hover,
     .bot-row:hover {
         background: var(--hover);
     }

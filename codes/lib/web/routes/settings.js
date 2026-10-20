@@ -244,6 +244,7 @@ export function buildSettingsPayload() {
         showReplyFooter: config.showReplyFooter !== false,
         updateCheckEnabled: config.updateCheckEnabled !== false,
         allTabExcludesFoldered: config.allTabExcludesFoldered === true,
+        foldersInList: config.foldersInList === true,
         onboardingDismissed: config.onboardingDismissed === true,
         nsfwLevel: normalizeNsfwLevel(config.nsfwLevel),
         nsfwLevels: NSFW_LEVELS,
@@ -294,7 +295,14 @@ export function askSessionCompression(lang, chatIds = null) {
 // ── PUT /api/settings 본문을 사용자 설정(config.json 내용)에 반영한다. 저장은 호출자가 한다. ──
 
 const LANGUAGES = ["en", "ko", "ja"];
-const BOOLEAN_FIELDS = ["showReplyFooter", "updateCheckEnabled", "allTabExcludesFoldered", "onboardingDismissed", "compressOnModelChange"];
+const BOOLEAN_FIELDS = [
+    "showReplyFooter",
+    "updateCheckEnabled",
+    "allTabExcludesFoldered",
+    "foldersInList",
+    "onboardingDismissed",
+    "compressOnModelChange",
+];
 const MAX_AUTO_MODEL_CANDIDATES = 30;
 
 // 일반 설정(언어·사고 수준·시간대·단계 값). 값이 잘못되면 오류 코드를 돌려준다.
