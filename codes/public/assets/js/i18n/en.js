@@ -141,6 +141,7 @@
         oauthOpenPage: "Open page",
         loadingModels: "Loading models…",
         modelsFailed: "Failed to load models",
+        baseURLAdjusted: "Base URL changed to {url}, where the model list was found",
         searchModels: "Filter models…",
         noModels: "No models found",
         vision: "Vision",

@@ -10,6 +10,7 @@
     let models = null;
 
     let modelsState = "idle"; // idle | loading | ready | failed
+    let modelsError = ""; // 목록을 받지 못한 이유(서버가 돌려준 오류)
 
     let modelsReq = 0;
 
@@ -53,6 +54,7 @@
         if (modelsState === "failed" || (modelsState === "ready" && !models.length)) {
             wrap.append(manualModel());
             if (modelsState === "failed") {
+                if (modelsError) wrap.append(T.h("div", { class: "set-desc", text: `${t("modelsFailed")}: ${modelsError}` }));
                 wrap.append(
                     T.h("button", {
                         class: "btn ghost",
@@ -155,9 +157,13 @@
             if (req !== modelsReq) return;
             models = Array.isArray(r?.models) ? r.models : [];
             modelsState = "ready";
-        } catch (_) {
+            modelsError = "";
+            // 입력한 주소에 /v1을 붙여야 목록이 나왔다: 저장할 주소도 그것으로 바꾼다.
+            if (r?.suggestedBaseURL && C.draft.baseURL.trim()) C.draft.baseURL = r.suggestedBaseURL;
+        } catch (err) {
             if (req !== modelsReq) return;
             modelsState = "failed";
+            modelsError = T.api.errorDetail(err);
         }
         if (req === modelsReq && C.visible) C.render();
     }

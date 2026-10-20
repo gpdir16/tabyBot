@@ -601,8 +601,16 @@
         try {
             const r = await T.api.models(payload);
             if (req !== C.modelsReq) return;
+            let cacheKey = key;
+            // 입력한 주소에 /v1을 붙여야 목록이 나왔다: 그 주소로 저장해 대화 요청도 같은 곳으로 가게 한다.
+            if (r?.suggestedBaseURL && provider.baseURL && r.suggestedBaseURL !== provider.baseURL) {
+                cacheKey = modelsKey({ ...provider, baseURL: r.suggestedBaseURL });
+                await C.put({ provider: { baseURL: r.suggestedBaseURL } });
+                T.toast.show("info", t("baseURLAdjusted", { url: r.suggestedBaseURL }));
+                if (req !== C.modelsReq) return;
+            }
             C.modelsCache = {
-                key,
+                key: cacheKey,
                 models: Array.isArray(r?.models) ? r.models : [],
                 routingModels: Array.isArray(r?.routingModels) ? r.routingModels : [],
             };

@@ -23,7 +23,7 @@ import { applySelfImprovementPatch, getDreamingConfig, getProactiveConfig, getRe
 import { emit } from "../bus.js";
 import { t as i18nT } from "../../i18n.js";
 import { isValidTimeZone } from "../../scheduling/time.js";
-import { fetchOpenRouterProviders, fetchProviderModels } from "../../llm/models.js";
+import { fetchOpenRouterProviders, fetchProviderModelsDetailed } from "../../llm/models.js";
 import { cacheKeepAliveSummary, normalizeCacheKeepAlive } from "../../llm/cache-keepalive.js";
 import { usageSummary } from "../../llm/usage-log.js";
 import { fetchGithubCopilotRoutingModels } from "../../llm/github-copilot-client.js";
@@ -289,9 +289,11 @@ function applyProviderPatch(config, providerPatch, prevProviderId) {
         provider.id = id;
     }
     if (providerPatch.baseURL !== undefined) {
+        // 엔드포인트 전체 주소(/chat/completions, /models)를 붙여 넣은 경우 baseURL만 남긴다.
         const url = String(providerPatch.baseURL || "")
             .trim()
-            .replace(/\/+$/, "");
+            .replace(/\/+$/, "")
+            .replace(/\/(?:chat\/completions|completions|models|responses)$/i, "");
         if (url) provider.baseURL = url;
         else delete provider.baseURL;
     }
@@ -450,7 +452,7 @@ export function registerSettingsRoutes(router) {
             } else {
                 provider = getMergedProvider(config);
             }
-            const models = await fetchProviderModels(provider, { useCache: false });
+            const { models, baseURL } = await fetchProviderModelsDetailed(provider, { useCache: false });
             let routingModels = [];
             if (provider.type === "github-copilot-oauth") {
                 try {
@@ -459,7 +461,9 @@ export function registerSettingsRoutes(router) {
                     // Auto 모델 목록은 기본 모델 목록만으로도 표시한다.
                 }
             }
-            ctx.json200({ models, routingModels });
+            // 입력한 주소에 /v1을 붙여야 목록이 나왔다: 화면이 그 주소로 바로잡는다.
+            const suggestedBaseURL = baseURL && baseURL !== provider.baseURL ? baseURL : undefined;
+            ctx.json200({ models, routingModels, suggestedBaseURL });
         } catch (err) {
             ctx.json400(err?.message || String(err));
         }
