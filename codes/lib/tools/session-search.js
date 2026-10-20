@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SESSION_DIR, USER_DIR } from "../paths.js";
-import { findAgentByNameOrId, getAgent, listAgents } from "../agents-store.js";
+import { findAgentByNameOrId, getAgent, getAgentByUuid, listAgents } from "../agents-store.js";
 import { extractSessionTextLines } from "../agent/chat-history.js";
+import { groupDir, groupsOfAgent, listGroups } from "../groups-store.js";
 
 const DEFAULT_LIMIT = 15;
 const MAX_LIMIT = 50;
@@ -15,12 +16,12 @@ export const sessionSearchToolDefinitions = [
         function: {
             name: "session_search",
             description:
-                "Search every archived session transcript (all bots) by keyword or regex. Returns matching user/assistant lines with session file paths. Follow up with file_read on a hit for full context. Only conversation text is searched, not tool outputs.",
+                "Search every archived session transcript (all bots, and group rooms) by keyword or regex. Returns matching user/assistant lines with session file paths. Follow up with file_read on a hit for full context. Only conversation text is searched, not tool outputs.",
             parameters: {
                 type: "object",
                 properties: {
                     query: { type: "string", description: "Case-insensitive keyword, or a regex if it compiles" },
-                    agent: { type: "string", description: "Limit to one bot by id or name (default: all)" },
+                    agent: { type: "string", description: "Limit to one bot by id or name, including the group rooms it is in (default: all)" },
                     limit: { type: "number", description: `Max matches (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})` },
                 },
                 required: ["query"],
@@ -45,6 +46,23 @@ function snippetAround(text, idx, queryLen) {
     return `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ")}${end < text.length ? "…" : ""}`;
 }
 
+// 찾을 곳: 에이전트 스레드와 그룹 방의 화면 기록(방 안의 모든 발화가 이름과 함께 들어 있다).
+// agentQuery를 주면 그 에이전트의 스레드와 그 에이전트가 든 방만 찾는다.
+function searchSources(agentQuery) {
+    let agents = listAgents();
+    let groups = listGroups();
+    if (agentQuery) {
+        const found = getAgent(String(agentQuery).trim()) || findAgentByNameOrId(agentQuery);
+        if (!found) return { error: `unknown agent: ${agentQuery}` };
+        agents = [found];
+        groups = groupsOfAgent(found.uuid);
+    }
+    return [
+        ...agents.map((agent) => ({ agent: agent.name, agentId: agent.id, root: path.join(SESSION_DIR, agent.uuid) })),
+        ...groups.map((group) => ({ agent: `group: ${group.name}`, agentId: null, groupId: group.id, root: groupDir(group.id) })),
+    ];
+}
+
 export function executeSessionSearchTool(name, args) {
     if (name !== "session_search") return { error: `Unknown tool: ${name}` };
 
@@ -52,20 +70,15 @@ export function executeSessionSearchTool(name, args) {
     if (!query) return { error: "query is required" };
     const limit = Math.min(Math.max(1, Number(args?.limit) || DEFAULT_LIMIT), MAX_LIMIT);
 
-    let agents = listAgents();
-    if (args?.agent) {
-        const found = getAgent(String(args.agent).trim()) || findAgentByNameOrId(args.agent);
-        if (!found) return { error: `unknown agent: ${args.agent}` };
-        agents = [found];
-    }
+    const sources = searchSources(args?.agent);
+    if (sources.error) return sources;
 
     const matches = [];
     let scannedFiles = 0;
     let hitLimit = false;
 
-    outer: for (const agent of agents) {
-        const root = path.join(SESSION_DIR, agent.uuid);
-        const sessionsDir = path.join(root, "sessions");
+    outer: for (const source of sources) {
+        const sessionsDir = path.join(source.root, "sessions");
         let files;
         try {
             files = fs
@@ -92,12 +105,13 @@ export function executeSessionSearchTool(name, args) {
                 const idx = matcher(line.text);
                 if (idx === -1) continue;
                 matches.push({
-                    agent: agent.name,
-                    agentId: agent.id,
+                    agent: source.agent,
+                    ...(source.agentId ? { agentId: source.agentId } : { groupId: source.groupId }),
                     session: data?.sessionId || file.name.replace(/\.json$/, ""),
                     file: path.relative(USER_DIR, abs).split(path.sep).join("/"),
                     at: line.at,
                     role: line.role,
+                    ...(line.speaker ? { speaker: getAgentByUuid(line.speaker)?.name || "" } : {}),
                     snippet: snippetAround(line.text, idx, query.length),
                 });
                 if (matches.length >= limit) {

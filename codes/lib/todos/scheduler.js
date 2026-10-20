@@ -13,7 +13,7 @@ import {
 import { sameWallClock } from "../scheduling/time.js";
 import { scheduleWork } from "../agent-queue.js";
 import { getAgent } from "../agents-store.js";
-import { isValidId } from "../web/conversations.js";
+import { isAgentThreadId } from "../web/conversations.js";
 
 const TICK_MS = 1000;
 const inFlight = new Set();
@@ -42,7 +42,7 @@ function executorOf(item) {
 // 결과를 올릴 스레드: conversationId가 유효하면 거기, 아니면 실행 봇 스레드.
 function sessionKeyFor(item, agent) {
     const conv = String(item?.conversationId || "").trim();
-    if (conv && isValidId(conv)) return conv;
+    if (conv && isAgentThreadId(conv)) return conv;
     return agent?.uuid || "";
 }
 

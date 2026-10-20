@@ -34,6 +34,7 @@
     const TABS = [
         "general",
         "folders",
+        "groups",
         "notices",
         "provider",
         "model",
@@ -49,9 +50,10 @@
     // 현재 경로를 설정 라우트로 해석한다. /s나 /s/…가 아니면 null.
     function routeFromPath() {
         if (/^\/s\/?$/.test(location.pathname || "")) return { tab: "root", agentId: null };
-        const m = /^\/s\/(general|folders|notices|provider|model|account|efficiency|selfimprovement|skills|mcp|secrets|agents)(?:\/([^/]+))?$/.exec(
-            location.pathname || "",
-        );
+        const m =
+            /^\/s\/(general|folders|groups|notices|provider|model|account|efficiency|selfimprovement|skills|mcp|secrets|agents)(?:\/([^/]+))?$/.exec(
+                location.pathname || "",
+            );
         if (!m) return null;
         const tab = m[1];
         let agentId = null;
@@ -105,6 +107,8 @@
         C.folderEditing = null;
         if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", agentId: o.folderAgent || null };
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
+        // open({tab:"groups", groupId}). 사이드바 그룹 대화방 행의 "그룹 설정"이 곧장 편집 폼을 연다.
+        C.groupEditing = tab === "groups" && o.groupId ? { mode: "edit", id: o.groupId } : null;
         C.modelSub = null;
         C.efficiencySub = null;
         C.providerSub = null;
@@ -170,6 +174,7 @@
         C.mcpEditing = null;
         C.secretEditing = null;
         C.folderEditing = null;
+        C.groupEditing = null;
         clearTimeout(C.viewTimer);
         C.viewBusy = false;
         C.rebuildPending = false;

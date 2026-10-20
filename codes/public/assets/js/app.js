@@ -406,15 +406,11 @@
     // 현재 경로에 맞는 화면을 띄운다. 스냅샷 표시와 서버 응답 반영 양쪽에서 호출된다.
     // 이미 맞는 화면이 떠 있으면 다시 열지 않는다.
     async function showRoute(pathBot, token) {
-        const bots = state.state.bots;
         const sr = settingsRoute();
         const tr = T.todosUI?.routeFromPath?.();
         const cr = T.computerUI?.routeFromPath?.();
-        const bot =
-            (pathBot && bots.find((b) => b.uuid === pathBot)) ||
-            (cr && bots.find((b) => b.uuid === cr.uuid)) ||
-            (!tr && !cr && state.mostRecentBot()) ||
-            null;
+        // 경로가 가리키는 대화: 에이전트 스레드나 그룹 대화방. 컴퓨터 페이지는 에이전트만 가진다.
+        const bot = (pathBot && state.chatByUuid(pathBot)) || (cr && state.botByUuid(cr.uuid)) || (!tr && !cr && state.mostRecentBot()) || null;
         if (bot) {
             if (bot.uuid !== state.state.currentId) {
                 const opened = T.chat.open(bot.uuid, { params: urlParams() });
@@ -448,7 +444,7 @@
         // 데이터 절약 모드에서는 누를 때 받는다.
         if (navigator.connection?.saveData) return;
         const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 600));
-        const ids = state.state.conversations.map((c) => c.id).filter((id) => state.botByUuid(id));
+        const ids = state.state.conversations.map((c) => c.id).filter((id) => state.chatByUuid(id));
         let n = 0;
         const next = () => {
             const id = ids.shift();
@@ -500,7 +496,7 @@
         T.todosUI?.hide?.();
         T.computerUI?.hide?.();
         const uuid = botUuidFromPath();
-        const bot = uuid && state.state.bots.find((b) => b.uuid === uuid);
+        const bot = uuid && state.chatByUuid(uuid);
         if (bot && bot.uuid !== state.state.currentId) T.chat.open(bot.uuid, { replaceState: true });
         // 이미 열린 대화로 다시 들어온 경우(알림을 누르거나 목록에서 다시 고름): 그사이 놓친 내용이 있을 수 있어 정본을 다시 받는다.
         else if (bot) T.chat.refreshCurrent?.();

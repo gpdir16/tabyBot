@@ -17,6 +17,7 @@
         [
             { id: "general", label: "general", icon: "settings", color: "#8e8e93" },
             { id: "folders", label: "folders", icon: "folder", color: "#0a84ff" },
+            { id: "groups", label: "groups", icon: "users", color: "#ac8e68" },
             { id: "notices", label: "notices", icon: "bell", color: "#ff453a" },
         ],
         [
@@ -34,7 +35,17 @@
     ];
 
     // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
-    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub", "providerSub"];
+    const FORM_KEYS = [
+        "folderEditing",
+        "groupEditing",
+        "skillEditing",
+        "mcpEditing",
+        "secretEditing",
+        "credsEditing",
+        "modelSub",
+        "efficiencySub",
+        "providerSub",
+    ];
 
     function formOpen() {
         return FORM_KEYS.some((k) => C[k]);
@@ -85,9 +96,14 @@
         build();
     }
 
+    // 폴더와 그룹 편집 폼의 제목: 새로 만들 때는 "새 …", 고칠 때는 그 이름.
+    function listFormTitle(editing, list, newKey, tabKey) {
+        return editing.mode === "new" ? t(newKey) : list.find((x) => x.id === editing.id)?.name || t(tabKey);
+    }
+
     function formTitle() {
-        if (C.folderEditing)
-            return C.folderEditing.mode === "new" ? t("folderNew") : C.folderList().find((f) => f.id === C.folderEditing.id)?.name || t("folders");
+        if (C.folderEditing) return listFormTitle(C.folderEditing, C.folderList(), "folderNew", "folders");
+        if (C.groupEditing) return listFormTitle(C.groupEditing, C.groupList(), "groupNew", "groups");
         if (C.skillEditing) return C.skillEditing.mode === "new" ? t("addSkill") : C.skillEditing.name;
         if (C.mcpEditing) return C.mcpEditing.mode === "new" ? t("addMcpServer") : C.mcpEditing.name;
         if (C.secretEditing) return C.secretEditing.mode === "new" ? t("addSecret") : C.secretEditing.name;
@@ -167,6 +183,7 @@
     const BUILDERS = {
         general: "buildGeneral",
         folders: "buildFolders",
+        groups: "buildGroups",
         notices: "buildNotices",
         provider: "buildProvider",
         model: "buildModel",

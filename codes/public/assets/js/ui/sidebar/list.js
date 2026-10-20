@@ -76,7 +76,7 @@
     function hydratePreviews() {
         if (state.state.offline) return Promise.resolve();
         const jobs = [];
-        for (const bot of state.state.bots) {
+        for (const bot of state.chats()) {
             const id = bot.uuid;
             if (!id || hydrated.has(id) || previewOf(bot)) continue;
             // 이미 받았거나 지금 열려 있는(chat.open이 받는 중인) 대화는 다시 받지 않는다.
@@ -186,10 +186,16 @@
         return el;
     }
 
+    // 목록 행의 아바타: 에이전트는 이름 첫 글자, 그룹 대화방은 여러 사람 아이콘.
+    function avatarOf(chat) {
+        if (chat?.isGroup) return T.h("span", { class: "bot-avatar group-avatar" }, [T.icon("users", "icon-sm")]);
+        return T.h("span", { class: "bot-avatar", text: initials(chat?.name || "?"), style: `background-color:${T.util.safeColor(chat?.color)}` });
+    }
+
     function buildHitRow(hit) {
-        const bot = state.botByUuid(hit.conversationId);
+        const bot = state.chatByUuid(hit.conversationId);
         const row = T.h("div", { class: "bot-row", role: "button", tabindex: "0" }, [
-            T.h("span", { class: "bot-avatar", text: initials(bot?.name || "?"), style: `background-color:${T.util.safeColor(bot?.color)}` }),
+            avatarOf(bot),
             T.h("span", { class: "bot-meta" }, [
                 T.h("span", { class: "bot-line" }, [
                     T.h("span", { class: "bot-name" }, [T.h("span", { class: "bot-name-text", text: bot?.name || "" })]),
@@ -219,7 +225,7 @@
         const preview = previewOf(bot);
         const unread = unreadOf(bot);
         const empty = !preview;
-        const previewText = empty ? t("botNoJob") : preview;
+        const previewText = empty ? t(bot.isGroup ? "groupNoMessages" : "botNoJob") : preview;
         const time = empty ? "" : listTime(recencyOf(bot));
         const row = T.h(
             "div",
@@ -231,7 +237,7 @@
                 tabindex: "0",
             },
             [
-                T.h("span", { class: "bot-avatar", text: initials(bot.name), style: `background-color:${T.util.safeColor(bot.color)}` }),
+                avatarOf(bot),
                 T.h("span", { class: "bot-meta" }, [
                     T.h("span", { class: "bot-line" }, [
                         T.h("span", { class: "bot-name" }, [
@@ -254,7 +260,7 @@
             ],
         );
         // 우클릭/길게 누르기 메뉴: 메신저처럼 행에 따로 ⋯ 버튼을 두지 않는다.
-        T.ctxmenu.attach(row, () => botMenuItems(bot));
+        T.ctxmenu.attach(row, () => (bot.isGroup ? groupMenuItems(bot) : botMenuItems(bot)));
         row.addEventListener("click", () => C.openBot(bot));
         row.addEventListener("keydown", (e) => {
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
@@ -277,6 +283,13 @@
                 ? { label: t("folderAdd"), icon: "folder", children: () => folderPickItems(bot, newFolder) }
                 : // 폴더가 하나도 없으면 고를 것이 없다. 곧장 만들기 폼으로 간다.
                   { label: t("folderAdd"), icon: "folder", defer: true, onSelect: newFolder },
+        ];
+    }
+
+    // 그룹 대화방 행: 설정의 그룹 탭에 있는 이 방의 편집 폼을 연다.
+    function groupMenuItems(group) {
+        return [
+            { label: t("groupSettings"), icon: "settings", defer: true, onSelect: () => T.settingsUI.open({ tab: "groups", groupId: group.uuid }) },
         ];
     }
 
@@ -421,7 +434,8 @@
     function listRows(active) {
         const rows = [];
         // 최근 메시지 순: 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
-        const bots = state.state.bots.filter(matches);
+        // 그룹 대화방은 폴더에 들지 않는다. 폴더 밖의 에이전트와 같이 놓인다.
+        const bots = state.chats().filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
         rows.push(...botRows(bots, active));
         if ((!active || C.query) && todosVisible()) rows.push(buildTodosRow());

@@ -23,7 +23,7 @@ import { setTodoHandlers } from "../todos/scheduler.js";
 import { SCHEDULED_TURN_MARKER, isScheduledTurnText } from "../agent/history/messages.js";
 import { formatAgentError, t } from "../i18n.js";
 import { emit } from "./bus.js";
-import { ensureConversation, getConversationMeta, listConversations, toDisplayTurns } from "./conversations.js";
+import { ensureConversation, hasConversation, listConversations, toDisplayTurns } from "./conversations.js";
 import { maybeScheduleSessionReview } from "../dreaming/review.js";
 import { markUserActivity } from "../user-activity.js";
 import { setProactiveRunner, CHECKIN_PROMPT } from "../proactive.js";
@@ -115,7 +115,7 @@ function persistCompletedTurn({
     recoveryBaseMessages,
     automated,
 }) {
-    if (!getConversationMeta(sessionKey)) return;
+    if (!hasConversation(sessionKey)) return;
     const skipPersist = automated && isUnremarkableAutoTurn(result);
     if (!skipPersist) {
         saveChatTurn(sessionKey, result, { turnId, messageId, displayText, attachments, baseMessages: resumed ? recoveryBaseMessages : null });
@@ -164,7 +164,10 @@ function displaySignature(messages) {
     return JSON.stringify(toDisplayTurns([{ messages }]));
 }
 
-async function runTurn({
+// mirror(messages, { final, result }): 그룹 방에서 쓴다. 이 실행의 기록이 바뀔 때마다(체크포인트, 완료) 불려
+// 방의 화면 기록에 같은 내용을 옮겨 적게 한다. onLeftover(messages): 끝나기 직전에 와서 합쳐지지 못한
+// 메시지를 넘긴다. 없으면 같은 세션의 다음 턴으로 이어 돌린다.
+export async function runTurn({
     sessionKey,
     agentId,
     userText,
@@ -176,6 +179,8 @@ async function runTurn({
     quietEmpty = false,
     automated = false,
     todoId = null,
+    mirror = null,
+    onLeftover = null,
 }) {
     const lang = loadUserConfig().language || "en";
     const session = beginAgentSession(sessionKey, { automated });
@@ -216,12 +221,13 @@ async function runTurn({
                 onCheckpoint: automated
                     ? undefined // 자동 턴은 중간 체크포인트를 쓰지 않는다. 무의미 턴이면 통째로 저장을 건너뛴다.
                     : (turnMessages) => {
-                          if (!getConversationMeta(sessionKey)) return;
+                          if (!hasConversation(sessionKey)) return;
                           const messages = storableTurnMessages(turnMessages, { messageId, displayText, attachments });
                           checkpointChatTurn(sessionKey, messages, {
                               turnId,
                               baseMessages: appendToRecovery ? recoveryBaseMessages : null,
                           });
+                          mirror?.(messages, { final: false });
                           // 보이는 내용(중간 발화, 답변, 합쳐진 사용자 메시지)이 바뀐 체크포인트만 화면에 알린다.
                           const display = displaySignature(messages);
                           if (display === lastDisplay) return;
@@ -258,6 +264,9 @@ async function runTurn({
             recoveryBaseMessages,
             automated,
         });
+        if (mirror && result?.turnMessages?.length) {
+            mirror(storableTurnMessages(result.turnMessages, { messageId, displayText, attachments }), { final: true, result });
+        }
 
         if (stoppedByUser) {
             emit({
@@ -314,7 +323,10 @@ async function runTurn({
         if (outcome === "stopped") settleStoppedConversation(sessionKey);
         // 끝나기 직전에 도착해 이번 실행에 합쳐지지 못한 메시지: 버리지 않고 다음 턴으로 넘긴다.
         // 실패한 턴 뒤에는 잇지 않는다(같은 오류를 되풀이한다). 기록에는 끊긴 턴으로 남아 있다.
-        else if (outcome === "done" && leftover.length) startUserTurn({ sessionKey, agentId, messages: leftover });
+        else if (outcome === "done" && leftover.length) {
+            if (onLeftover) onLeftover(leftover);
+            else startUserTurn({ sessionKey, agentId, messages: leftover });
+        }
     }
 }
 

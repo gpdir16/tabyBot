@@ -1,4 +1,4 @@
-// 에이전트와 폴더 API.
+// 에이전트, 폴더, 그룹 방 API.
 import { loadUserConfig } from "../../config-loader.js";
 import { getCompressOnModelChange } from "../../user-settings.js";
 import {
@@ -19,9 +19,24 @@ import { purgeAgentComputer } from "../computer.js";
 import { requestAgentStop } from "../../agent/session.js";
 import { cancelQueuedAgentWork } from "../../agent-queue.js";
 import { askSessionCompression, publicAgent } from "./settings.js";
+import { addGroup, listGroups, removeGroup, updateGroup } from "../../groups-store.js";
+import { ensureConversation, getConversationMeta } from "../conversations.js";
+import { stopGroup } from "../group-turns.js";
+
+// 그룹 방을 클라이언트에 내려줄 때의 공개 모양. 읽은 위치(cursors)는 서버 내부용이다.
+function publicGroup(g) {
+    const meta = getConversationMeta(g.id);
+    return {
+        id: g.id,
+        name: g.name,
+        members: g.members,
+        createdAt: g.createdAt,
+        preview: typeof meta?.preview === "string" ? meta.preview : "",
+    };
+}
 
 export function registerAgentsRoutes(router) {
-    const agentsPayload = () => ({ agents: listAgents().map(publicAgent), folders: listFolders() });
+    const agentsPayload = () => ({ agents: listAgents().map(publicAgent), folders: listFolders(), groups: listGroups().map(publicGroup) });
 
     router.add("GET", "/api/agents", (ctx) => {
         ctx.json200(agentsPayload());
@@ -83,6 +98,33 @@ export function registerAgentsRoutes(router) {
             console.error(`tabyBot: agent computer purge failed (${ctx.params.id}):`, err?.message || err),
         );
         if (purgeAgentTodos(ctx.params.id).changed) emit({ type: "todos_changed" });
+        emit({ type: "conversations_changed" });
+        ctx.json200(agentsPayload());
+    });
+
+    // 그룹 방: 이름과 멤버(에이전트 uuid, 둘 이상). 멤버 순서가 멘션 없을 때 답하는 순서다.
+    router.add("POST", "/api/groups", async (ctx) => {
+        const body = await ctx.json();
+        const result = addGroup({ name: body.name, members: body.members });
+        if (result.error) return ctx.json400(result.error);
+        ensureConversation(result.group.id);
+        emit({ type: "conversations_changed" });
+        ctx.json200({ ...agentsPayload(), group: publicGroup(result.group) });
+    });
+
+    router.add("PATCH", "/api/groups/:id", async (ctx) => {
+        const body = await ctx.json();
+        const result = updateGroup(ctx.params.id, { name: body.name, members: body.members });
+        if (result.error === "not_found") return ctx.json404();
+        if (result.error) return ctx.json400(result.error);
+        emit({ type: "conversations_changed" });
+        ctx.json200({ ...agentsPayload(), group: publicGroup(result.group) });
+    });
+
+    router.add("DELETE", "/api/groups/:id", (ctx) => {
+        stopGroup(ctx.params.id);
+        const result = removeGroup(ctx.params.id);
+        if (result.error) return ctx.json404();
         emit({ type: "conversations_changed" });
         ctx.json200(agentsPayload());
     });

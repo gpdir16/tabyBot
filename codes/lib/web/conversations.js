@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readJsonFile, writeJsonAtomic } from "../atomic-file.js";
 import { firstAgentId, getAgentByUuid, listAgents } from "../agents-store.js";
+import { isGroupId, listGroups, parseMemberKey } from "../groups-store.js";
 import { isAgentSessionAutomated, isAgentSessionRunning } from "../agent/session.js";
 import {
     conversationDir,
@@ -29,8 +30,14 @@ function manifestPath(id) {
     return dir ? path.join(dir, "manifest.json") : null;
 }
 
+// 화면에서 여는 대화: 에이전트 스레드나 그룹 방. 그룹 안의 에이전트 세션은 내부용이라 열지 않는다.
 export function isValidId(id) {
-    return Boolean(conversationDir(id));
+    return Boolean(conversationDir(id)) && !parseMemberKey(id);
+}
+
+// 에이전트 하나의 스레드인가(예약 작업 결과처럼 에이전트가 혼자 올리는 곳).
+export function isAgentThreadId(id) {
+    return Boolean(getAgentByUuid(id));
 }
 
 export function ensureConversation(id) {
@@ -99,7 +106,8 @@ function readMeta(id) {
     return {
         id,
         preview: typeof preview === "string" ? preview : "",
-        agentId: getAgentByUuid(id)?.id || firstAgentId(),
+        agentId: getAgentByUuid(id)?.id || (isGroupId(id) ? null : firstAgentId()),
+        ...(isGroupId(id) ? { group: true } : {}),
         createdAt: toIso(createdAt),
         updatedAt: toIso(updatedAt),
         // 클라이언트가 SSE 재접속 사이에 놓친 turn_done을 정합한다.
@@ -117,14 +125,24 @@ export function markConversationRead(id) {
     return markChatRead(id);
 }
 
+// 화면에서 여는 대화의 id: 에이전트 스레드와 그룹 방.
+function threadIds() {
+    return [...listAgents().map((a) => a.uuid), ...listGroups().map((g) => g.id)];
+}
+
 export function listConversations() {
     const metas = [];
-    for (const agent of listAgents()) {
-        const meta = readMeta(agent.uuid);
+    for (const id of threadIds()) {
+        const meta = readMeta(id);
         if (meta) metas.push(meta);
     }
     metas.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
     return metas;
+}
+
+// 기록 폴더가 있는 대화인가. 그룹 안의 에이전트 세션처럼 화면에서 열지 않는 대화도 포함한다.
+export function hasConversation(id) {
+    return Boolean(conversationDir(id) && readMeta(id));
 }
 
 export function getConversationMeta(id) {
@@ -153,10 +171,10 @@ export function searchMessages(query, { limit = 30 } = {}) {
         .toLowerCase();
     if (!q) return [];
     const hits = [];
-    for (const agent of listAgents()) {
+    for (const id of threadIds()) {
         let turns;
         try {
-            turns = toDisplayTurns(loadFullChatHistory(agent.uuid));
+            turns = toDisplayTurns(loadFullChatHistory(id));
         } catch {
             continue;
         }
@@ -170,7 +188,7 @@ export function searchMessages(query, { limit = 30 } = {}) {
                 const from = Math.max(0, idx - 60);
                 const to = Math.min(text.length, idx + q.length + 60);
                 hits.push({
-                    conversationId: agent.uuid,
+                    conversationId: id,
                     turnIndex: t,
                     messageIndex: m,
                     role: msg.role,

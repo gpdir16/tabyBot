@@ -7,6 +7,7 @@ import { USER_DIR } from "../paths.js";
 import { writeJsonAtomic } from "../atomic-file.js";
 import { getConversationMeta } from "./conversations.js";
 import { getAgent, getAgentByUuid } from "../agents-store.js";
+import { getGroup } from "../groups-store.js";
 
 const DIR = path.join(USER_DIR, "web-push");
 const KEYS_FILE = path.join(DIR, "vapid.json");
@@ -99,6 +100,12 @@ function listSubs() {
 function eventTitle(event) {
     const id = event.conversationId;
     if (!id) return "tabyBot";
+    // 그룹 방: 말한 에이전트와 방 이름을 함께 쓴다.
+    const group = getGroup(id);
+    if (group) {
+        const speaker = getAgentByUuid(event.speaker)?.name;
+        return speaker ? `${speaker} (${group.name})` : group.name;
+    }
     const meta = getConversationMeta(id);
     const agent = getAgent(meta?.agentId) || getAgentByUuid(id);
     return agent?.name || "tabyBot";

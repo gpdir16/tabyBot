@@ -357,7 +357,7 @@
         // 배지는 메신저처럼 "안 읽은 대화 수"다. 0이면 숨긴다.
         // allTabExcludesFoldered가 켜져 있으면 "전체"는 미분류 에이전트만 센다.
         const counts = new Map();
-        for (const b of state.state.bots) {
+        for (const b of state.chats()) {
             if (!C.unreadOf(b)) continue;
             const f = folderOf(b);
             if (f) counts.set(f, (counts.get(f) || 0) + 1);

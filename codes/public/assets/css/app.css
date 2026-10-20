@@ -610,6 +610,27 @@ kbd {
 .msg-stack .bubble {
     max-width: 100%;
 }
+/* 그룹 대화방: 버블 위에 말한 에이전트의 이름표 */
+.msg-speaker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 -3px var(--sp-1);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.msg-speaker-avatar {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 10px;
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1));
+}
 /* 라이브 중간 과정 버블(툴 호출 전 코멘트) */
 .live-inter {
     display: flex;
@@ -618,6 +639,7 @@ kbd {
     /* 기록에서 이어진 말풍선이 붙는 간격과 같게 */
     gap: 3px;
 }
+.live-speaker:empty,
 .live-inter:empty,
 .tool-stack:empty,
 .asks:empty {
@@ -1493,6 +1515,10 @@ kbd {
 .cm-hand-menu button.on {
     color: var(--accent);
 }
+/* 그룹 대화방의 @멘션 자동 완성: 방향키로 고른 항목 */
+.cm-mention-menu button.on {
+    background: var(--surface-2);
+}
 .chip .spin-overlay {
     position: absolute;
     inset: 0;
@@ -1591,12 +1617,14 @@ kbd {
     display: none;
 }
 
-/* 할 일 행: 메신저의 "저장한 메시지"처럼 강조색 원에 흰 아이콘 */
-.todo-avatar {
+/* 할 일 행과 그룹 대화방 행: 메신저의 "저장한 메시지"처럼 강조색 원에 흰 아이콘 */
+.todo-avatar,
+.group-avatar {
     background-color: var(--accent);
     color: #fff;
 }
-.todo-avatar .icon {
+.todo-avatar .icon,
+.group-avatar .icon {
     width: 46%;
     height: 46%;
 }
@@ -5389,6 +5417,9 @@ body.sb-collapsed .btn-menu {
 }
 #btnHdrComputer {
     margin-left: auto;
+}
+body.group-chat #btnHdrComputer {
+    visibility: hidden;
 }
 /* 아바타는 오른쪽 끝에 둔다 */
 .hdr-avatar {

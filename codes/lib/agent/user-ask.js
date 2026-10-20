@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { emit } from "../web/bus.js";
+import { parseMemberKey } from "../groups-store.js";
 import { clearTodoWaiting, markTodoWaiting } from "../todos/store.js";
 import { createSecret, deleteOnceSecrets, findSecretIdByName, updateSecret } from "../secrets/store.js";
 import { placeholderFor } from "../secrets/vault.js";
@@ -85,12 +86,18 @@ function settleAsk(entry, choiceIndex, text) {
     return settleAndNotify(entry, answer) ? answer : null;
 }
 
+// 그룹 방 안의 에이전트가 물은 질문은 그 방에 보인다(bus.js와 같은 규칙).
+function visibleConversation(key) {
+    const member = parseMemberKey(key);
+    return member ? { conversationId: member.groupId, speaker: member.agentUuid } : { conversationId: key };
+}
+
 // 아직 답을 기다리는 질문 목록. 새로고침·재접속한 화면이 카드를 되살리는 데 쓴다.
 export function listPendingAsks() {
     return [...pendingAsks.values()]
         .filter((e) => !e.settled)
         .map((e) => ({
-            conversationId: e.key,
+            ...visibleConversation(e.key),
             askId: e.id,
             question: e.question,
             options: e.options,

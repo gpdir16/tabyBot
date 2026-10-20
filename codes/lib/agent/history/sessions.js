@@ -133,7 +133,8 @@ export function extractSessionTextLines(turns) {
                 text = stripAttachedFiles(text);
             }
             text = text.trim();
-            if (text) lines.push({ role: m.role, at: turn.at || null, text });
+            // 그룹 방의 에이전트 발화는 누가 말했는지(speaker: 에이전트 uuid)를 함께 남긴다.
+            if (text) lines.push({ role: m.role, at: turn.at || null, text, ...(turn.speaker ? { speaker: turn.speaker } : {}) });
         }
     }
     return lines;
