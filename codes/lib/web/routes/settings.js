@@ -29,6 +29,16 @@ import { usageSummary } from "../../llm/usage-log.js";
 import { fetchGithubCopilotRoutingModels } from "../../llm/github-copilot-client.js";
 import { startDreamingScheduler } from "../../dreaming/scheduler.js";
 import { restartUpdateScheduler } from "../../update/scheduler.js";
+import {
+    activateProfile,
+    activeProfile,
+    addProfile,
+    ensureProfiles,
+    normalizeProfileName,
+    removeProfile,
+    syncActiveProfile,
+    uniqueProfileName,
+} from "../../provider-profiles.js";
 
 // ── 에이전트를 클라이언트에 내려줄 때의 공개 모양. ──
 
@@ -117,6 +127,62 @@ export function providerPresets() {
     return presets;
 }
 
+// ── 프로바이더 프로필 ──
+
+const CUSTOM_LABEL = "Custom API URL";
+
+// OpenAI 프리셋 id에 다른 주소를 넣은 설정은 커스텀 주소다.
+function isCustomProvider(provider) {
+    if ((provider?.id || "default") !== "default" || !provider?.baseURL) return false;
+    try {
+        return provider.baseURL.replace(/\/$/, "") !== String(loadProviderConfig("default").baseURL || "").replace(/\/$/, "");
+    } catch {
+        return true;
+    }
+}
+
+function profileLabel(profile) {
+    if (profile.custom) return CUSTOM_LABEL;
+    const id = profile.provider?.id || "default";
+    return PROVIDER_LABELS[id] || id;
+}
+
+// 이름을 따로 주지 않은 프로필의 이름. 커스텀 주소는 주소의 호스트가 이름이 된다.
+function profileDefaultName(profile) {
+    if (profile.custom && profile.provider?.baseURL) {
+        try {
+            return new URL(profile.provider.baseURL).host;
+        } catch {
+            // 주소가 아니면 프로바이더 이름을 쓴다
+        }
+    }
+    return profileLabel(profile);
+}
+
+const PROFILE_HELPERS = { isCustom: isCustomProvider, labelOf: profileDefaultName };
+
+// 화면에 내려줄 프로필 목록. apiKey는 넣지 않고 저장 여부만 알린다.
+function publicProfiles(config) {
+    return config.providerProfiles.map((p) => {
+        let apiKeySet = false;
+        try {
+            apiKeySet = Boolean(getMergedProvider({ provider: p.provider }).apiKey);
+        } catch {
+            // 사라진 프리셋이면 키가 없는 것으로 보인다
+        }
+        return {
+            uid: p.uid,
+            name: p.name,
+            providerId: p.custom ? "custom" : p.provider?.id || "default",
+            label: profileLabel(p),
+            baseURL: p.provider?.baseURL || "",
+            model: p.provider?.model || "",
+            apiKeySet,
+            active: p.uid === config.activeProviderProfile,
+        };
+    });
+}
+
 // 세션 압축 진행 상태: 수동 버튼과 모델 변경 확인 알림이 같은 실행 경로를 쓴다.
 // 동시에 하나만 돌리고, 시작/종료를 SSE로 알려 새로고침해도 진행 상태가 보이게 한다.
 let sessionCompressInFlight = false;
@@ -140,6 +206,9 @@ export async function runSessionCompression(chatIds = null) {
 // GET/PUT 공용 설정 스냅샷. apiKey는 절대 포함하지 않는다.
 export function buildSettingsPayload() {
     const config = loadUserConfig();
+    // 프로필이 없던 설정도 첫 프로필이 있는 것처럼 보여 준다. 저장은 다음 변경 때 한다.
+    ensureProfiles(config, PROFILE_HELPERS);
+    const profile = activeProfile(config);
     const pid = config.provider?.id || "default";
     const meta = getProviderThinkingMeta(pid);
     let currentPreset = null;
@@ -189,6 +258,7 @@ export function buildSettingsPayload() {
         provider: {
             id: pid,
             label: PROVIDER_LABELS[pid] || pid,
+            custom: Boolean(profile?.custom),
             type: currentPreset?.type || "openai-compatible",
             baseURL: config.provider?.baseURL || currentPreset?.baseURL || "",
             model: config.provider?.model || "",
@@ -202,6 +272,7 @@ export function buildSettingsPayload() {
         // 효율적인 운영 탭의 지표와 사용 기록: 날짜별, 프로바이더와 모델별 토큰 수.
         usage: usageSummary(),
         providers: presets,
+        profiles: publicProfiles(config),
         agents: listAgents().map(publicAgent),
         agentColors: AVATAR_COLORS,
         selfImprovement: {
@@ -360,6 +431,25 @@ export function applySettingsPatch(config, patch) {
 
 // ── 설정과 모델 목록 API. ──
 
+// 모델이 바뀌었으면 새 모델의 정보를 받아 두고, 압축 옵션이 켜져 있으면 모든 세션 압축 여부를 묻는다.
+// 실행은 사용자가 알림을 눌러 확인할 때만 한다. 모델이 비워진 상태(프로바이더 전환 중)에는 묻지 않는다.
+function afterModelSaved(config, prevModel) {
+    const model = String(config.provider?.model || "").trim();
+    if (!model || model === prevModel) return;
+    // 설정 화면의 채움 한도 토큰 표시가 이전 모델 값으로 남지 않도록 컨텍스트 윈도우를 미리 받아 둔다.
+    void ensureModelMeta(getMergedProvider(config)).catch((err) => console.error("tabyBot: model meta refresh failed:", err?.message || err));
+    if (getCompressOnModelChange(config)) askSessionCompression(config.language || "en");
+}
+
+// 다른 프로필로 바꾸고 저장한다. 사고 수준은 새 프로바이더 기준으로 다시 맞춘다.
+function switchProfile(config, uid) {
+    const prevModel = String(config.provider?.model || "").trim();
+    activateProfile(config, uid);
+    config.thinkingLevel = normalizeThinkingLevel(config.thinkingLevel, config.provider?.id || "default");
+    saveUserConfig(config);
+    afterModelSaved(config, prevModel);
+}
+
 function substituteEnvSafe(value) {
     return String(value ?? "").replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name] ?? "");
 }
@@ -377,21 +467,97 @@ export function registerSettingsRoutes(router) {
         const applied = applySettingsPatch(config, patch);
         if (applied.error) return ctx.json400(applied.error);
 
+        if (patch.provider !== undefined && typeof patch.provider === "object") {
+            // 프로바이더 설정은 고른 프로필의 것이다. 프로필에도 옮겨 적는다.
+            ensureProfiles(config, PROFILE_HELPERS);
+            const profile = activeProfile(config);
+            if (profile && patch.provider.id !== undefined) {
+                if (String(patch.provider.id).trim() === "custom") profile.custom = true;
+                else delete profile.custom;
+            }
+            syncActiveProfile(config);
+            // 이름을 직접 정하지 않은 커스텀 프로필은 주소를 바꾸면 그 호스트로 이름이 바뀐다.
+            if (profile?.custom && !profile.named && patch.provider.baseURL !== undefined) {
+                const others = config.providerProfiles.filter((p) => p !== profile);
+                profile.name = uniqueProfileName(others, profileDefaultName(profile));
+            }
+        }
         saveUserConfig(config);
         if (patch.updateCheckEnabled !== undefined) restartUpdateScheduler();
         // proactive는 매 틱 설정을 다시 읽으므로 재시작 불필요. dreaming 크론은 재등록이 필요하다(시간대 포함).
         if (applied.selfImprovementChanged || patch.timezone !== undefined) startDreamingScheduler();
-        // 모델이 바뀌었고 압축 옵션이 켜져 있으면 모든 세션 압축 여부를 묻는다.
-        // 실행은 사용자가 알림을 눌러 확인할 때만 한다. 자동 실행은 하지 않는다.
-        // 모델이 비워진 상태(프로바이더 전환 중)에는 묻지 않는다.
-        const modelChanged = String(config.provider?.model || "").trim() !== prevModel;
-        if (modelChanged && config.provider?.model) {
-            // 새 모델의 컨텍스트 윈도우를 미리 받아 둔다. 설정 화면의 채움 한도
-            // 토큰 표시가 이전 모델 값으로 남지 않도록.
-            void ensureModelMeta(getMergedProvider(config)).catch((err) => console.error("tabyBot: model meta refresh failed:", err?.message || err));
-            if (getCompressOnModelChange(config)) askSessionCompression(config.language || "en");
-        }
+        afterModelSaved(config, prevModel);
         // 프론트가 부분 객체로 상태를 덮어쓰지 않도록 항상 전체 스냅샷을 돌려준다.
+        ctx.json200(buildSettingsPayload());
+    });
+
+    // 프로필 추가: 고른 프로바이더로 새 프로필을 만들고 바로 그 프로필로 바꾼다. 키와 모델은 비어 있다.
+    router.add("POST", "/api/provider-profiles", async (ctx) => {
+        const body = await ctx.json().catch(() => ({}));
+        const requested = String(body?.providerId || "").trim();
+        if (!providerPresets().some((p) => p.id === requested)) return ctx.json400("unknown_provider");
+        const config = loadUserConfig();
+        ensureProfiles(config, PROFILE_HELPERS);
+        const custom = requested === "custom";
+        const id = custom ? "default" : requested;
+        const provider = id === "github-copilot" ? { id, model: "auto", autoMode: true } : { id, model: "" };
+        const name = normalizeProfileName(body?.name);
+        const profile = addProfile(config, {
+            name: uniqueProfileName(config.providerProfiles, name || profileLabel({ custom, provider })),
+            provider,
+            custom,
+        });
+        if (name) profile.named = true;
+        switchProfile(config, profile.uid);
+        ctx.json200(buildSettingsPayload());
+    });
+
+    router.add("PUT", "/api/provider-profiles/:uid", async (ctx) => {
+        const body = await ctx.json().catch(() => ({}));
+        const config = loadUserConfig();
+        ensureProfiles(config, PROFILE_HELPERS);
+        syncActiveProfile(config);
+        const profile = config.providerProfiles.find((p) => p.uid === ctx.params.uid);
+        if (!profile) return ctx.json404();
+        if (body?.name !== undefined) {
+            // 이름을 비우면 프로바이더 이름으로 돌아간다.
+            const others = config.providerProfiles.filter((p) => p !== profile);
+            const name = normalizeProfileName(body.name);
+            profile.name = uniqueProfileName(others, name || profileDefaultName(profile));
+            if (name) profile.named = true;
+            else delete profile.named;
+        }
+        saveUserConfig(config);
+        ctx.json200(buildSettingsPayload());
+    });
+
+    router.add("POST", "/api/provider-profiles/:uid/activate", (ctx) => {
+        const config = loadUserConfig();
+        ensureProfiles(config, PROFILE_HELPERS);
+        if (!config.providerProfiles.some((p) => p.uid === ctx.params.uid)) return ctx.json404();
+        if (config.activeProviderProfile !== ctx.params.uid) switchProfile(config, ctx.params.uid);
+        ctx.json200(buildSettingsPayload());
+    });
+
+    router.add("DELETE", "/api/provider-profiles/:uid", (ctx) => {
+        const config = loadUserConfig();
+        ensureProfiles(config, PROFILE_HELPERS);
+        syncActiveProfile(config);
+        const removed = removeProfile(config, ctx.params.uid);
+        if (removed.error === "not_found") return ctx.json404();
+        if (removed.error) return ctx.json400(removed.error);
+        // 고른 프로필을 지웠으면 다음 프로필로 바꾼다. 지운 프로필의 설정은 옮겨 적지 않는다.
+        if (removed.nextUid) {
+            const prevModel = String(config.provider?.model || "").trim();
+            const next = config.providerProfiles.find((p) => p.uid === removed.nextUid);
+            config.activeProviderProfile = next.uid;
+            config.provider = JSON.parse(JSON.stringify(next.provider));
+            config.thinkingLevel = normalizeThinkingLevel(config.thinkingLevel, config.provider.id || "default");
+            saveUserConfig(config);
+            afterModelSaved(config, prevModel);
+        } else {
+            saveUserConfig(config);
+        }
         ctx.json200(buildSettingsPayload());
     });
 
@@ -446,8 +612,10 @@ export function registerSettingsRoutes(router) {
                     apiKeyOptional: Boolean(base.apiKeyOptional),
                 };
                 if (base.defaultContextWindow) provider.defaultContextWindow = base.defaultContextWindow;
+                // 저장된 키는 지금 프로필과 같은 주소로 목록을 받을 때만 쓴다. 다른 곳으로 보내지 않는다.
                 if (!provider.apiKey && !provider.apiKeyOptional) {
-                    provider.apiKey = substituteEnvSafe(config.provider?.apiKey || "");
+                    const current = getMergedProvider(config);
+                    if (current.id === providerId && current.baseURL === provider.baseURL) provider.apiKey = current.apiKey;
                 }
             } else {
                 provider = getMergedProvider(config);
