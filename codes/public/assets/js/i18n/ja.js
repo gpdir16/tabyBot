@@ -141,6 +141,7 @@
         oauthOpenPage: "ページを開く",
         loadingModels: "モデルを取得中…",
         modelsFailed: "モデルの取得に失敗しました",
+        baseURLAdjusted: "モデル一覧が {url} にあったため、Base URL をこのアドレスに変更しました",
         searchModels: "モデルを検索…",
         noModels: "モデルが見つかりません",
         vision: "ビジョン",

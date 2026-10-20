@@ -141,6 +141,7 @@
         oauthOpenPage: "페이지 열기",
         loadingModels: "모델 불러오는 중…",
         modelsFailed: "모델을 불러오지 못했습니다",
+        baseURLAdjusted: "모델 목록이 {url} 에 있어서 Base URL을 이 주소로 바꿨습니다",
         searchModels: "모델 검색…",
         noModels: "모델이 없습니다",
         vision: "비전",
