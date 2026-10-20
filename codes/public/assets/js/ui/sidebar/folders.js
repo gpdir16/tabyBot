@@ -16,9 +16,16 @@
        폴더 만들기·이름·순서·소속은 설정의 폴더 탭에서 다룬다.
        활성 탭은 로컬 상태, 실제 데이터는 state.folders/bot.folder. */
     const ACTIVE_TAB_KEY = "tabybot.sidebar.folder.active";
+    const COLLAPSED_KEY = "tabybot.sidebar.folder.collapsed";
+
+    // 설정: 폴더를 탭 대신 목록 안의 묶음으로 보여 준다. 이때는 탭이 없고 목록이 늘 "전체"다.
+    function foldersInList() {
+        return state.state.settings?.foldersInList === true;
+    }
 
     // 지워진 폴더를 가리키면 "전체"로 되돌린다. 저장값은 존재하는 폴더만 인정.
     function activeFolderId() {
+        if (foldersInList()) return "";
         const id = C.lsGet(ACTIVE_TAB_KEY) || "";
         return id && (state.state.folders || []).some((f) => f.id === id) ? id : "";
     }
@@ -48,6 +55,65 @@
     // 설정: "전체" 탭에서 폴더 소속 에이전트를 숨긴다(미분류만 표시).
     function allExcludesFoldered() {
         return state.state.settings?.allTabExcludesFoldered === true;
+    }
+
+    /* ── 목록 안의 폴더 묶음 ───────────────────────────
+       폴더마다 머리 행이 있고, 누르면 그 아래의 에이전트 행이 접히거나 펼쳐진다. 접힌 상태는 이 기기에만 남는다. */
+    function collapsedFolders() {
+        try {
+            const v = JSON.parse(C.lsGet(COLLAPSED_KEY) || "[]");
+            return new Set(Array.isArray(v) ? v.map(String) : []);
+        } catch {
+            return new Set();
+        }
+    }
+
+    function isFolderCollapsed(id) {
+        return collapsedFolders().has(id);
+    }
+
+    function toggleFolderCollapsed(id) {
+        const set = collapsedFolders();
+        if (set.has(id)) set.delete(id);
+        else set.add(id);
+        // 지워진 폴더의 기록은 남기지 않는다.
+        const alive = new Set((state.state.folders || []).map((f) => f.id));
+        C.lsSet(COLLAPSED_KEY, JSON.stringify([...set].filter((x) => alive.has(x))));
+        C.render(true);
+    }
+
+    // 폴더 머리 행: 폴더 아이콘, 이름, 에이전트 수, 꺾쇠. 접혀 있으면 안 읽은 대화 수가 배지로 붙는다.
+    function buildFolderHeader(folder, bots) {
+        const collapsed = isFolderCollapsed(folder.id);
+        const unread = collapsed ? bots.filter((b) => C.unreadOf(b)).length : 0;
+        const row = T.h(
+            "div",
+            {
+                class: `sb-group${collapsed ? " collapsed" : ""}`,
+                role: "button",
+                tabindex: "0",
+                "aria-expanded": String(!collapsed),
+                dataset: { folder: folder.id },
+            },
+            [
+                T.icon("folder", "sb-group-icon"),
+                T.h("span", { class: "sb-group-name", text: folder.name }),
+                T.h("span", { class: "sb-group-count", text: String(bots.length) }),
+                unread
+                    ? T.h("span", { class: "bot-unread", text: unread > 99 ? "99+" : String(unread), "aria-label": t("unreadCount", { n: unread }) })
+                    : null,
+                T.icon("chevron", "sb-group-chev"),
+            ],
+        );
+        T.ctxmenu.attach(row, () => C.tabMenuItems(folder.id));
+        row.addEventListener("click", () => toggleFolderCollapsed(folder.id));
+        row.addEventListener("keydown", (e) => {
+            if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
+                e.preventDefault();
+                toggleFolderCollapsed(folder.id);
+            }
+        });
+        return row;
     }
 
     async function assignAgentFolder(agentId, folderId) {
@@ -106,7 +172,7 @@
     // dir: +1 = 다음(오른쪽) 탭, -1 = 이전 탭. 끝이면 null.
     function neighborFolder(dir) {
         const folders = state.state.folders || [];
-        if (C.query || !folders.length) return null;
+        if (C.query || !folders.length || foldersInList()) return null;
         const order = ["", ...folders.map((f) => f.id)];
         const to = order.indexOf(activeFolderId()) + dir;
         return to >= 0 && to < order.length ? order[to] : null;
@@ -234,7 +300,7 @@
             "wheel",
             (e) => {
                 if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
-                if (C.query || !(state.state.folders || []).length) return;
+                if (C.query || !(state.state.folders || []).length || foldersInList()) return;
                 // 브라우저의 "뒤로 가기" 스와이프가 대신 먹지 않게 한다.
                 e.preventDefault();
                 clearTimeout(wheelIdle);
@@ -281,8 +347,8 @@
     function renderTabs() {
         if (!tabsEl) return;
         const folders = state.state.folders || [];
-        tabsEl.hidden = !folders.length;
-        if (!folders.length) {
+        tabsEl.hidden = !folders.length || foldersInList();
+        if (tabsEl.hidden) {
             tabsEl.replaceChildren();
             tabsSig = null;
             return;
@@ -313,6 +379,9 @@
     }
 
     C.activeFolderId = activeFolderId;
+    C.foldersInList = foldersInList;
+    C.isFolderCollapsed = isFolderCollapsed;
+    C.buildFolderHeader = buildFolderHeader;
     C.folderOf = folderOf;
     C.allExcludesFoldered = allExcludesFoldered;
     C.assignAgentFolder = assignAgentFolder;

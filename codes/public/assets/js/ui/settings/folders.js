@@ -221,7 +221,7 @@
     function buildFolders(body) {
         const s = state.state.settings || {};
         const sec = T.h("div", { class: "set-section" });
-        if (!C.folderEditing) sec.append(T.h("div", { class: "set-desc", text: t("foldersDesc") }));
+        if (!C.folderEditing) sec.append(T.h("div", { class: "set-desc", text: t(s.foldersInList ? "foldersDescInList" : "foldersDesc") }));
         if (C.folderEditing) {
             sec.append(folderForm());
             body.append(sec);
@@ -245,14 +245,25 @@
             ),
         );
         sec.append(T.h("hr", { class: "divider" }));
-        // 전체 탭에서 폴더 소속 에이전트 제외
+        // 폴더를 탭 대신 목록 안의 묶음으로 보기
         sec.append(
             T.h("div", { class: "set-row" }, [
-                T.h("div", { class: "set-label", text: t("allTabExcludesFoldered") }),
-                C.switchEl(s.allTabExcludesFoldered, (v) => C.put({ allTabExcludesFoldered: v }), t("allTabExcludesFoldered")),
+                T.h("div", { class: "set-label", text: t("foldersInList") }),
+                C.switchEl(s.foldersInList, (v) => C.put({ foldersInList: v }).then(() => C.build()), t("foldersInList")),
             ]),
-            T.h("div", { class: "set-desc", text: t("allTabExcludesFolderedDesc") }),
+            T.h("div", { class: "set-desc", text: t("foldersInListDesc") }),
         );
+        // 전체 탭에서 폴더 소속 에이전트 제외. 묶음으로 볼 때는 전체 탭이 없다.
+        if (!s.foldersInList) {
+            sec.append(
+                T.h("hr", { class: "divider" }),
+                T.h("div", { class: "set-row" }, [
+                    T.h("div", { class: "set-label", text: t("allTabExcludesFoldered") }),
+                    C.switchEl(s.allTabExcludesFoldered, (v) => C.put({ allTabExcludesFoldered: v }), t("allTabExcludesFoldered")),
+                ]),
+                T.h("div", { class: "set-desc", text: t("allTabExcludesFolderedDesc") }),
+            );
+        }
         body.append(sec);
     }
 
