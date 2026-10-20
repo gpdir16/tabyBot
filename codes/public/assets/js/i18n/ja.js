@@ -137,6 +137,7 @@
         apiKey: "APIキー",
         apiKeyOptional: "キー任意",
         apiKeySaved: "保存済み",
+        apiKeySavedToast: "API キーを保存しました",
         getApiKey: "APIキーを取得",
         oauthOpenPage: "ページを開く",
         loadingModels: "モデルを取得中…",

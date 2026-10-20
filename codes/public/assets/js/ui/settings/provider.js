@@ -544,26 +544,37 @@
                 }),
             );
         } else {
-            rows.push(
-                C.labeledRow(
-                    t("apiKey"),
-                    C.secretInput({
-                        placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
-                        aria: t("apiKey"),
-                        onCommit(input) {
-                            const v = input.trim();
-                            if (!v) return;
-                            C.put({ provider: { apiKey: v } }).then((ok) => {
-                                if (ok) {
-                                    C.keyEditing = false;
-                                    resetModels();
-                                    C.build();
-                                }
-                            });
-                        },
-                    }),
-                ),
-            );
+            // 저장 버튼이나 Enter로만 저장한다. 포커스가 빠질 때 저장하면 저장됐는지 알 수 없고 실수로 바뀐다.
+            let saving = false;
+            const save = () => {
+                const v = input.value.trim();
+                if (!v || saving) return;
+                saving = true;
+                saveRow.disabled = true;
+                C.put({ provider: { apiKey: v } }).then((ok) => {
+                    saving = false;
+                    if (!ok) {
+                        saveRow.disabled = false;
+                        return;
+                    }
+                    C.keyEditing = false;
+                    resetModels();
+                    T.toast.show("info", t("apiKeySavedToast"));
+                    C.build();
+                });
+            };
+            const keyRow = C.secretInput({
+                placeholder: provider.apiKeySet ? "••••••••" : meta.apiKeyOptional ? "" : "sk-…",
+                aria: t("apiKey"),
+                onInput(v) {
+                    saveRow.disabled = !v.trim();
+                },
+                onEnter: save,
+            });
+            const input = keyRow.querySelector("input");
+            const saveRow = C.actionRow(t("save"), save);
+            saveRow.disabled = true;
+            rows.push(C.labeledRow(t("apiKey"), keyRow), saveRow);
             if (provider.apiKeySet) {
                 // 교체를 그만두고 저장된 키를 그대로 쓴다.
                 rows.push(

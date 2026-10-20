@@ -52,7 +52,8 @@
 
     /* 비밀 입력(API 키 등): 입력칸 + 보기 토글. 설정과 온보딩에서 공용으로 쓴다.
        onCommit: blur/Enter 시 확정값, onInput: 입력마다 값 전달(온보딩 draft 동기화용). */
-    function secretInput({ value = "", placeholder = "", aria = "", onInput, onCommit }) {
+    // onCommit: 포커스가 빠질 때 저장. onEnter: Enter로 저장(저장 버튼을 따로 두는 곳).
+    function secretInput({ value = "", placeholder = "", aria = "", onInput, onCommit, onEnter }) {
         const input = T.h("input", {
             class: "input",
             type: "password",
@@ -81,7 +82,11 @@
         input.addEventListener("input", () => onInput?.(input.value));
         input.addEventListener("keydown", (e) => {
             e.stopPropagation();
-            if (e.key === "Enter") input.blur();
+            if (e.key !== "Enter" || e.isComposing) return;
+            if (onEnter) {
+                e.preventDefault();
+                onEnter(input.value);
+            } else input.blur();
         });
         if (onCommit) input.addEventListener("blur", () => onCommit(input.value));
         return T.h("div", { class: "key-row" }, [input, eye]);
