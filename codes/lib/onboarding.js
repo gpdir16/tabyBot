@@ -10,9 +10,10 @@ const OAUTH_AUTH_CHECKS = {
 };
 
 export function getConfigIssue(config = loadUserConfig()) {
-    if (!config.provider?.model?.trim()) return "model_missing";
     try {
+        // 기본 모델 프리셋이 쓸 수 있는 상태인지 본다.
         const provider = getMergedProvider(config);
+        if (!provider.model) return "model_missing";
         if (provider.type.endsWith("-oauth") && !OAUTH_AUTH_CHECKS[provider.id]?.()) return "oauth_missing";
         if (!provider.apiKey?.trim() && !provider.apiKeyOptional) return "api_key_missing";
         return null;

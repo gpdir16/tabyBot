@@ -28,44 +28,34 @@
         model_too_long: "modelTooLong",
         invalid_thinking_level: "invalidThinkingLevel",
         invalid_color: "invalidColor",
+        invalid_model_preset: "invalidModelPreset",
         too_many: "lastBotTooltip",
     };
 
     const DEFAULT_PALETTE = ["#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ff9f0a", "#32d74b", "#64d2ff"];
 
-    // "비워 두면 전역 값을 쓴다"는 선택 상자: 첫 항목이 전역 값을 보여 준다.
-    function inheritSelect({ label, options, globalLabel, current }) {
-        const opts = [{ value: "", label: t("agentInherit") + (globalLabel ? ` (${globalLabel})` : "") }, ...options];
-        const select = C.editorSelect(C.presetOptions(opts, current, current), current, label);
-        return { select, row: C.labeledRow(label, C.selectWrap(select)) };
-    }
+    // 예전 모델 오버라이드를 그대로 두는 선택지(프리셋이 생기기 전에 모델을 따로 고른 에이전트).
+    const LEGACY = "__legacy__";
 
-    // 모델 선택. 목록은 모델 탭과 같은 캐시(modelsCache)를 쓴다.
-    function buildModelPicker(agent, provider) {
-        const key = C.modelsKey(provider);
-        const cacheReady = C.modelsCache && C.modelsCache.key === key;
-        if (!cacheReady && !C.modelsLoading && C.modelsFailedKey !== key) void C.loadModels(provider);
-        const models = cacheReady ? C.modelsCache.models : [];
-        const globalLabel = models.find((m) => m.id === provider.model)?.label || provider.model;
-        return inheritSelect({
-            label: t("model"),
-            options: models.map((m) => ({ value: m.id, label: m.label || m.id })),
-            globalLabel,
-            current: agent?.model || "",
-        });
-    }
-
-    // 사고 수준 선택. 서버가 수준 목록을 주지 않으면 null.
-    function buildThinkingPicker(agent, settings) {
-        const levels = settings.thinkingLevels;
-        if (!Array.isArray(levels) || !levels.length) return null;
-        const globalLabel = levels.find((l) => l.value === settings.thinkingLevel)?.label || settings.thinkingLevel;
-        return inheritSelect({
-            label: t("thinkingLevel"),
-            options: levels.map((l) => ({ value: l.value, label: l.label || l.value })),
-            globalLabel,
-            current: agent?.thinkingLevel || "",
-        });
+    // 모델 프리셋 고르기. 비워 두면 기본 프리셋을 쓴다.
+    function buildPresetPicker(agent) {
+        const def = C.defaultModelPreset();
+        const options = [
+            { value: "", label: t("agentInherit") + (def ? ` (${C.modelPresetName(def)})` : "") },
+            ...C.modelPresets().map((p) => ({ value: p.uid, label: C.modelPresetName(p) })),
+        ];
+        let current = agent?.modelPreset && C.modelPresetByUid(agent.modelPreset) ? agent.modelPreset : "";
+        const legacy = !current && (agent?.model || agent?.thinkingLevel);
+        if (legacy) {
+            options.push({ value: LEGACY, label: t("agentLegacyModel", { model: agent.model || agent.thinkingLevel }) });
+            current = LEGACY;
+        }
+        const select = C.editorSelect(options, current, t("modelPreset"));
+        return {
+            rows: [C.labeledRow(t("modelPreset"), C.selectWrap(select)), T.h("div", { class: "set-desc", text: t("agentPresetDesc") })],
+            // 프리셋을 고르면 예전 모델 오버라이드는 지운다.
+            values: () => (select.value === LEGACY ? {} : { modelPreset: select.value, model: "", thinkingLevel: "" }),
+        };
     }
 
     // 아바타 색상 고르기. "자동"이면 id 해시로 정한다. value()는 고른 색(자동이면 "").
@@ -165,10 +155,8 @@
         name.addEventListener("keydown", (e) => e.stopPropagation());
         editor.append(C.labeledRow(t("agentName"), name));
 
-        const modelPicker = buildModelPicker(agent, settings.provider || {});
-        editor.append(modelPicker.row);
-        const thinkingPicker = buildThinkingPicker(agent, settings);
-        if (thinkingPicker) editor.append(thinkingPicker.row);
+        const presetPicker = buildPresetPicker(agent);
+        editor.append(...presetPicker.rows);
         const colorPicker = buildColorPicker(agent, settings);
         editor.append(colorPicker.row);
         const personaSection = buildPersonaSection(agent);
@@ -180,8 +168,7 @@
                 name.focus();
                 return;
             }
-            const body = { name: n, persona: personaSection.persona.value, model: modelPicker.select.value, color: colorPicker.value() };
-            if (thinkingPicker) body.thinkingLevel = thinkingPicker.select.value;
+            const body = { name: n, persona: personaSection.persona.value, color: colorPicker.value(), ...presetPicker.values() };
             await saveAgent(agent, body);
         });
 

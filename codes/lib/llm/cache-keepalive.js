@@ -76,10 +76,11 @@ const clampNumber = (value, min, max, fallback) => {
     return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
-// 프로바이더별 설정: { mode: "auto" } | { mode: "off" } | { mode: "custom", ttlMinutes, keepHours }.
-// 저장하지 않은 프로바이더는 자동이다(예전의 false는 끔).
-export function cacheKeepAliveSettings(providerId, config = loadUserConfig()) {
-    const raw = config.cacheKeepAlive?.[providerId || "default"];
+// 모델 프리셋별 설정: { mode: "auto" } | { mode: "off" } | { mode: "custom", ttlMinutes, keepHours }.
+// 저장하지 않은 프리셋은 자동이다(예전의 false는 끔). 예전에는 프로바이더 종류(id)로 저장했으므로 그 값도 읽는다.
+export function cacheKeepAliveSettings(provider, config = loadUserConfig()) {
+    const all = config.cacheKeepAlive || {};
+    const raw = (provider.presetUid && all[provider.presetUid]) ?? all[provider.id || "default"];
     if (raw === false || raw?.mode === "off") return { mode: "off" };
     if (raw?.mode === "custom") {
         return {
@@ -104,7 +105,7 @@ export function normalizeCacheKeepAlive(value) {
 }
 
 function providerKey(provider) {
-    return `${provider.id}|${provider.type}|${provider.baseURL}|${provider.model}|${provider.openRouterPins?.[provider.model] || ""}`;
+    return `${provider.profileUid || ""}|${provider.id}|${provider.type}|${provider.baseURL}|${provider.model}|${provider.openRouterPins?.[provider.model] || ""}`;
 }
 
 // ── 학습한 값(재시작해도 이어 씀) ──
@@ -187,10 +188,13 @@ function saveStats() {
     saveTimer.unref?.();
 }
 
+// 학습한 만료 시간은 프로바이더 프로필과 모델(OpenRouter는 고정한 업스트림까지)마다 따로 둔다.
+// 업스트림마다 캐시가 따로라 같은 모델이라도 만료 시간이 다르다. 예전 키(프로바이더 종류|모델)의 값은 이어 쓴다.
 function modelStat(provider, profile) {
     const s = loadStats();
-    const id = `${provider.id}|${provider.model}`;
-    s.models[id] ??= { ttlMs: profile.ttlMs, cached: false, hitGapMs: 0 };
+    const pin = provider.openRouterPins?.[provider.model] || "";
+    const id = `${provider.profileUid || provider.id}|${provider.model}${pin ? `|${pin}` : ""}`;
+    s.models[id] ??= { ...(s.models[`${provider.id}|${provider.model}`] || { ttlMs: profile.ttlMs, cached: false, hitGapMs: 0 }) };
     return s.models[id];
 }
 
@@ -376,7 +380,7 @@ function returnBuckets(weight) {
 export function cacheKeepAliveSummary(provider, config = loadUserConfig()) {
     const profile = profileOf(provider);
     if (!profile) return null;
-    const settings = cacheKeepAliveSettings(provider.id, config);
+    const settings = cacheKeepAliveSettings(provider, config);
     const stat = modelStat(provider, profile);
     const mix = patternMix();
     const pattern = { own: mix.own, base: mix.base, ownShare: Math.round(mix.ownShare * 100), returns: returnBuckets(mix.weight) };
@@ -415,7 +419,7 @@ function drop(entry) {
 }
 
 // 지금 쓸 만료 시간. 사용자 지정이면 그 값, 아니면 학습한 값.
-function ttlFor(entry, settings = cacheKeepAliveSettings(entry.provider.id)) {
+function ttlFor(entry, settings = cacheKeepAliveSettings(entry.provider)) {
     return settings.mode === "custom" ? settings.ttlMinutes * MINUTE : modelStat(entry.provider, entry.profile).ttlMs;
 }
 
@@ -430,13 +434,15 @@ function schedule(entry) {
 function worthPinging(entry) {
     let current = null;
     try {
-        current = getMergedProvider(loadUserConfig());
+        // 이 대화가 쓰는 프리셋의 지금 설정. 프리셋 대신 예전 모델 오버라이드를 쓰는 봇은 모델을 그 봇의 것으로 맞춘다.
+        const fresh = getMergedProvider(loadUserConfig(), entry.provider.presetUid);
+        current = entry.provider.modelOverride ? { ...fresh, model: entry.provider.model, openRouterPins: {} } : fresh;
     } catch {
         return false; // 설정을 읽을 수 없으면 보내지 않는다
     }
     // 프로바이더나 모델이 바뀌었으면 다음 요청은 이 캐시를 쓰지 않는다.
     if (providerKey(current) !== providerKey(entry.provider)) return false;
-    const settings = cacheKeepAliveSettings(current.id);
+    const settings = cacheKeepAliveSettings(current);
     if (settings.mode === "off" || entry.promptTokens < MIN_PROMPT_TOKENS) return false;
     const now = Date.now();
     const idle = now - entry.endedAt;

@@ -135,14 +135,18 @@
             }),
 
         models: (payload) => request("/api/models/fetch", { method: "POST", json: payload || {} }),
-        openRouterProviders: (model) => request(`/api/providers/openrouter/endpoints?model=${enc(model || "")}`),
+        openRouterProviders: (model, profile) =>
+            request(`/api/providers/openrouter/endpoints?model=${enc(model || "")}${profile ? `&profile=${enc(profile)}` : ""}`),
 
         getSettings: () => request("/api/settings"),
         putSettings: (patch) => request("/api/settings", { method: "PUT", json: patch }),
         addProviderProfile: (providerId) => request("/api/provider-profiles", { method: "POST", json: { providerId } }),
-        renameProviderProfile: (uid, name) => request(`/api/provider-profiles/${enc(uid)}`, { method: "PUT", json: { name } }),
-        activateProviderProfile: (uid) => request(`/api/provider-profiles/${enc(uid)}/activate`, { method: "POST", json: {} }),
+        updateProviderProfile: (uid, body) => request(`/api/provider-profiles/${enc(uid)}`, { method: "PUT", json: body }),
         deleteProviderProfile: (uid) => request(`/api/provider-profiles/${enc(uid)}`, { method: "DELETE" }),
+        createModelPreset: (body) => request("/api/model-presets", { method: "POST", json: body }),
+        updateModelPreset: (uid, body) => request(`/api/model-presets/${enc(uid)}`, { method: "PUT", json: body }),
+        defaultModelPreset: (uid) => request(`/api/model-presets/${enc(uid)}/default`, { method: "POST", json: {} }),
+        deleteModelPreset: (uid) => request(`/api/model-presets/${enc(uid)}`, { method: "DELETE" }),
         compressAllSessions: (chatIds) =>
             request("/api/sessions/compress-all", { method: "POST", json: Array.isArray(chatIds) && chatIds.length ? { chatIds } : {} }),
 

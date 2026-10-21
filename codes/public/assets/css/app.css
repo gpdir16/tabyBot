@@ -2770,6 +2770,7 @@ body.sb-collapsed .sp-expand {
     transition: background-color 320ms var(--ease);
 }
 .nav-row:active,
+.radio-row:active:not(:disabled),
 .act-row:active:not(:disabled) {
     background: var(--fill);
     transition: none;
@@ -2948,6 +2949,8 @@ body.sb-collapsed .sp-expand {
 .sp-body .models-list {
     max-height: none;
     overflow: hidden;
+    /* 스크롤하지 않으므로 스크롤 막대 자리를 남기지 않는다(남기면 오른쪽 모서리만 둥근 판 밖으로 잘려 보인다) */
+    scrollbar-gutter: auto;
 }
 .sp-body .models-list .radio-row {
     position: relative;
@@ -6518,6 +6521,7 @@ body.viewer-open {
     .td-row,
     .nav-row,
     .act-row,
+    .radio-row,
     .provider-card {
         transition: background-color var(--dur-1) var(--ease);
     }
@@ -6525,6 +6529,7 @@ body.viewer-open {
     .sp-item:hover,
     .nav-row:hover,
     .act-row:hover:not(:disabled),
+    .radio-row:hover:not(:disabled),
     .provider-card:hover {
         background: var(--hover);
     }
@@ -6779,6 +6784,10 @@ body.viewer-open {
     }
     .sp-view[data-level="2"] {
         --w: 500px;
+    }
+    /* 폼 안에서 한 단계 더 들어간 화면(모델 고르기 등)은 폼 오른쪽에 열로 붙는다 */
+    .sp-view[data-level="3"] {
+        z-index: 0;
     }
     /* 목록 열에는 돌아갈 곳이 없다. 상세와 폼 열의 버튼은 그 열을 닫는다 */
     .sp-view[data-view="root"] .sp-back {

@@ -1,4 +1,5 @@
-import { loadUserConfig, loadProviderConfig } from "./config-loader.js";
+import { loadUserConfig, loadProviderConfig, providerConfigOf } from "./config-loader.js";
+import { defaultPreset } from "./model-presets.js";
 
 const LABELS = {
     en: { off: "Off", none: "None", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "XHigh", max: "Max" },
@@ -43,9 +44,11 @@ export function normalizeThinkingLevel(value, providerIdOrMeta) {
     return meta.defaultLevel;
 }
 
+// 기본 모델 프리셋의 추론 깊이.
 export function getThinkingLevelForUser(config = loadUserConfig()) {
-    const pid = config.provider?.id || "default";
-    return normalizeThinkingLevel(config.thinkingLevel ?? config.reasoningEffort, pid);
+    const preset = defaultPreset(config);
+    const pid = providerConfigOf(config, preset.profile).provider?.id || "default";
+    return normalizeThinkingLevel(preset.thinkingLevel || config.reasoningEffort, pid);
 }
 
 export function getProviderThinkingMeta(providerId) {

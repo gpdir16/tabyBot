@@ -21,8 +21,7 @@
             { id: "notices", label: "notices", icon: "bell", color: "#ff453a" },
         ],
         [
-            { id: "provider", label: "provider", icon: "cloud", color: "#5e5ce6" },
-            { id: "model", label: "model", icon: "cpu", color: "#bf5af2" },
+            { id: "model", label: "modelsTab", icon: "cpu", color: "#bf5af2" },
             { id: "account", label: "account", icon: "person", color: "#30d158" },
             { id: "efficiency", label: "efficiency", icon: "gauge", color: "#32ade6" },
         ],
@@ -35,17 +34,7 @@
     ];
 
     // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
-    const FORM_KEYS = [
-        "folderEditing",
-        "groupEditing",
-        "skillEditing",
-        "mcpEditing",
-        "secretEditing",
-        "credsEditing",
-        "modelSub",
-        "efficiencySub",
-        "providerSub",
-    ];
+    const FORM_KEYS = ["folderEditing", "groupEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub"];
 
     function formOpen() {
         return FORM_KEYS.some((k) => C[k]);
@@ -56,8 +45,30 @@
     }
 
     function closeForm() {
+        // 모델 고르기처럼 폼 안에서 한 단계 더 들어간 화면은 그 폼으로 돌아간다.
+        if (C.modelSubBack?.()) return;
         clearForms();
         build();
+    }
+
+    // 폼 안에서 한 단계 더 들어간 화면(모델 고르기 등)이 열려 있는지. 열려 있으면 그 화면은 깊이 3이다.
+    function subFormOpen() {
+        return Boolean(C.modelSubParent?.());
+    }
+
+    // 모델 탭의 폼은 종류가 여럿이다(프리셋 편집, 프로바이더 추가, 프로바이더 편집). 종류가 다르면 다른 화면으로 친다.
+    function modelFormKey() {
+        const sub = C.modelSub;
+        return sub && typeof sub === "object" ? `:${sub.kind}:${sub.uid || ""}` : "";
+    }
+
+    // 한 단계 더 들어간 화면을 잠깐 닫은 것으로 치고 그 밑의 폼을 그린다.
+    function viewUnderSub() {
+        const saved = C.modelSub;
+        C.modelSub = C.modelSubParent();
+        const view = buildView();
+        C.modelSub = saved;
+        return view;
     }
 
     // 폼을 잠깐 닫은 것으로 치고 그 밑의 상세 화면을 그린다.
@@ -103,14 +114,12 @@
 
     function formTitle() {
         if (C.folderEditing) return listFormTitle(C.folderEditing, C.folderList(), "folderNew", "folders");
-        if (C.groupEditing) return listFormTitle(C.groupEditing, C.groupList(), "groupNew", "groups");
         if (C.skillEditing) return C.skillEditing.mode === "new" ? t("addSkill") : C.skillEditing.name;
         if (C.mcpEditing) return C.mcpEditing.mode === "new" ? t("addMcpServer") : C.mcpEditing.name;
         if (C.secretEditing) return C.secretEditing.mode === "new" ? t("addSecret") : C.secretEditing.name;
         if (C.credsEditing) return t(C.credsEditing === "password" ? "authPassword" : "authUsername");
-        if (C.modelSub) return t(C.modelSub === "adv" ? "advanced" : "model");
-        if (C.efficiencySub) return t(C.efficiencySub === "stats" ? "usageStats" : "cacheKeepAlive");
-        if (C.providerSub) return t("addProvider");
+        if (C.modelSub) return C.modelSubTitle(C.modelSub);
+        if (C.efficiencySub) return C.efficiencyTitle();
         return "";
     }
 
@@ -185,7 +194,6 @@
         folders: "buildFolders",
         groups: "buildGroups",
         notices: "buildNotices",
-        provider: "buildProvider",
         model: "buildModel",
         account: "buildAccount",
         efficiency: "buildEfficiency",
@@ -249,7 +257,7 @@
                     async onclick(e) {
                         const level = e.currentTarget.closest(".sp-view")?.dataset.level;
                         if (!(await confirmLeave())) return;
-                        if (level === "2") {
+                        if (level === "2" || level === "3") {
                             closeForm();
                             return;
                         }
@@ -273,12 +281,17 @@
         // (폼 여부는 본문을 그린 뒤에 본다. 지워진 대상의 폼은 그리는 중에 닫힌다.)
         const form = tab !== "root" && formOpen();
         if (form) title.textContent = formTitle();
-        const level = tab === "root" ? 0 : form ? 2 : 1;
+        const sub = form && subFormOpen();
+        const level = tab === "root" ? 0 : sub ? 3 : form ? 2 : 1;
         const view = T.h(
             "div",
             {
                 class: "sp-view",
-                dataset: { view: tab === "root" ? "root" : "detail", level: String(level), key: C.pathFor(tab, agentId) + (form ? "#form" : "") },
+                dataset: {
+                    view: tab === "root" ? "root" : "detail",
+                    level: String(level),
+                    key: C.pathFor(tab, agentId) + (sub ? "#sub" : form ? `#form${modelFormKey()}` : ""),
+                },
             },
             [head, T.h("div", { class: "sp-main" }, [buildNav(mark ? mark.tab : tab, mark ? mark.agentId : agentId), body])],
         );
@@ -307,8 +320,11 @@
     // 화면을 다시 그린다. 깊이가 달라졌으면 모바일에서 새 화면이 밀려 들어오고(깊어질 때) 옛 화면이 밀려 나간다(얕아질 때).
     // 같은 화면을 다시 그릴 때는 스크롤 위치를 지킨다.
     function build() {
+        // 같은 깊이에서 다음 화면으로 넘어갈 때(프로바이더를 만들고 바로 그 편집으로) 화면이 밀려 들어오게 한다.
+        const forward = C.nextPush === true;
+        C.nextPush = false;
         if (!isMobile()) {
-            buildColumns();
+            buildColumns(forward);
             return;
         }
         const prev = page.querySelector(".sp-view:not(.sp-leaving)");
@@ -316,7 +332,7 @@
         const sameKey = prev && prev.dataset.key === view.dataset.key;
         const depth = prev ? Number(view.dataset.level) - Number(prev.dataset.level) : 0;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const anim = depth && isMobile() && !reduce ? (depth > 0 ? "push" : "pop") : null;
+        const anim = reduce || !prev ? null : forward && !sameKey ? "push" : depth ? (depth > 0 ? "push" : "pop") : null;
         // 화면이 움직이는 중에 통째로 갈아 끼우면 애니메이션이 끊기고 제스처가 죽는다.
         // (모델·스킬 목록이 도착하거나 설정 이벤트가 올 때) 다 움직인 뒤에 한 번 그린다.
         if (!anim && C.viewBusy) {
@@ -367,7 +383,8 @@
 
     // 데스크톱: 목록 · 상세 · 편집 폼을 바꿔 끼우지 않고 왼쪽부터 열로 나란히 놓는다.
     // 새 열이 생기면 그 열이 보이도록 앱의 가로 스크롤을 옮긴다.
-    function buildColumns() {
+    // forward: 같은 자리의 열이 바뀌어도 바로 바꾸지 않고, 옛 열은 닫히고 새 열이 미끄러져 나온다.
+    function buildColumns(forward = false) {
         clearTimeout(C.viewTimer);
         C.viewBusy = false;
         C.rebuildPending = false;
@@ -377,7 +394,8 @@
         if (C.openTab !== "root") {
             // 폼이 열려 있으면 폼을 먼저 그린다(지워진 대상의 폼은 그리는 중에 닫힌다).
             const top = buildView();
-            if (top.dataset.level === "2") views.push(viewUnderForm());
+            if (top.dataset.level !== "1") views.push(viewUnderForm());
+            if (top.dataset.level === "3") views.push(viewUnderSub());
             views.push(top);
         }
         // 같은 열을 다시 그릴 때는 스크롤 위치를 지킨다.
@@ -389,7 +407,7 @@
         const gone = live.filter((v) => !views.some((n) => n.dataset.key === v.dataset.key));
         // 열고 닫는 움직임(app.css의 col-in / col-out): 새 열은 왼쪽 이웃 밑에서 미끄러져 나오고, 닫힌 열은 그 밑으로 들어간다.
         // 같은 자리의 열이 다른 것으로 바뀔 때(다른 항목을 고름)는 움직이지 않고 바로 바뀐다. 목록 열은 늘 있으므로 뺀다.
-        const sameLevel = (list, v) => list.some((x) => x.dataset.level === v.dataset.level);
+        const sameLevel = (list, v) => !forward && list.some((x) => x.dataset.level === v.dataset.level);
         for (const v of views) if (v.dataset.view !== "root") T.columnIn(v, `s:${v.dataset.key}`, added.includes(v) && !sameLevel(gone, v));
         // 아직 닫히는 중인 열과 이번에 닫힌 열은 맨 뒤(원래 있던 자리)에 남겨 두었다가 다 움직이면 치운다.
         const leaving = [...page.querySelectorAll(".sp-view.col-out"), ...gone.filter((v) => !sameLevel(added, v))].filter(
@@ -437,15 +455,16 @@
             const top = views.find((v) => !v.classList.contains("sp-leaving") && v.dataset.view !== "root") || views[views.length - 1];
             for (const v of views) if (v !== top) v.remove();
             top.classList.remove("sp-in-right", "sp-in-left");
+            const fromSub = top.dataset.level === "3";
             const fromForm = top.dataset.level === "2";
-            const under = fromForm ? viewUnderForm() : buildView("root", null);
+            const under = fromSub ? viewUnderSub() : fromForm ? viewUnderForm() : buildView("root", null);
             page.prepend(under);
-            if (fromForm) under.querySelector(".sp-body").scrollTop = leftScroll.get(under.dataset.key) || 0;
+            if (fromForm || fromSub) under.querySelector(".sp-body").scrollTop = leftScroll.get(under.dataset.key) || 0;
             else under.querySelector(".sp-nav").scrollTop = C.rootScroll;
             C.viewBusy = true;
-            return { top, under, fromForm };
+            return { top, under, fromForm, fromSub };
         },
-        end(commit, { top, under, fromForm }) {
+        end(commit, { top, under, fromForm, fromSub }) {
             if (!commit) {
                 under.remove();
                 settleView();
@@ -458,7 +477,7 @@
                 C.rebuildPending = false;
                 void confirmLeave().then((ok) => {
                     if (!ok) return;
-                    if (fromForm) closeForm();
+                    if (fromForm || fromSub) closeForm();
                     else C.popToRoot();
                 });
                 return;
@@ -467,6 +486,11 @@
             top.remove();
             C.viewBusy = false;
             C.rebuildPending = false;
+            if (fromSub) {
+                // 깔아 둔 폼이 그대로 지금 화면이 된다.
+                C.modelSub = C.modelSubParent();
+                return;
+            }
             if (fromForm) {
                 // 깔아 둔 상세 화면이 그대로 지금 화면이 된다.
                 clearForms();
