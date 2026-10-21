@@ -286,11 +286,9 @@
         ];
     }
 
-    // 그룹 대화방 행: 설정의 그룹 탭에 있는 이 방의 편집 폼을 연다.
+    // 그룹 대화방 행: 대화 정보 창의 그룹 정보를 연다.
     function groupMenuItems(group) {
-        return [
-            { label: t("groupSettings"), icon: "settings", defer: true, onSelect: () => T.settingsUI.open({ tab: "groups", groupId: group.uuid }) },
-        ];
+        return [{ label: t("groupInfo"), icon: "settings", defer: true, onSelect: () => T.chatInfo.open(group) }];
     }
 
     // "폴더에 추가…" 하위 메뉴: 지금 들어 있는 폴더에는 체크가 붙고, 다시 누르면 폴더에서 뺀다.
