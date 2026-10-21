@@ -467,6 +467,7 @@
         const sr = T.settingsUI.routeFromPath();
         if (sr) {
             // 설정 라우트: 모바일에서도 /a/와 마찬가지로 메인 패널을 표시한다.
+            T.chatInfo?.close?.(true);
             T.todosUI?.hide?.();
             T.computerUI?.hide?.();
             T.sidebar?.showChat?.();
@@ -476,6 +477,7 @@
         const tr = T.todosUI?.routeFromPath?.();
         if (tr) {
             T.settingsUI.hide();
+            T.chatInfo?.close?.(true);
             T.computerUI?.hide?.();
             T.sidebar?.showChat?.();
             T.todosUI.open({ id: tr.id || null, fromUrl: true });
@@ -486,6 +488,7 @@
         if (cr) {
             // 봇 컴퓨터 라우트: 화면 스트림 + PTY 터미널 페이지.
             T.settingsUI.hide();
+            T.chatInfo?.close?.(true);
             T.todosUI?.hide?.();
             T.sidebar?.showChat?.();
             T.computerUI.open({ uuid: cr.uuid, fromUrl: true });

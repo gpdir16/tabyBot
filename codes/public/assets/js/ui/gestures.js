@@ -74,12 +74,12 @@
 
     function pickMode(cur, dx) {
         if (!isMobile() || blocked()) return null;
-        // 할 일 상세 화면은 메인 화면 밖(맨 위 층)에 떠 있다. 그 위에서의 밀기는 그 화면을 밀어낸다.
-        const todo = T.todosUI?.gesture;
-        if (todo?.canPop() && todo.host()?.contains(cur.target)) {
+        // 할 일 상세 화면과 대화 정보 패널은 메인 화면 밖(맨 위 층)에 떠 있다. 그 위에서의 밀기는 그 화면을 밀어낸다.
+        for (const layer of [T.chatInfo?.gesture, T.todosUI?.gesture]) {
+            if (!layer?.canPop() || !layer.host()?.contains(cur.target)) continue;
             if (dx <= 0) return null;
-            if (cur.edge !== "left" && (cur.target.closest?.(OWN_DRAG) || scrollsX(cur.target, todo.host()))) return null;
-            cur.api = todo;
+            if (cur.edge !== "left" && (cur.target.closest?.(OWN_DRAG) || scrollsX(cur.target, layer.host()))) return null;
+            cur.api = layer;
             return "panel";
         }
         if (chatOpen()) {

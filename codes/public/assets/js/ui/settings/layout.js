@@ -17,7 +17,6 @@
         [
             { id: "general", label: "general", icon: "settings", color: "#8e8e93" },
             { id: "folders", label: "folders", icon: "folder", color: "#0a84ff" },
-            { id: "groups", label: "groups", icon: "users", color: "#ac8e68" },
             { id: "notices", label: "notices", icon: "bell", color: "#ff453a" },
         ],
         [
@@ -34,7 +33,7 @@
     ];
 
     // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
-    const FORM_KEYS = ["folderEditing", "groupEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub"];
+    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub"];
 
     function formOpen() {
         return FORM_KEYS.some((k) => C[k]);
@@ -172,15 +171,6 @@
                 onclick: () => C.navigate("agents", a.id),
             }),
         );
-        agents.push(
-            navItem({
-                active: tab === "agents" && agentId === "__new__",
-                label: t("addAgent"),
-                accent: true,
-                tile: T.h("span", { class: "sp-tile plain" }, [T.icon("plus")]),
-                onclick: () => C.navigate("agents", "__new__"),
-            }),
-        );
         return T.h("nav", { class: "sp-nav", role: "tablist", "aria-label": t("settings") }, [
             ...groups,
             T.h("div", { class: "sp-nav-head", text: t("agents") }),
@@ -192,7 +182,6 @@
     const BUILDERS = {
         general: "buildGeneral",
         folders: "buildFolders",
-        groups: "buildGroups",
         notices: "buildNotices",
         model: "buildModel",
         account: "buildAccount",
@@ -240,7 +229,8 @@
                 "button",
                 {
                     class: "btn-icon sp-expand",
-                    "aria-label": t("menu"),
+                    "aria-label": t("expand"),
+                    "data-tip": t("expand"),
                     onclick() {
                         T.sidebar?.expand?.();
                     },
@@ -512,6 +502,7 @@
     }
 
     C.build = build;
+    C.groupRows = groupRows;
     C.dirtyView = dirtyView;
     C.confirmLeave = confirmLeave;
     C.openForm = openForm;

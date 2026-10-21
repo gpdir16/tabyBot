@@ -24,7 +24,8 @@
 
     function syncMobileNavigation() {
         const chatOpen = isMobile() && document.body.classList.contains("mobile-chat");
-        setIcon(collapseBtn, isMobile() ? "settings" : "chevron");
+        // 데스크톱의 접기 버튼은 접힌 뒤 대화와 설정 머리에 나오는 펼치기 버튼과 같은 아이콘을 쓴다.
+        setIcon(collapseBtn, isMobile() ? "settings" : "menu");
         collapseBtn.setAttribute("data-tip", isMobile() ? t("settings") : t(C.collapsedState ? "expand" : "collapse"));
         collapseBtn.setAttribute("aria-label", isMobile() ? t("settings") : t(C.collapsedState ? "expand" : "collapse"));
         if (isMobile()) collapseBtn.setAttribute("aria-expanded", "false");

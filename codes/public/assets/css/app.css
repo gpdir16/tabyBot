@@ -2854,10 +2854,28 @@ body.sb-collapsed .sp-expand {
     border-top: 1px solid var(--border);
     margin: var(--sp-2) 0;
 }
-/* 묶음 목록에서는 묶음 사이의 간격이 구분선 노릇을 한다 */
+/* 묶음 목록에서는 묶음 사이의 간격이 구분선 노릇을 한다.
+   칸 사이는 8px(.set-section, .agent-editor)이고, 새 구획은 앞 묶음에서 늘 28px 떨어진다.
+   구분선이 있으면 그 여백이, 없으면 소제목이나 다음 묶음의 위 여백이 28px을 채운다.
+   묶음에 딸린 설명(꼬리말)은 8px, 설명 다음 묶음은 14px이다. 알림 목록(.nt-list)도 묶음으로 친다. */
 .sp-body .divider {
     border-top: 0;
     margin: 6px 0;
+}
+:is(.set-section, .agent-editor) > :not(.divider, .set-warn) + :is(.field-label, .field:has(> .field-label)),
+:is(.set-section, .agent-editor) > :is(.set-group, .field, .nt-list) + .set-group {
+    margin-top: 20px;
+}
+.set-section > .set-warn + .field-label {
+    margin-top: 12px;
+}
+/* 묶음 바로 밑의 설명은 꼬리말이다. 그 다음은 새 구획이므로 28px을 띄운다.
+   (설명 다음 묶음의 14px 규칙보다 우선하도록 :is 안에 그 규칙의 가장 구체적인 선택자를 같이 둔다) */
+:is(.set-section, .agent-editor)
+    > :is(.set-group, .nt-list)
+    + .set-desc
+    + :is(.set-group, .nt-list, .set-desc, .field, .field:not(:has(> .field-label))) {
+    margin-top: 20px;
 }
 .field {
     display: flex;
@@ -2922,7 +2940,7 @@ body.sb-collapsed .sp-expand {
     padding-inline: var(--sp-4);
 }
 /* 설명은 바로 위 묶음에 딸린 글이다. 다음 묶음과는 조금 더 띄운다 */
-.set-section > .set-desc + .set-group {
+:is(.set-section, .agent-editor) > .set-desc + :is(.set-group, .nt-list, .field:not(:has(> .field-label))) {
     margin-top: 6px;
 }
 .set-section > .set-desc,
@@ -3356,7 +3374,7 @@ body.sb-collapsed .sp-expand {
 .agent-editor {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-3);
+    gap: var(--sp-2);
 }
 /* 봇 아바타 색상 스와치 */
 .agent-colors {
@@ -5824,7 +5842,8 @@ body.group-chat #btnHdrComputer {
 
     /* 상세 화면(todos/detail.js의 renderDetail): 문서 맨 위 층에 놓이고, 설정 화면과 같은 머리·묶음·전환을 쓴다.
        화면이 떠 있는 동안 밑의 할 일 목록은 왼쪽으로 30% 물러나 있다. */
-    .td-detail-host {
+    .td-detail-host,
+    .ci-host {
         --hdr-h: calc(52px + env(safe-area-inset-top));
         position: fixed;
         top: 0;
@@ -5836,11 +5855,17 @@ body.group-chat #btnHdrComputer {
         overflow: hidden;
         pointer-events: none;
     }
-    .td-detail-host[hidden] {
+    .td-detail-host[hidden],
+    .ci-host[hidden] {
         display: none;
     }
-    body.mobile-chat.td-detail-open #main {
+    body.mobile-chat.td-detail-open #main,
+    body.mobile-chat.ci-open #main,
+    body.ci-open:not(.mobile-chat) #sidebar {
         transform: translateX(-30%);
+    }
+    .ci-host > .sp-view:not(.sp-leaving) {
+        pointer-events: auto;
     }
     .td-view {
         position: absolute;
@@ -6499,6 +6524,18 @@ body.viewer-open {
         background: var(--selected);
         transform: none;
     }
+    /* 사이드바 머리 버튼은 대화와 설정 머리의 버튼과 같은 자리(왼쪽 12px), 같은 크기(아이콘 16px)로 둔다.
+       바탕 없는 버튼은 아이콘만 보이므로 검색창의 돋보기와 ⌘K, 폴더 탭 글자를 그 아이콘 줄에 맞춘다. */
+    .sb-top .btn-icon .icon {
+        width: 16px;
+        height: 16px;
+    }
+    .sb-search {
+        padding: 0 10px;
+    }
+    .sb-tabs {
+        padding: 0 10px;
+    }
     #header > .btn-menu {
         display: none;
     }
@@ -6794,15 +6831,21 @@ body.viewer-open {
         display: none;
     }
     /* 할 일: 상세 · 일정/담당이 목록 오른쪽에 열로 붙는다(todos/detail.js의 renderDetailColumns) */
-    .td-detail-host {
+    .td-detail-host,
+    .ci-host {
         position: relative;
         z-index: 1;
         display: flex;
         flex: none;
         height: 100%;
     }
-    .td-detail-host[hidden] {
+    .td-detail-host[hidden],
+    .ci-host[hidden] {
         display: none;
+    }
+    /* 대화 정보 패널: 채팅과 맞닿는 왼쪽에 구분선을 긋는다 */
+    .ci-host {
+        border-left: var(--hairline) solid var(--separator);
     }
     .td-view {
         --w: var(--col-w);
@@ -6843,4 +6886,29 @@ body.viewer-open {
     .td-view.col-out {
         animation-duration: 1ms;
     }
+}
+
+/* 대화 정보 패널(ui/chatinfo.js): 화면은 설정과 같은 .sp-view다.
+   데스크톱은 채팅 오른쪽 열, 모바일은 할 일 상세처럼 문서 맨 위 층에서 밀려 들어온다(.td-detail-host와 같은 규칙). */
+/* 멤버 행: 아바타, 이름과 쓰는 프리셋 */
+.ci-agent-row {
+    gap: var(--sp-3);
+}
+.ci-agent-row .bot-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: var(--fs-s);
+}
+/* 대화방 헤더의 아바타와 이름을 누르면 대화 정보 패널이 열린다 */
+.hdr-info {
+    cursor: pointer;
+}
+.hd-name-wrap.hdr-info:focus-visible,
+.hdr-avatar.hdr-info:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+.hdr-avatar.hdr-info:focus-visible {
+    border-radius: 50%;
 }

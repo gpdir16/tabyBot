@@ -27,7 +27,18 @@
                 searchEl.select();
             }
         });
-        addBtn.addEventListener("click", () => T.settingsUI.open({ agentId: "__new__" }));
+        // + 메뉴: 길게 누르기와 우클릭은 다른 목록 행처럼 attach로 붙인다.
+        // 터치로 탭하면 길게 누를 때와 같은 시트로, 마우스로 누르면 버튼 아래 메뉴로 연다.
+        T.ctxmenu.attach(addBtn, () => T.chatInfo.newMenuItems());
+        let addTouch = false;
+        addBtn.addEventListener("pointerdown", (e) => {
+            addTouch = e.pointerType === "touch";
+        });
+        addBtn.addEventListener("click", () => {
+            const items = T.chatInfo.newMenuItems();
+            if (addTouch) T.ctxmenu.open({ source: addBtn, touch: true, items });
+            else T.ctxmenu.open({ anchor: addBtn, items });
+        });
         settingsBtn.addEventListener("click", () => T.settingsUI.open());
         state.on("bots", () => {
             C.render();

@@ -31,20 +31,7 @@
     let putChain = Promise.resolve();
 
     /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = [
-        "general",
-        "folders",
-        "groups",
-        "notices",
-        "model",
-        "account",
-        "efficiency",
-        "selfimprovement",
-        "skills",
-        "mcp",
-        "secrets",
-        "agents",
-    ];
+    const TABS = ["general", "folders", "notices", "model", "account", "efficiency", "selfimprovement", "skills", "mcp", "secrets", "agents"];
 
     // 현재 경로를 설정 라우트로 해석한다. /s나 /s/…가 아니면 null.
     function routeFromPath() {
@@ -54,6 +41,8 @@
                 location.pathname || "",
             );
         if (!m) return null;
+        // 그룹 대화방은 이제 설정이 아니라 대화 정보 창에서 고친다. 예전 주소는 설정 첫 화면으로 연다.
+        if (m[1] === "groups") return { tab: "root", agentId: null };
         // 프로바이더 탭은 모델과 프로바이더 탭으로 합쳐졌다. 예전 주소는 그 탭으로 연다.
         const tab = m[1] === "provider" ? "model" : m[1];
         let agentId = null;
@@ -107,8 +96,6 @@
         C.folderEditing = null;
         if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", agentId: o.folderAgent || null };
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
-        // open({tab:"groups", groupId}). 사이드바 그룹 대화방 행의 "그룹 설정"이 곧장 편집 폼을 연다.
-        C.groupEditing = tab === "groups" && o.groupId ? { mode: "edit", id: o.groupId } : null;
         C.modelSub = null;
         C.efficiencySub = null;
         C.keyEditing = null;
@@ -170,7 +157,6 @@
         C.mcpEditing = null;
         C.secretEditing = null;
         C.folderEditing = null;
-        C.groupEditing = null;
         clearTimeout(C.viewTimer);
         C.viewBusy = false;
         C.rebuildPending = false;

@@ -9,6 +9,7 @@
     const thread = document.getElementById("thread");
     const hdrAvatar = document.getElementById("hdrAvatar");
     const hdrName = document.getElementById("hdrName");
+    const hdrNameWrap = hdrName?.parentElement;
 
     /* ── 대화 열기 ──────────────────────────────────────────── */
     const REVALIDATE_AFTER_MS = 3000;
@@ -143,6 +144,7 @@
         // 컴퓨터 뷰가 열려 있으면 헤더/타이틀은 그 페이지가 소유한다.
         if (T.computerUI?.isOpen?.()) return;
         hdrAvatar.replaceChildren();
+        setHeaderInfo(false);
         if (T.todosUI?.isOpen?.()) {
             const name = t("todos");
             document.title = `${name} · tabyBot`;
@@ -167,10 +169,42 @@
         }
         hdrAvatar.style.color = "#fff";
         hdrName.textContent = name;
+        setHeaderInfo(Boolean(bot));
+    }
+
+    // 대화방이 열려 있으면 헤더의 아바타와 이름을 눌러 대화 정보 창을 연다(메신저처럼).
+    function setHeaderInfo(on) {
+        for (const el of [hdrAvatar, hdrNameWrap]) {
+            if (!el) continue;
+            el.classList.toggle("hdr-info", on);
+            if (on) {
+                el.setAttribute("role", "button");
+                el.setAttribute("tabindex", "0");
+                el.setAttribute("aria-label", T.state.currentChat()?.isGroup ? t("groupInfo") : t("agentInfo"));
+            } else {
+                for (const a of ["role", "tabindex", "aria-label"]) el.removeAttribute(a);
+            }
+        }
+    }
+
+    function openHeaderInfo() {
+        if (T.computerUI?.isOpen?.() || T.todosUI?.isOpen?.()) return;
+        T.chatInfo?.open(T.state.currentChat());
     }
 
     /* ── 구독 ───────────────────────────────────────────────── */
     function init() {
+        for (const el of [hdrAvatar, hdrNameWrap]) {
+            el?.addEventListener("click", () => {
+                if (el.classList.contains("hdr-info")) openHeaderInfo();
+            });
+            el?.addEventListener("keydown", (e) => {
+                if ((e.key === "Enter" || e.key === " ") && !e.isComposing && el.classList.contains("hdr-info")) {
+                    e.preventDefault();
+                    openHeaderInfo();
+                }
+            });
+        }
         const routeIfCurrent = (p) => {
             if (p.id === state.state.currentId) C.requestSync();
         };

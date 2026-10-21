@@ -101,7 +101,8 @@
     }
 
     // 저장하고 화면을 맞춘다. 새 에이전트는 설정에 머물지 않고 그 에이전트의 채팅으로 바로 이동한다.
-    async function saveAgent(agent, body) {
+    // host.onSaved가 있으면(설정 밖의 정보 창) 그쪽이 다음 화면을 정한다.
+    async function saveAgent(agent, body, host) {
         try {
             const r = agent ? await T.api.updateAgent(agent.id, body) : await T.api.createAgent(body);
             if (r && Array.isArray(r.agents)) {
@@ -111,6 +112,10 @@
                 const settings = await T.api.getSettings();
                 if (settings) state.setSettings(settings);
                 await C.refreshBots();
+            }
+            if (host?.onSaved) {
+                host.onSaved(r?.agent || agent);
+                return;
             }
             if (!agent && r?.agent?.uuid) {
                 T.util.pushUrl(`/a/${encodeURIComponent(r.agent.uuid)}`);
@@ -125,7 +130,7 @@
         }
     }
 
-    function deleteAgent(agent) {
+    function deleteAgent(agent, host) {
         T.api
             .deleteAgent(agent.id)
             .then((r) => {
@@ -137,6 +142,10 @@
                     if (next && T.chat) T.chat.open(next.uuid);
                     else if (T.chat) T.chat.open(null);
                 }
+                if (host?.onDeleted) {
+                    host.onDeleted();
+                    return;
+                }
                 C.editingAgent = agents[0]?.id || "__new__";
                 C.syncPath();
                 C.build();
@@ -146,7 +155,8 @@
             });
     }
 
-    function agentEditor(agent) {
+    // host: 설정 밖(대화 정보 창)에서 쓸 때 저장, 삭제 뒤의 동작. { onSaved(agent), onDeleted(), saveLabel }
+    function agentEditor(agent, host = null) {
         const isNew = !agent;
         const settings = state.state.settings || {};
         const editor = T.h("div", { class: "agent-editor" });
@@ -162,14 +172,14 @@
         const personaSection = buildPersonaSection(agent);
         editor.append(...personaSection.nodes);
 
-        C.headAction(t("save"), async () => {
+        C.headAction(host?.saveLabel || t("save"), async () => {
             const n = name.value.trim();
             if (!n) {
                 name.focus();
                 return;
             }
             const body = { name: n, persona: personaSection.persona.value, color: colorPicker.value(), ...presetPicker.values() };
-            await saveAgent(agent, body);
+            await saveAgent(agent, body, host);
         });
 
         // 마지막으로 남은 봇은 삭제할 수 없다.
@@ -178,7 +188,7 @@
             const del = C.actionRow(
                 t("delete"),
                 async () => {
-                    if (await C.confirmDelete(agent.name)) deleteAgent(agent);
+                    if (await C.confirmDelete(agent.name)) deleteAgent(agent, host);
                 },
                 { danger: true, own: true },
             );
@@ -194,4 +204,5 @@
     }
 
     C.buildAgents = buildAgents;
+    C.agentEditor = agentEditor;
 })(window.Taby);
