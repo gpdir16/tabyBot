@@ -36,7 +36,6 @@
         "folders",
         "groups",
         "notices",
-        "provider",
         "model",
         "account",
         "efficiency",
@@ -55,7 +54,8 @@
                 location.pathname || "",
             );
         if (!m) return null;
-        const tab = m[1];
+        // 프로바이더 탭은 모델과 프로바이더 탭으로 합쳐졌다. 예전 주소는 그 탭으로 연다.
+        const tab = m[1] === "provider" ? "model" : m[1];
         let agentId = null;
         if (tab === "agents") {
             if (m[2] === "new") agentId = "__new__";
@@ -111,8 +111,7 @@
         C.groupEditing = tab === "groups" && o.groupId ? { mode: "edit", id: o.groupId } : null;
         C.modelSub = null;
         C.efficiencySub = null;
-        C.providerSub = null;
-        C.keyEditing = false;
+        C.keyEditing = null;
         C.credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;
         const wasChatOpen = document.body.classList.contains("mobile-chat");
@@ -157,10 +156,7 @@
         // oauthPending은 유지. 다시 열면 oauthSection이 폴링을 재개한다.
         C.stopOauthPoll();
         C.openTab = null;
-        C.modelsCache = null;
-        C.modelsLoading = false;
-        C.modelsFailedKey = null;
-        C.modelsReq++;
+        C.forgetModelLists();
         C.skillsCache = null;
         C.skillsLoading = false;
         C.skillsFailed = false;
@@ -329,11 +325,8 @@
                 });
             // 다른 창에서 로그인을 마치고 돌아온 결과: 그사이 화면을 보고 있지 않았을 수 있어 경고창으로 알린다.
             T.notices.alert({ text: p.ok ? t("oauthSuccess") : `${t("errorPrefix")}: ${p.detail || t("oauthFailed")}` });
-            C.modelsReq++;
-            C.modelsLoading = false;
-            C.modelsCache = null;
-            C.modelsFailedKey = null;
-            if (C.openTab === "model" || C.openTab === "provider") C.build();
+            C.forgetModelLists();
+            if (C.openTab === "model") C.build();
         });
         T.i18n.onChange(() => {
             if (C.openTab) C.build();

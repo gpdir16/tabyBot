@@ -67,14 +67,11 @@
             return;
         }
         const week = usageOf(s.usage?.days, 7).total;
-        const open = (which) => () =>
+        const open = (which, presetUid) => () =>
             C.openForm(() => {
                 C.efficiencySub = which;
+                if (presetUid) C.cachePreset = presetUid;
             });
-        const ka = s.cacheKeepAlive;
-        const modeLabel = !ka
-            ? t("cacheKeepAliveOff")
-            : t({ auto: "cacheKeepAliveAuto", custom: "cacheKeepAliveCustom", off: "cacheKeepAliveOff" }[ka.mode] || "cacheKeepAliveAuto");
         sec.append(
             C.fieldLabel(t("usageLastWeek")),
             T.h("div", { class: "set-group eff-metrics" }, [
@@ -82,8 +79,22 @@
                 metric(week.calls ? compact(week.input + week.output) : "-", t("usageTokens")),
             ]),
             C.navRow(t("usageStatsMore"), "", open("stats")),
-            C.navRow(t("cacheKeepAlive"), modeLabel, open("cache")),
         );
+        // 캐시 유지는 프리셋마다 따로 정한다. 프리셋이 여럿이면 프리셋마다 한 행씩 두고, 누르면 그 프리셋의 설정으로 들어간다.
+        const list = Array.isArray(s.modelPresets) ? s.modelPresets : [];
+        if (list.length > 1) {
+            sec.append(
+                C.fieldLabel(t("cacheKeepAlive")),
+                ...list.map((p) => C.navRow(C.modelPresetName(p), modeLabel(p.cacheKeepAlive), open("cache", p.uid))),
+            );
+        } else {
+            sec.append(C.navRow(t("cacheKeepAlive"), modeLabel(cachePresetOf(s)?.cacheKeepAlive ?? s.cacheKeepAlive), open("cache")));
+        }
+    }
+
+    function modeLabel(ka) {
+        if (!ka) return t("cacheKeepAliveOff");
+        return t({ auto: "cacheKeepAliveAuto", custom: "cacheKeepAliveCustom", off: "cacheKeepAliveOff" }[ka.mode] || "cacheKeepAliveAuto");
     }
 
     function metric(value, label) {
@@ -185,23 +196,28 @@
 
     // ── 프롬프트 캐시 유지 ──
 
+    // 캐시 유지는 모델 프리셋마다 따로 정한다. 여럿이면 효율 화면에서 누른 프리셋이다(처음에는 기본 프리셋).
+    function cachePresetOf(s) {
+        const list = Array.isArray(s.modelPresets) ? s.modelPresets : [];
+        return list.find((p) => p.uid === C.cachePreset) || list.find((p) => p.isDefault) || list[0] || null;
+    }
+
     function cacheView(sec, s) {
         sec.append(T.h("div", { class: "set-desc", text: t("cacheKeepAliveDesc") }));
-        const providerLabel = s.providers?.find((p) => p.id === s.provider?.id)?.label || s.provider?.label || s.provider?.id || "";
-        sec.append(C.valueRow(t("provider"), providerLabel));
-        const ka = s.cacheKeepAlive;
+        const preset = cachePresetOf(s);
+        const ka = preset ? preset.cacheKeepAlive : s.cacheKeepAlive;
         // 요청 수로 과금되거나 로컬에서 도는 프로바이더는 캐시를 살려 둬도 아끼는 것이 없다.
         if (!ka) {
             sec.append(T.h("div", { class: "set-desc", text: t("cacheKeepAliveUnsupported") }));
             return;
         }
-        cacheKeepAliveRows(sec, ka);
+        cacheKeepAliveRows(sec, ka, preset?.uid || "");
         if (ka.mode === "auto" && ka.pattern) patternRows(sec, ka.pattern);
     }
 
     // 캐시 유지 설정: 모드(자동, 사용자 지정, 끔), 사용자 지정 값, 자동일 때의 예상.
-    function cacheKeepAliveRows(sec, ka) {
-        const save = (value) => C.put({ cacheKeepAlive: value }).then(() => C.build());
+    function cacheKeepAliveRows(sec, ka, presetUid) {
+        const save = (value) => C.put({ cacheKeepAlive: value, ...(presetUid ? { cacheKeepAlivePreset: presetUid } : {}) }).then(() => C.build());
         const custom = (patch) => save({ mode: "custom", ttlMinutes: ka.ttlMinutes || 60, keepHours: ka.keepHours || 3, ...patch });
         sec.append(
             C.labeledRow(
@@ -288,5 +304,14 @@
         }
     }
 
+    // 한 단계 더 들어간 화면의 제목. 프리셋이 여럿일 때 캐시 유지 화면은 누른 행의 이름(프리셋)을 쓴다.
+    function efficiencyTitle() {
+        if (C.efficiencySub === "stats") return t("usageStats");
+        const s = state.state.settings;
+        const preset = s && s.modelPresets?.length > 1 ? cachePresetOf(s) : null;
+        return preset ? C.modelPresetName(preset) : t("cacheKeepAlive");
+    }
+
     C.buildEfficiency = buildEfficiency;
+    C.efficiencyTitle = efficiencyTitle;
 })(window.Taby);

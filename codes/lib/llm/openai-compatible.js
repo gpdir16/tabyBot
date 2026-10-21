@@ -21,6 +21,8 @@ function completionPayload(completion) {
             },
         ],
         usage: completion.usage ?? null,
+        // 실제로 답한 모델(OpenRouter 별칭이 넘겨 준 모델을 알아내는 데 쓴다)
+        model: completion.model || null,
     };
 }
 
@@ -59,10 +61,12 @@ class StreamAccumulator {
         this.usage = null;
         this.finishReason = null;
         this.toolCalls = new Map(); // delta의 index별로 이어 붙인다
+        this.model = null;
     }
 
     add(chunk, onTextDelta) {
         if (chunk.usage) this.usage = chunk.usage;
+        if (chunk.model) this.model = chunk.model;
         const choice = chunk.choices?.[0];
         if (!choice) return;
         if (choice.finish_reason) this.finishReason = choice.finish_reason;
@@ -92,7 +96,7 @@ class StreamAccumulator {
         if (this.toolCalls.size) {
             message.tool_calls = [...this.toolCalls.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
         }
-        return { choices: [{ message, finish_reason: this.finishReason || "stop" }], usage: this.usage };
+        return { choices: [{ message, finish_reason: this.finishReason || "stop" }], usage: this.usage, model: this.model };
     }
 }
 

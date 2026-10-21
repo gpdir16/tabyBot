@@ -47,6 +47,7 @@ export function registerAgentsRoutes(router) {
         const result = addAgent({
             name: body.name,
             persona: body.persona,
+            modelPreset: body.modelPreset,
             model: body.model,
             thinkingLevel: body.thinkingLevel,
             color: body.color,
@@ -57,10 +58,13 @@ export function registerAgentsRoutes(router) {
 
     router.add("PATCH", "/api/agents/:id", async (ctx) => {
         const body = await ctx.json();
-        const prevModel = String(getAgent(ctx.params.id)?.model || "").trim();
+        // 쓰는 모델은 프리셋과 예전 모델 오버라이드로 정해진다. 둘 중 하나라도 바뀌면 모델이 바뀐 것이다.
+        const modelOf = (a) => `${a?.modelPreset || ""}|${String(a?.model || "").trim()}`;
+        const prevModel = modelOf(getAgent(ctx.params.id));
         const result = storeUpdateAgent(ctx.params.id, {
             name: body.name,
             persona: body.persona,
+            modelPreset: body.modelPreset,
             model: body.model,
             thinkingLevel: body.thinkingLevel,
             color: body.color,
@@ -70,8 +74,8 @@ export function registerAgentsRoutes(router) {
         // 봇별 모델 오버라이드가 바뀌면 그 봇의 세션 압축 여부를 묻는다.
         const userConfig = loadUserConfig();
         if (
-            body.model !== undefined &&
-            String(result.agent?.model || "").trim() !== prevModel &&
+            (body.model !== undefined || body.modelPreset !== undefined) &&
+            modelOf(result.agent) !== prevModel &&
             result.agent?.uuid &&
             getCompressOnModelChange(userConfig)
         ) {

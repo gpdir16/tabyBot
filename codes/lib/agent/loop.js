@@ -1,5 +1,5 @@
-import { getMergedProvider, loadAgentConfig, loadUserConfig } from "../config-loader.js";
-import { createLlmClient, applyAgentOverrides } from "../llm/client.js";
+import { loadAgentConfig, loadUserConfig } from "../config-loader.js";
+import { createLlmClient, agentProvider } from "../llm/client.js";
 import { assistantMessageToPlain } from "../llm/messages.js";
 import { executeTool, getAllToolDefinitions, toolResultContent } from "./tool-registry.js";
 import { buildToolResultContent } from "../llm/vision.js";
@@ -26,11 +26,14 @@ function parseToolArgs(raw) {
 
 function providerKey(provider) {
     return [
+        provider.presetUid || "",
+        provider.profileUid || "",
         provider.id,
         provider.type,
         provider.baseURL,
         provider.model,
         provider.autoMode,
+        provider.thinkingLevel || "",
         provider.openRouterPins?.[provider.model] || "",
         ...(provider.autoModelCandidates || []),
     ].join("\u0000");
@@ -419,9 +422,10 @@ async function runAgentTurn(
     clearFileReadCache();
     const resolvedSessionKey = sessionKey || chatId;
     const resolvedAgentId = agentId || firstAgentId();
-    // 봇별 오버라이드. 모델과 사고 수준은 client 생성 시 적용한다.
+    // 봇이 고른 모델 프리셋(없으면 기본 프리셋). 프리셋을 고르지 않은 예전 봇은 예전 모델 오버라이드를 쓴다.
     const agent = getAgent(resolvedAgentId) || firstAgent();
     const agentOverrides = {
+        preset: agent?.modelPreset || "",
         model: agent?.model?.trim() || "",
         thinkingLevel: agent?.thinkingLevel || "",
     };
@@ -488,7 +492,7 @@ async function runAgentTurn(
 
     for (let round = 0; round < maxRounds; round++) {
         // 설정에서 모델이나 프로바이더가 바뀌었으면 다음 라운드부터 새 클라이언트를 쓴다.
-        const configuredProvider = applyAgentOverrides(getMergedProvider(loadUserConfig()), agentOverrides);
+        const configuredProvider = agentProvider(loadUserConfig(), agentOverrides);
         if (providerKey(configuredProvider) !== activeProviderKey) {
             turn.llm = await createLlmClient(agentOverrides);
             activeProviderKey = providerKey(turn.llm.provider);

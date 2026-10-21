@@ -227,6 +227,13 @@ function normalizeAgentModel(model) {
     return { model: trimmed };
 }
 
+// 에이전트가 쓸 모델 프리셋 uid. 빈 문자열은 기본 프리셋을 따른다.
+function normalizeAgentModelPreset(value) {
+    const v = String(value || "").trim();
+    if (v.length > 64 || /[^\w-]/.test(v)) return { error: "invalid_model_preset" };
+    return { modelPreset: v };
+}
+
 function normalizeAgentThinkingLevel(value) {
     const v = String(value || "")
         .trim()
@@ -276,13 +283,15 @@ function canAddAgent() {
     return listAgents().length < MAX_AGENTS;
 }
 
-export function addAgent({ name, persona, model, thinkingLevel, color }) {
+export function addAgent({ name, persona, modelPreset, model, thinkingLevel, color }) {
     const named = normalizeAgentName(name);
     if (named.error) return named;
     const person = normalizeAgentPersona(persona);
     if (person.error) return person;
     const mod = normalizeAgentModel(model);
     if (mod.error) return mod;
+    const preset = normalizeAgentModelPreset(modelPreset);
+    if (preset.error) return preset;
     const thinking = normalizeAgentThinkingLevel(thinkingLevel);
     if (thinking.error) return thinking;
     const col = normalizeAgentColor(color);
@@ -299,6 +308,7 @@ export function addAgent({ name, persona, model, thinkingLevel, color }) {
         uuid: newUuid(),
         name: named.name,
         persona: person.persona,
+        modelPreset: preset.modelPreset,
         model: mod.model,
         thinkingLevel: thinking.thinkingLevel,
         color: col.color,
@@ -329,6 +339,11 @@ export function updateAgent(id, patch) {
         const mod = normalizeAgentModel(patch.model);
         if (mod.error) return mod;
         current.model = mod.model;
+    }
+    if (patch.modelPreset !== undefined) {
+        const preset = normalizeAgentModelPreset(patch.modelPreset);
+        if (preset.error) return preset;
+        current.modelPreset = preset.modelPreset;
     }
     if (patch.thinkingLevel !== undefined) {
         const thinking = normalizeAgentThinkingLevel(patch.thinkingLevel);

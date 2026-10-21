@@ -413,10 +413,8 @@
             if (state.state.currentId === convId) pendingRow(pend)?.remove();
             const notConfigured = err?.status === 409 && err.payload?.error === "not_configured";
             T.toast.show("error", notConfigured ? T.api.errorDetail(err) : T.api.errorText(err, t("sendFailed")));
-            if (notConfigured) {
-                const tab = err.payload.reason === "model_missing" ? "model" : "provider";
-                T.app?.openSettings?.(tab);
-            }
+            // 키, 로그인, 모델은 모두 모델과 프로바이더 탭에서 고친다.
+            if (notConfigured) T.app?.openSettings?.("model");
             return false;
         }
     }

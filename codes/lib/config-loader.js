@@ -1,6 +1,7 @@
 import path from "node:path";
 import { CONFIG_DIR, USER_DIR } from "./paths.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-file.js";
+import { findPreset } from "./model-presets.js";
 
 // 깨진 파일은 경로와 함께 오류로 남기고 fallback을 쓴다.
 const readJson = (filePath, fallback = null) => readJsonFile(filePath, fallback, { label: `JSON in ${filePath}` });
@@ -71,41 +72,58 @@ export function loadProviderConfig(providerId) {
     return substituteDeep(base);
 }
 
-export function getMergedProvider(userConfig) {
-    const id = userConfig?.provider?.id || "default";
+// 저장된 프로바이더 프로필 하나의 설정(주소, 키). uid가 없거나 못 찾으면 고른 프로필, 즉 config.provider다.
+// 고른 프로필의 정본은 config.provider이고 프로필 목록의 것은 사본이다.
+export function providerConfigOf(userConfig, uid = "") {
+    const active = userConfig?.activeProviderProfile || "";
+    if (uid && uid !== active) {
+        const profile = (userConfig?.providerProfiles || []).find((p) => p?.uid === uid);
+        if (profile?.provider) return { uid, provider: profile.provider };
+    }
+    return { uid: active, provider: userConfig?.provider || {} };
+}
+
+// 프로바이더 프로필 하나의 접속 정보(종류, 주소, 키). 모델은 들어 있지 않다.
+export function getProfileProvider(userConfig, profileUid = "") {
+    const { uid, provider: providerConfig } = providerConfigOf(userConfig, profileUid);
+    const id = providerConfig?.id || "default";
     const providerFile = loadProviderConfig(id);
-    const baseURLOverride = userConfig?.provider?.baseURL?.trim();
+    const baseURLOverride = providerConfig?.baseURL?.trim();
     const baseURL = (baseURLOverride || providerFile.baseURL || "").replace(/\/$/, "");
-    let apiKey = substituteEnv(userConfig?.provider?.apiKey || "");
+    let apiKey = substituteEnv(providerConfig?.apiKey || "");
     if (!apiKey && providerFile.apiKeyOptional) {
         apiKey = substituteEnv(providerFile.defaultApiKey || "");
     }
-    const model = userConfig?.provider?.model || "";
-    // OpenRouter 고정은 모델마다 프로바이더 태그가 다르므로 모델별로 보관한다.
-    // 예전 단일 값(openRouterProvider)은 현재 모델의 고정값으로만 승계한다.
-    const pins =
-        userConfig?.provider?.openRouterPins && typeof userConfig.provider.openRouterPins === "object"
-            ? Object.fromEntries(
-                  Object.entries(userConfig.provider.openRouterPins)
-                      .map(([key, value]) => [String(key), String(value || "").trim()])
-                      .filter(([key, value]) => key && value),
-              )
-            : {};
-    const legacyPin = String(userConfig?.provider?.openRouterProvider || "").trim();
-    if (legacyPin && model && !pins[model]) pins[model] = legacyPin;
-    return {
+    const out = {
+        profileUid: uid,
         id,
         type: providerFile.type,
         baseURL,
         apiKey,
-        model,
         extraHeaders: providerFile.extraHeaders || {},
         apiKeyOptional: Boolean(providerFile.apiKeyOptional),
-        autoMode: id === "github-copilot" ? userConfig?.provider?.autoMode !== false : false,
-        autoModelCandidates: Array.isArray(userConfig?.provider?.autoModelCandidates)
-            ? userConfig.provider.autoModelCandidates.map(String).filter(Boolean)
-            : [],
-        // OpenRouter 전용: 모델별 업스트림 프로바이더 고정. 에이전트 모델 오버라이드도 이 맵에서 찾는다.
-        openRouterPins: id === "openrouter" ? pins : {},
+    };
+    if (providerFile.defaultContextWindow) out.defaultContextWindow = providerFile.defaultContextWindow;
+    return out;
+}
+
+// 모델 프리셋 하나를 실제 요청 설정으로 푼다. presetUid를 비우면 기본 프리셋.
+// 주소와 키는 프리셋이 가리키는 프로바이더 프로필에서, 모델과 추론 깊이, 고정은 프리셋에서 온다.
+export function getMergedProvider(userConfig, presetUid = "") {
+    const preset = findPreset(userConfig || {}, presetUid);
+    const base = getProfileProvider(userConfig, preset.profile);
+    const model = String(preset.model || "").trim();
+    const pin = base.id === "openrouter" && model ? String(preset.openRouterPin || "").trim() : "";
+    return {
+        ...base,
+        // 이 설정을 만든 프리셋. 캐시 유지 설정을 프리셋마다 따로 두는 데 쓴다.
+        presetUid: preset.uid,
+        model,
+        thinkingLevel: String(preset.thinkingLevel || ""),
+        // GitHub Copilot의 자동 모델은 프리셋의 모델을 "auto"로 고른 것이다.
+        autoMode: base.id === "github-copilot" && model === "auto",
+        autoModelCandidates: Array.isArray(preset.autoModelCandidates) ? preset.autoModelCandidates.map(String).filter(Boolean) : [],
+        // OpenRouter 전용: 이 모델을 서빙할 업스트림 프로바이더 고정.
+        openRouterPins: pin ? { [model]: pin } : {},
     };
 }

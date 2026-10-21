@@ -396,10 +396,11 @@ export async function compressBotSessions(chatIds = null, onProgress = null) {
     const clients = new Map();
     const clientFor = async (chatId) => {
         const agent = getAgentByUuid(chatId);
+        const preset = agent?.modelPreset || "";
         const model = agent?.model?.trim() || "";
         const thinkingLevel = agent?.thinkingLevel || "";
-        const key = `${model}|${thinkingLevel}`;
-        if (!clients.has(key)) clients.set(key, await createLlmClient({ model, thinkingLevel }));
+        const key = `${preset}|${model}|${thinkingLevel}`;
+        if (!clients.has(key)) clients.set(key, await createLlmClient({ preset, model, thinkingLevel }));
         return clients.get(key);
     };
     for (const chatId of candidates) {
