@@ -14,6 +14,10 @@ import { purgeOnceSecrets } from "./user-ask.js";
 
 const SILENT_REPLY_TOKEN = "__SILENT__";
 const TOOL_BUDGET_ERROR = { error: "Tool call budget exceeded for this turn." };
+const USER_STEERED_RESULT = {
+    ok: false,
+    error: "Not run: the user sent a new message. Read it first, then run this again only if it is still needed.",
+};
 const EMPTY_STATS = { toolCallCount: 0, modelCallCount: 0, tokensUsed: 0, contextWindow: 128000 };
 
 function parseToolArgs(raw) {
@@ -272,6 +276,13 @@ class AgentTurn {
                 return this.stopped();
             }
 
+            // 작업 중에 사용자가 메시지를 보냈으면 남은 도구는 건너뛰고 다음 라운드에서 바로 읽힌다.
+            if (this.session?.hasPendingMessages?.()) {
+                this.pushSkippedToolResults(toolCalls, toolIndex, USER_STEERED_RESULT);
+                this.checkpoint();
+                break;
+            }
+
             this.setStatus("tools", tc.function.name);
 
             const parsed = parseToolArgs(tc.function.arguments);
@@ -285,6 +296,7 @@ class AgentTurn {
             }
             this.toolCallCount += 1;
 
+            if (this.session) this.session.toolRunning = true;
             const result = await executeTool(tc.function.name, parsed.args, {
                 ...toolContext,
                 messages: this.messages,
@@ -296,6 +308,8 @@ class AgentTurn {
                 modelMeta: this.llm.modelMeta,
                 signal: this.session?.signal,
                 onStatusPhase: this.setStatus,
+            }).finally(() => {
+                if (this.session) this.session.toolRunning = false;
             });
 
             this.pushToolResult(tc.id, result);
