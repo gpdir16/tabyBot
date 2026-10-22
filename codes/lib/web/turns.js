@@ -15,7 +15,7 @@ import {
     settlePendingUserTurns,
     userMessageIdsOf,
 } from "../agent/chat-history.js";
-import { beginAgentSession, endAgentSession, enqueueAgentMessage, requestAgentStop } from "../agent/session.js";
+import { beginAgentSession, endAgentSession, enqueueAgentMessage, requestAgentStop, restartOnQuickFollowup } from "../agent/session.js";
 import { ASK_CANCEL_USER_MESSAGE, cancelPendingAsk } from "../agent/user-ask.js";
 import { cancelQueuedAgentWork, scheduleWork } from "../agent-queue.js";
 import { loadUserConfig } from "../config-loader.js";
@@ -184,6 +184,7 @@ export async function runTurn({
 }) {
     const lang = loadUserConfig().language || "en";
     const session = beginAgentSession(sessionKey, { automated });
+    if (messageAt) session.lastUserMessageAt = Date.parse(messageAt);
     // 이 실행의 기록은 turnId로 찾는다. 위치(마지막 턴)로 찾으면 실행 중에 온 메시지와 뒤섞인다.
     const turnId = newMessageId();
     let recoveryBaseMessages = recovery ? lastChatTurnMessages(sessionKey) : null;
@@ -193,6 +194,7 @@ export async function runTurn({
     let lastDisplay = null;
     // 턴이 어떻게 끝났는지: 남은 대기 메시지를 어떻게 할지 정한다.
     let outcome = "failed";
+    let finalResult = null;
     const deltas = createDeltaStream({ sessionKey, automated, quietEmpty });
 
     const status = (phase, detail = null) => {
@@ -248,6 +250,7 @@ export async function runTurn({
             result = await run(RECOVERY_PROMPT, true);
         }
         deltas.stop();
+        finalResult = result;
         const stoppedByUser = isStoppedByUser(result);
         if (stoppedByUser) outcome = "stopped";
         else if (!result?.error || result.error === "silent") outcome = "done";
@@ -272,7 +275,8 @@ export async function runTurn({
             emit({
                 type: "turn_done",
                 conversationId: sessionKey,
-                text: result.text?.trim() || t("stopped_by_user", lang),
+                // 바로 이어 보낸 메시지로 다시 시작할 때는 중지 안내를 남기지 않는다.
+                text: session.restartRequested ? null : result.text?.trim() || t("stopped_by_user", lang),
                 stats: result.stats || null,
                 attachments: result.deliveredAttachments || [],
                 error: null,
@@ -320,14 +324,32 @@ export async function runTurn({
         deltas.stop();
         const leftover = session.drainPendingMessages();
         endAgentSession(sessionKey);
-        if (outcome === "stopped") settleStoppedConversation(sessionKey);
-        // 끝나기 직전에 도착해 이번 실행에 합쳐지지 못한 메시지: 버리지 않고 다음 턴으로 넘긴다.
-        // 실패한 턴 뒤에는 잇지 않는다(같은 오류를 되풀이한다). 기록에는 끊긴 턴으로 남아 있다.
-        else if (outcome === "done" && leftover.length) {
-            if (onLeftover) onLeftover(leftover);
-            else startUserTurn({ sessionKey, agentId, messages: leftover });
-        }
+        // 이어 돌린 실행이면 시작 메시지는 이미 기록에 있다.
+        const origin = { id: resumed ? null : messageId, text: userText, attachments, at: messageAt };
+        continueAfterTurn({ sessionKey, agentId, outcome, restart: session.restartRequested, origin, finalResult, leftover, onLeftover });
     }
+}
+
+// 끝난 실행 뒤에 남은 대기 메시지를 처리한다.
+function continueAfterTurn({ sessionKey, agentId, outcome, restart, origin, finalResult, leftover, onLeftover }) {
+    if (outcome === "stopped" && restart) {
+        restartAfterQuickFollowup({ sessionKey, agentId, origin, savedMessages: finalResult?.turnMessages, leftover });
+    } else if (outcome === "stopped") settleStoppedConversation(sessionKey);
+    // 끝나기 직전에 도착해 이번 실행에 합쳐지지 못한 메시지: 버리지 않고 다음 턴으로 넘긴다.
+    // 실패한 턴 뒤에는 잇지 않는다(같은 오류를 되풀이한다). 기록에는 끊긴 턴으로 남아 있다.
+    else if (outcome === "done" && leftover.length) {
+        if (onLeftover) onLeftover(leftover);
+        else startUserTurn({ sessionKey, agentId, messages: leftover });
+    }
+}
+
+// 바로 이어 보낸 메시지로 멈춘 실행을 다시 시작한다. 멈춘 실행이 시작 메시지를 기록하지 못했으면 함께 다시 보낸다.
+function restartAfterQuickFollowup({ sessionKey, agentId, origin, savedMessages, leftover }) {
+    if (!hasConversation(sessionKey)) return;
+    const saved = new Set(userMessageIdsOf(savedMessages));
+    const messages = origin.id && !saved.has(origin.id) ? [origin, ...leftover] : leftover;
+    if (messages.length) startUserTurn({ sessionKey, agentId, messages });
+    else settleStoppedConversation(sessionKey);
 }
 
 // 사용자가 멈춘 대화에 남은 대기 메시지는 다시 실행하지 않고 기록으로만 남긴다.
@@ -383,6 +405,8 @@ export function dispatchMessage({ sessionKey, agentId, id = null, userText, atta
         // user_ask·secret_request가 답을 기다리는 중이면 기다림을 끝낸다. 도구가 바로 돌아와야 다음 라운드에서
         // 이 메시지를 읽는다. 안 그러면 질문 시간이 끝날 때까지(최대 10분) 메시지가 대기열에만 머문다.
         cancelPendingAsk(sessionKey, ASK_CANCEL_USER_MESSAGE);
+        // 직전 메시지에서 얼마 안 돼 보낸 메시지는 끼워 넣지 않고 실행을 멈춘 뒤 새 턴으로 다시 보낸다.
+        restartOnQuickFollowup(sessionKey, message.at);
         return { id: message.id, queued: true };
     }
     startUserTurn({ sessionKey, agentId, messages: [message] });
