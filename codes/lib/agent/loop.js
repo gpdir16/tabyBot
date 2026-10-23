@@ -1,6 +1,6 @@
 import { loadAgentConfig, loadUserConfig } from "../config-loader.js";
 import { createLlmClient, agentProvider } from "../llm/client.js";
-import { assistantMessageToPlain } from "../llm/messages.js";
+import { assistantMessageToPlain, stripReasoning } from "../llm/messages.js";
 import { executeTool, getAllToolDefinitions, toolResultContent } from "./tool-registry.js";
 import { buildToolResultContent } from "../llm/vision.js";
 import { extractTurnMessages } from "./chat-history.js";
@@ -10,7 +10,7 @@ import { countMessagesTokens, countRequestTokens, countTokens } from "./context.
 import { learnTokenScale } from "../llm/token-estimate.js";
 import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
 import { buildPendingUserMessages } from "./history/messages.js";
-import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
+import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT, SILENT_TO_USER_HINT } from "./session.js";
 import { purgeOnceSecrets } from "./user-ask.js";
 
 const SILENT_REPLY_TOKEN = "__SILENT__";
@@ -116,6 +116,7 @@ class AgentTurn {
         this.partialText = null; // 스트리밍 중 지금까지 받은 본문. 중단되면 이것을 돌려준다.
         this.toolTokens = toolTokens || 0; // 도구 정의의 어림 토큰 수. 도구를 켠 호출의 입력에 들어간다.
         this.usageAnchor = null; // 마지막 호출에서 API가 센 입력 토큰 수와 그때 보낸 메시지 수
+        this.silenceRejected = false;
     }
 
     get stopRequested() {
@@ -148,6 +149,15 @@ class AgentTurn {
         const model = this.llm.modelMeta?.model || "";
         learnTokenScale(model, countMessagesTokens(this.messages.slice(0, sentLength)) + toolTokens, actual);
         this.usageAnchor = { model, length: sentLength, tokens: actual };
+    }
+
+    // 사람이 보낸 턴의 침묵은 한 번 되돌려 답을 받는다. 침묵은 자동 턴(quietEmpty)만 쓸 수 있다.
+    // 앞 턴의 예약 작업 흐름에 끌려가 사용자 질문에 __SILENT__로 끝내는 일이 있었다. 되돌렸으면 true.
+    rejectSilence() {
+        if (this.quietEmpty || this.silenceRejected) return false;
+        this.silenceRejected = true;
+        this.messages.push({ role: "user", content: SILENT_TO_USER_HINT });
+        return true;
     }
 
     // 응답의 usage에서 입력 토큰과 그중 캐시에서 읽은 토큰을 모은다(Chat Completions와 Responses 모양 모두).
@@ -224,7 +234,8 @@ class AgentTurn {
         for (let attempt = 0; attempt < this.maxEmptyReplyRetries; attempt++) {
             if (this.stopRequested) return null;
 
-            if (attempt > 0) {
+            // 침묵을 되돌린 직후에는 그 안내가 이미 마지막에 있다.
+            if (attempt > 0 && this.messages.at(-1)?.role !== "user") {
                 this.messages.push({ role: "user", content: this.quietEmpty ? QUIET_EMPTY_HINT : EMPTY_REPLY_HINT });
             }
 
@@ -260,7 +271,10 @@ class AgentTurn {
             if (msg.content?.trim()) {
                 this.messages.push(msg);
                 this.checkpoint();
-                if (isSilentReply(msg.content)) return { text: null, usage: response.usage, silent: true };
+                if (isSilentReply(msg.content)) {
+                    if (this.rejectSilence()) continue;
+                    return { text: null, usage: response.usage, silent: true };
+                }
                 return { text: msg.content, usage: response.usage };
             }
         }
@@ -274,7 +288,10 @@ class AgentTurn {
             this.messages.push(choice);
             this.checkpoint();
             if (this.injectPendingUserMessages()) return undefined;
-            if (isSilentReply(choice.content)) return this.result({ text: null, usage: response.usage, silent: true });
+            if (isSilentReply(choice.content)) {
+                if (this.rejectSilence()) return undefined;
+                return this.result({ text: null, usage: response.usage, silent: true });
+            }
             return this.result({ text: choice.content, usage: response.usage });
         }
 
@@ -550,6 +567,8 @@ async function runAgentTurn(
         if (providerKey(configuredProvider) !== activeProviderKey) {
             turn.llm = await createLlmClient(agentOverrides);
             activeProviderKey = providerKey(turn.llm.provider);
+            // 앞 모델의 추론 내용은 새 업체가 모르는 필드일 수 있다
+            for (const message of turn.messages) stripReasoning(message);
             visionSupport = Boolean(turn.llm.modelMeta?.supportsVision);
         }
         turn.injectPendingUserMessages();

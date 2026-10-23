@@ -1,6 +1,7 @@
 // 저장된 메시지의 모양: 내부 메시지 판별, 표식, 침묵 마커, 말하기 호출 추출, 턴 변환.
 import crypto from "node:crypto";
-import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT, STOP_BY_USER_HINT } from "../session.js";
+import { stripReasoning } from "../../llm/messages.js";
+import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT, SILENT_TO_USER_HINT, STOP_BY_USER_HINT } from "../session.js";
 
 // ── 저장된 메시지의 모양: 내부 메시지 판별, 침묵 마커, 말하기 호출 추출, 턴 변환. ──
 
@@ -12,6 +13,7 @@ const INTERNAL_USER_HINTS = new Set([
     STOP_BY_USER_HINT,
     EMPTY_REPLY_HINT,
     QUIET_EMPTY_HINT,
+    SILENT_TO_USER_HINT,
     RECOVERY_PROMPT,
 ]);
 
@@ -64,7 +66,8 @@ export function extractTurnMessages(messages, fromIndex) {
         .map((m) => {
             // 첫 추출 시각을 발화 시각으로 쓴다. 원본에 남겨 다음 체크포인트에서도 유지한다.
             if (typeof m.at !== "string" || !m.at) m.at = new Date().toISOString();
-            return cloneStoredMessage(m);
+            // 추론 내용은 이번 턴 안에서만 쓴다. 기록에 남기면 다음 턴부터 컨텍스트만 불어난다.
+            return stripReasoning(cloneStoredMessage(m));
         });
 }
 
