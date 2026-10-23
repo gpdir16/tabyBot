@@ -387,6 +387,31 @@
             }
         });
 
+        // 입력창을 눌러 키보드를 열 때 iOS는 입력창을 보이게 하려고 페이지 전체를 위로 밀고, 앱이 높이를
+        // 맞추면서 다시 내려와 화면이 두 번 움직인다. 입력 바는 키보드를 따라 올라가므로(app.js) 밀 필요가 없다.
+        // 기본 동작 대신 스크롤 없이 포커스를 준다. 이미 포커스가 있으면 커서 옮기기 등 기본 동작을 그대로 둔다.
+        let tapStart = null;
+        input.addEventListener(
+            "touchstart",
+            (e) => {
+                tapStart = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+            },
+            { passive: true },
+        );
+        input.addEventListener("touchend", (e) => {
+            const touch = e.changedTouches[0];
+            const tap = tapStart && touch && Math.hypot(touch.clientX - tapStart.x, touch.clientY - tapStart.y) < 10;
+            tapStart = null;
+            if (!tap || document.activeElement === input) return;
+            e.preventDefault();
+            input.focus({ preventScroll: true });
+            // 기본 동작을 막아 누른 자리에 커서가 놓이지 않으므로 이어 쓰기 좋게 끝에 둔다
+            input.setSelectionRange(input.value.length, input.value.length);
+        });
+
+        // 누르는 순간 입력창에서 포커스가 빠지면 휴대폰 키보드가 닫힌다. 포커스를 입력창에 그대로 둔다.
+        btnSend.addEventListener("pointerdown", (e) => e.preventDefault());
+        btnSend.addEventListener("mousedown", (e) => e.preventDefault());
         btnSend.addEventListener("click", send);
         btnAttach.addEventListener("click", () => fileInput.click());
         btnHandoff.addEventListener("click", (e) => {
