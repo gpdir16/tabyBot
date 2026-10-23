@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeFileAtomic } from "../atomic-file.js";
-import { countMessagesTokens, countTokens, getContextWindow } from "../agent/context.js";
+import { countRequestTokens, countTokens, getContextWindow } from "../agent/context.js";
+import { tokenScale } from "../llm/token-estimate.js";
 import { resolveExistingAgentPath } from "../paths.js";
 import { filePathParamDescription, filePatchDescription, fileReadDescription } from "../path-labels.js";
 import { isSecretStorePath } from "../secrets/store.js";
@@ -10,9 +11,10 @@ function resolveFilePath(rawPath) {
     return resolveExistingAgentPath(rawPath);
 }
 
-function getMaxFileReadTokens(messages, modelMeta) {
-    const window = getContextWindow(modelMeta);
-    const used = countMessagesTokens(messages || []);
+function getMaxFileReadTokens(ctx) {
+    const window = getContextWindow(ctx.modelMeta);
+    // 루프가 주는 값은 마지막 호출에서 API가 센 입력 토큰이 기준이다. 없으면 메시지를 어림한다.
+    const used = ctx.contextTokens ? ctx.contextTokens() : countRequestTokens(ctx.messages || [], { model: ctx.modelMeta?.model });
     const remaining = Math.max(0, window - used);
     const half = Math.floor(remaining * 0.5);
     return Math.max(0, half - 1);
@@ -67,7 +69,8 @@ function sliceByLineRange(lines, startLine, endLine) {
     return { start, end, slice: lines.slice(start - 1, end) };
 }
 
-function truncateToTokenBudget(text, maxTokens) {
+function truncateToTokenBudget(text, maxTokens, scale = 1) {
+    const count = (chunk) => Math.ceil(countTokens(chunk) * scale);
     if (maxTokens <= 0) {
         return { text: "", tokens: 0, truncated: true };
     }
@@ -77,13 +80,13 @@ function truncateToTokenBudget(text, maxTokens) {
     while (lo < hi) {
         const mid = Math.ceil((lo + hi) / 2);
         const chunk = lines.slice(0, mid).join("\n");
-        if (countTokens(chunk) <= maxTokens) lo = mid;
+        if (count(chunk) <= maxTokens) lo = mid;
         else hi = mid - 1;
     }
     const kept = lines.slice(0, lo).join("\n");
     return {
         text: kept,
-        tokens: countTokens(kept),
+        tokens: count(kept),
         truncated: lo < lines.length,
     };
 }
@@ -160,7 +163,7 @@ export function executeFileRead(args, ctx) {
         };
     }
 
-    const maxTokens = getMaxFileReadTokens(ctx.messages, ctx.modelMeta);
+    const maxTokens = getMaxFileReadTokens(ctx);
     if (maxTokens <= 0) {
         return {
             error: "No context budget left for file_read (must stay under 50% of remaining window)",
@@ -213,7 +216,7 @@ export function executeFileRead(args, ctx) {
     const { start, end, slice } = sliceByLineRange(lines, requestedStart, requestedEnd);
     const joined = formatLineNumbered(slice, start);
 
-    const { text, tokens, truncated } = truncateToTokenBudget(joined, maxTokens);
+    const { text, tokens, truncated } = truncateToTokenBudget(joined, maxTokens, tokenScale(ctx.modelMeta?.model));
     const returnedLineCount = text ? text.split("\n").length : 0;
 
     const notes = [];

@@ -1,6 +1,7 @@
 import {
     buildInitialMessages,
     countMessagesTokens,
+    countRequestTokens,
     countTokens,
     getCompressTriggerTokens,
     getContextLimit,
@@ -16,6 +17,7 @@ import {
 import { listAgents, getAgentByUuid } from "../agents-store.js";
 import { isAgentSessionRunning } from "./session.js";
 import { createLlmClient } from "../llm/client.js";
+import { tokenScale } from "../llm/token-estimate.js";
 
 const COMPRESS_SYSTEM = `You compress chat transcripts for long-term context storage.
 
@@ -53,10 +55,6 @@ const TOOL_OUTPUT_KEEP_TAIL = 200;
 
 function buildWithHistory(userMessage, history, opts = {}) {
     return buildInitialMessages(userMessage, { history, ...opts });
-}
-
-function tokenCount(messages) {
-    return countMessagesTokens(messages);
 }
 
 function contentToText(content) {
@@ -255,7 +253,8 @@ async function applyIntelligentCompression(
     { signal, runtimeInfo = {}, chatId = null, archiveReason = "context_compression", excludeMessageIds = [] } = {},
 ) {
     const recentBudget = getKeepRecentTokenBudget(modelMeta);
-    const { oldItems, recentItems } = splitHistoryForCompression(fullHistory, userMessage, recentBudget);
+    // 기록은 배율 없이 어림하므로 예산을 같은 단위로 바꿔 나눈다.
+    const { oldItems, recentItems } = splitHistoryForCompression(fullHistory, userMessage, recentBudget / tokenScale(modelMeta?.model));
 
     if (!oldItems.length) {
         return null;
@@ -290,9 +289,10 @@ export async function ensureWithinContextLimit(
     llm,
     userMessage,
     modelMeta,
-    { chatId, onStatusPhase, attachments = [], session = null, runtimeInfo = {}, history = null, excludeMessageIds = [] } = {},
+    { chatId, onStatusPhase, attachments = [], session = null, runtimeInfo = {}, history = null, excludeMessageIds = [], toolTokens = 0 } = {},
 ) {
     const fullHistory = history ?? (chatId ? loadChatHistory(chatId) : []);
+    const tokenCount = (messages) => countRequestTokens(messages, { model: modelMeta?.model, toolTokens });
     const trigger = getCompressTriggerTokens(modelMeta);
     const hardLimit = getContextLimit(modelMeta);
 

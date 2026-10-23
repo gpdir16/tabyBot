@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeTextForLlm } from "./sanitize-messages.js";
+import { estimateTextTokens } from "./token-estimate.js";
 
 const IMAGE_MIMES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
 
@@ -66,13 +67,11 @@ export function buildToolResultContent(text, imagePath, { visionEnabled = false 
 }
 
 export function estimateContentTokens(content) {
-    if (typeof content === "string") {
-        return Math.ceil(content.length / 4);
-    }
+    if (typeof content === "string") return estimateTextTokens(content);
     if (!Array.isArray(content)) return 0;
     let n = 0;
     for (const part of content) {
-        if (part.type === "text") n += Math.ceil((part.text || "").length / 4);
+        if (part.type === "text") n += estimateTextTokens(part.text);
         if (part.type === "image_url") n += 1100;
     }
     return n;

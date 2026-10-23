@@ -12,7 +12,6 @@
     "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.296",
         "@modelcontextprotocol/sdk": "^1.12.1",
-        "js-tiktoken": "^1.0.19",
         "node-cron": "^3.0.3",
         "openai": "^4.104.0",
         "web-push": "^3.6.7",
