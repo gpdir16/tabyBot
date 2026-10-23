@@ -89,6 +89,7 @@ const PROVIDER_LABELS = {
     upstage: "Upstage",
     zenmux: "ZenMux",
     orcarouter: "OrcaRouter",
+    "opencode-go": "OpenCode Go",
 };
 
 function providerPresets() {
@@ -131,6 +132,7 @@ function providerPresets() {
         "ollama-cloud",
         "zenmux",
         "upstage",
+        "opencode-go",
         "codex",
         "grok",
         "github-copilot",
@@ -762,6 +764,7 @@ function modelsRequestProvider(config, body) {
         apiKeyOptional: Boolean(base.apiKeyOptional),
     };
     if (base.defaultContextWindow) provider.defaultContextWindow = base.defaultContextWindow;
+    if (base.modelsDev) provider.modelsDev = base.modelsDev;
     // 저장된 키는 기본 프리셋과 같은 주소로 목록을 받을 때만 쓴다. 다른 곳으로 보내지 않는다.
     if (!provider.apiKey && !provider.apiKeyOptional && current.id === providerId && current.baseURL === provider.baseURL) {
         provider.apiKey = current.apiKey;

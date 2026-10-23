@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { getMergedProvider, loadUserConfig } from "../config-loader.js";
 import { chatCompletions, chatCompletionsPing, createOpenAIClient } from "./openai-compatible.js";
 import { codexComplete, codexPing } from "./codex-client.js";
@@ -179,10 +180,13 @@ async function buildLlmClient(overrides) {
     const thinkingParam = () => getCachedProviderThinkingMeta(provider.id, provider.model).param || "reasoning_effort";
     const pinnedProvider = provider.id === "openrouter" ? provider.openRouterPins?.[provider.model] || "" : "";
     const providerRouting = pinnedProvider ? { order: [pinnedProvider], allow_fallbacks: false } : null;
+    // 세션 헤더가 필요한 곳은 대화(cacheKey)를 세션 id로 보낸다. 대화가 없는 요청(압축, 드리밍)은 요청마다 새 id.
+    const sessionHeaders = (cacheKey) =>
+        provider.sessionHeader ? { [provider.sessionHeader]: cacheKey ? String(cacheKey) : crypto.randomUUID() } : undefined;
     return withCacheKeepAlive({
         provider,
         modelMeta,
-        ping({ messages, tools, tool_choice, signal }) {
+        ping({ messages, tools, tool_choice, signal, cacheKey }) {
             return chatCompletionsPing({
                 client,
                 model: provider.model,
@@ -193,9 +197,10 @@ async function buildLlmClient(overrides) {
                 thinkingLevel,
                 thinkingParam: thinkingParam(),
                 providerRouting,
+                headers: sessionHeaders(cacheKey),
             });
         },
-        complete({ messages, tools, tool_choice, stream, onTextDelta, signal }) {
+        complete({ messages, tools, tool_choice, stream, onTextDelta, signal, cacheKey }) {
             const done = chatCompletions({
                 client,
                 model: provider.model,
@@ -208,6 +213,7 @@ async function buildLlmClient(overrides) {
                 thinkingLevel,
                 thinkingParam: thinkingParam(),
                 providerRouting,
+                headers: sessionHeaders(cacheKey),
             });
             // OpenRouter 별칭 모델(~)이면 이번에 실제로 답한 모델을 기억한다(프로바이더 고정 선택지에 쓴다).
             if (provider.id !== "openrouter" || !isOpenRouterAlias(provider.model)) return done;

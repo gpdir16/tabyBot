@@ -104,6 +104,10 @@ export function getProfileProvider(userConfig, profileUid = "") {
         apiKeyOptional: Boolean(providerFile.apiKeyOptional),
     };
     if (providerFile.defaultContextWindow) out.defaultContextWindow = providerFile.defaultContextWindow;
+    // 대화마다 고정된 세션 id를 이 헤더로 보내야 받아 주는 곳(OpenCode Go).
+    if (providerFile.sessionHeader) out.sessionHeader = String(providerFile.sessionHeader);
+    // 모델 정보를 채울 models.dev의 프로바이더 키(앞에서부터 찾는다).
+    if (Array.isArray(providerFile.modelsDev)) out.modelsDev = providerFile.modelsDev.map(String);
     return out;
 }
 
