@@ -99,7 +99,7 @@ function isNewerVersion(a, b) {
     return false;
 }
 
-export function upgradeProfileCompat(user, current = installedCamoufoxVersion()) {
+function upgradeProfileCompat(user, current = installedCamoufoxVersion()) {
     if (!current) return;
     const file = path.join(camofoxProfilesDir(), user, "compatibility.json");
     try {

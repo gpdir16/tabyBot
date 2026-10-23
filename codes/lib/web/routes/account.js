@@ -171,7 +171,7 @@ function registerOauthRoutes(router) {
 // 진행 중인 OAuth 디바이스 플로우. kind별로 AbortController 1개만 유지한다.
 const activeOauthLogins = new Map();
 
-export async function startOauthLogin(kind) {
+async function startOauthLogin(kind) {
     const prev = activeOauthLogins.get(kind);
     if (prev) prev.abort.abort();
     // 기존 토큰을 지운 뒤 새 로그인을 시작한다(원본 설정 마법사와 동일 동작).
@@ -208,7 +208,7 @@ export async function startOauthLogin(kind) {
 }
 
 // 진행 중인 로그인을 취소한다.
-export function cancelOauthLogin(kind) {
+function cancelOauthLogin(kind) {
     const prev = activeOauthLogins.get(kind);
     if (prev) prev.abort.abort();
     activeOauthLogins.delete(kind);

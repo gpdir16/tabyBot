@@ -7,10 +7,9 @@ import path from "node:path";
 import { USER_DIR } from "../paths.js";
 import { readJsonFile, writeFileAtomic, writeJsonAtomic } from "../atomic-file.js";
 
-export const SECRETS_FILE = path.join(USER_DIR, "secrets.json");
-export const SECRET_KEY_FILE = path.join(USER_DIR, ".secret-key");
+const SECRETS_FILE = path.join(USER_DIR, "secrets.json");
+const SECRET_KEY_FILE = path.join(USER_DIR, ".secret-key");
 
-export const SECRET_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_SECRET_LENGTH = 8192;
 const MAX_NAME_LENGTH = 60;
 

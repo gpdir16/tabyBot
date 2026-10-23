@@ -13,7 +13,7 @@ const USER_ASK_DESCRIPTION = [
 
 // 모델이 질문 칸에 배경 설명을 함께 넣는 경우가 있다. 빈 줄로 나뉜 문단 중
 // 마지막 물음표 문단(없으면 마지막 문단)을 질문으로 보고, 나머지는 앞선 발화로 분리한다.
-export function splitAskQuestion(raw) {
+function splitAskQuestion(raw) {
     const text = String(raw || "").trim();
     if (!text) return { question: "", preamble: "" };
     const parts = text

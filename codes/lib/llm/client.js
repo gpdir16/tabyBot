@@ -21,7 +21,7 @@ export function agentProvider(userConfig, overrides = {}) {
     return applyAgentOverrides(provider, overrides);
 }
 
-export function applyAgentOverrides(provider, { model, thinkingLevel } = {}) {
+function applyAgentOverrides(provider, { model, thinkingLevel } = {}) {
     if (model) {
         provider.model = model;
         provider.modelOverride = true;
@@ -170,7 +170,7 @@ async function buildLlmClient(overrides) {
     }
 
     const modelMeta = await ensureModelMeta(provider);
-    const client = createOpenAIClient({
+    const client = await createOpenAIClient({
         baseURL: provider.baseURL,
         apiKey: provider.apiKey,
         extraHeaders: provider.extraHeaders,

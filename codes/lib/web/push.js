@@ -2,7 +2,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import webpush from "web-push";
 import { USER_DIR } from "../paths.js";
 import { writeJsonAtomic } from "../atomic-file.js";
 import { getConversationMeta } from "./conversations.js";
@@ -17,6 +16,18 @@ function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true });
 }
 
+// web-push generateVAPIDKeys와 같은 형식(P-256 공개 키 65바이트, 개인 키 32바이트, base64url)으로 만든다.
+// 키를 만들 때까지 web-push를 불러오지 않으려고 직접 만든다.
+function generateVapidKeys() {
+    const curve = crypto.createECDH("prime256v1");
+    curve.generateKeys();
+    const pad = (buf, size) => (buf.length < size ? Buffer.concat([Buffer.alloc(size - buf.length), buf]) : buf);
+    return { publicKey: pad(curve.getPublicKey(), 65).toString("base64url"), privateKey: pad(curve.getPrivateKey(), 32).toString("base64url") };
+}
+
+// web-push는 의존성이 많아 불러오는 데 시간이 걸린다. 실제로 보낼 때 불러온다.
+let webpush;
+
 function loadKeys() {
     try {
         const raw = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
@@ -25,8 +36,7 @@ function loadKeys() {
         // 없거나 깨졌으면 새로 만든다
     }
     ensureDir(DIR);
-    const generated = webpush.generateVAPIDKeys();
-    const keys = { publicKey: generated.publicKey, privateKey: generated.privateKey };
+    const keys = generateVapidKeys();
     writeJsonAtomic(KEYS_FILE, keys, { mode: 0o600 });
     return keys;
 }
@@ -167,7 +177,10 @@ export async function maybePush(event) {
     const payload = payloadFor(event);
     if (!payload) return;
 
+    const subs = listSubs();
+    if (!subs.length) return;
     const keys = loadKeys();
+    webpush ??= (await import("web-push")).default;
     const body = JSON.stringify(payload);
     const opts = {
         vapidDetails: {
@@ -179,7 +192,7 @@ export async function maybePush(event) {
     };
 
     await Promise.all(
-        listSubs().map(async (sub) => {
+        subs.map(async (sub) => {
             try {
                 await webpush.sendNotification(sub, body, opts);
             } catch (err) {

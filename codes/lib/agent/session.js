@@ -6,7 +6,7 @@ export const EMPTY_REPLY_HINT =
 export const QUIET_EMPTY_HINT = "If the user does not need a message, reply with ONLY __SILENT__. Do not narrate an empty check.";
 
 // 직전 사용자 메시지에서 이 시간 안에 다음 메시지가 오면 끼워 넣지 않고 실행을 멈춘 뒤 새 턴으로 다시 시작한다.
-export const QUICK_FOLLOWUP_MS = 15_000;
+const QUICK_FOLLOWUP_MS = 15_000;
 
 const sessions = new Map();
 

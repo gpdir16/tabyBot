@@ -2,7 +2,7 @@
 
 // ── LLM 클라이언트가 공유하는 전송 오류 판별과 재시도 흐름. ──
 
-export function isAbortError(err) {
+function isAbortError(err) {
     return err?.name === "AbortError" || err?.code === "ABORT_ERR";
 }
 
@@ -27,7 +27,7 @@ const TRANSIENT_MARKERS = [
 ];
 
 // 재시도해 볼 만한 일시적 네트워크 오류인가.
-export function isTransientTransportError(err) {
+function isTransientTransportError(err) {
     const text = normalizeErrorText(err);
     if (!text) return false;
     return TRANSIENT_MARKERS.some((marker) => text.includes(marker));

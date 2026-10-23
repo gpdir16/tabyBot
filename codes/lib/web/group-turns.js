@@ -27,7 +27,7 @@ function agentName(uuid) {
 }
 
 // 글에서 멘션된 멤버(uuid). "@이름" 뒤가 글자나 숫자가 아니어야 한다. 긴 이름부터 맞춰 "봇"과 "봇2"를 가린다.
-export function mentionedMembers(text, group) {
+function mentionedMembers(text, group) {
     const body = String(text || "");
     if (!body.includes("@")) return [];
     const members = group.members.map((uuid) => ({ uuid, name: agentName(uuid) })).sort((a, b) => b.name.length - a.name.length);
@@ -260,8 +260,4 @@ export function stopGroup(groupId) {
     if (run.current) requestAgentStop(memberSessionKey(groupId, run.current));
     else emit({ type: "turn_done", conversationId: groupId, text: null, stats: null, error: null, stopped: true });
     return true;
-}
-
-export function isGroupRunning(groupId) {
-    return runs.has(groupId);
 }
