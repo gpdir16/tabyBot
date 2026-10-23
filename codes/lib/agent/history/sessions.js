@@ -168,6 +168,7 @@ export function formatPastSessionsForPrompt(chatId) {
             const rel = path.relative(USER_DIR, s.absolutePath).split(path.sep).join("/");
             const parts = [`session ${s.id}`, `${turnCount} turns`];
             if (s.archiveReason === "context_compression") parts.push("archived before context compression");
+            if (s.archiveReason === "manual_restart") parts.push("ended when the user restarted the session");
             if (s.closedAt) parts.push(`closed ${s.closedAt}`);
             return `- \`${rel}\`: ${parts.join(", ")}`;
         })

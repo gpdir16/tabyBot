@@ -324,6 +324,40 @@
         });
         compressRow.disabled = compressing;
         sec.append(compressRow, T.h("div", { class: "set-desc", text: t("compressAllNowDesc") }));
+
+        // 모든 봇의 세션 다시 시작: 압축해도 요약에 꼬인 흐름이 남을 때 쓴다. 실행 중인 턴도 멈춘다.
+        // 지난 기록은 보관되어 화면과 검색에는 남고, 모델은 빈 세션으로 시작한다.
+        const restartRow = C.actionRow(
+            t("restartAllNow"),
+            async () => {
+                const ok = await T.confirm({
+                    title: t("restartAllConfirmTitle"),
+                    text: t("restartAllNowDesc"),
+                    confirmLabel: t("restartAllConfirmButton"),
+                    danger: true,
+                });
+                if (!ok) return;
+                restartRow.disabled = true;
+                restartRow.querySelector(".act-label").textContent = t("restarting");
+                T.api
+                    .restartAllSessions()
+                    .then((r) => {
+                        const n = Number(r?.restarted) || 0;
+                        const f = Number(r?.failed) || 0;
+                        if (f) T.toast.show("warn", t("restartAllPartial", { n, f }));
+                        else if (!n) T.toast.show("info", t("restartAllNone"));
+                        else T.toast.show("info", t("restartAllDone", { n }));
+                    })
+                    .catch((err) => T.toast.show("error", T.api.errorText(err, t("restartAllFailed"))))
+                    .finally(() => {
+                        restartRow.disabled = false;
+                        restartRow.querySelector(".act-label").textContent = t("restartAllNow");
+                    });
+            },
+            { danger: true },
+        );
+        restartRow.disabled = compressing;
+        sec.append(restartRow, T.h("div", { class: "set-desc", text: t("restartAllNowDesc") }));
     }
 
     C.isOauthProvider = isOauthProvider;
