@@ -2503,8 +2503,8 @@ body.todos-route #main {
 }
 #btnAttach,
 #btnSend {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
 }
 
 /* 설정 화면: 묶음 목록. 화면 하나(.sp-view)가 페이지를 가득 채우고, 모바일에서 목록과 상세를 오갈 때는
@@ -5367,7 +5367,7 @@ body.sb-collapsed .btn-menu {
 }
 
 #composer {
-    padding: var(--sp-1) var(--sp-1) var(--sp-1);
+    padding: 0 var(--sp-1) var(--sp-1);
     border-radius: 30px;
     box-shadow: 0 0 24px rgba(0, 0, 0, 1);
 }
@@ -5725,6 +5725,18 @@ body.group-chat #btnHdrComputer {
     /* 키보드가 열려 있을 때는 여백을 없애고 입력 바를 화면 끝에 딱 붙인다 */
     body.kb-open #composerWrap {
         padding: 0;
+    }
+    /* 키보드를 따라 올라가는 동안 입력 바 밑에 드러나는 자리를 키보드 둘레 색으로 채운다.
+       다 올라가면 앱 아래 끝 밖이라 잘려서 보이지 않는다. */
+    body.kb-open #composerWrap::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        height: 100vh;
+        background: var(--kb-bg, var(--bg));
+        pointer-events: none;
     }
     body.kb-open #composer {
         border-radius: calc(var(--radius-l) + var(--sp-2)) calc(var(--radius-l) + var(--sp-2)) 0 0;
@@ -6676,6 +6688,12 @@ body.viewer-open {
         width: auto;
         max-width: 760px;
         margin: 0 auto;
+        padding: var(--sp-1);
+    }
+    #btnAttach,
+    #btnSend {
+        width: 44px;
+        height: 44px;
     }
     .sb-scroll {
         padding: 0 0 var(--sp-2);

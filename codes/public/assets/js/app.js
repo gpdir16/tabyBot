@@ -23,6 +23,20 @@
     // 이전 동기화 시점의 높이 (높이 변화 감지용)
     let vvLastHeight = 0;
     let revealTimer = 0;
+    // 키보드를 따라 진행 중인 입력 바 움직임, 포커스가 빠져 키보드를 내리는 중인 시각의 끝
+    let keyboardMove = null;
+    let kbClosingUntil = 0;
+    // iOS 키보드의 움직임에 맞춘 시간과 곡선. 시뮬레이터 녹화에서 잰 키보드 윗변의 움직임을 따른다.
+    const KB_OPEN_MS = 320;
+    const KB_OPEN_EASE = "cubic-bezier(0.15, 0.9, 0.45, 1)";
+    // iOS는 키보드가 화면에 보이기 두 프레임쯤 전에 높이를 알려 준다. 먼저 출발하면 입력 바 밑에 틈이 보인다.
+    const KB_OPEN_DELAY_MS = 32;
+    const KB_CLOSE_MS = 180;
+    const KB_CLOSE_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
+    const KB_CLOSE_GRACE_MS = 1500;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    // 가상 키보드가 있는 터치 화면
+    const coarsePointer = window.matchMedia?.("(pointer: coarse)");
     const REVEAL_DELAY_MS = 120;
     const FOCUS_MARGIN = 12;
     const NON_TEXT_INPUT = /^(button|checkbox|radio|range|color|file|submit|reset|image|hidden)$/;
@@ -52,14 +66,16 @@
     }
     // 키보드가 열렸을 때 화면 아래 가장자리에 실제로 보이는 요소의 배경색을 읽어 body 배경(--kb-bg)으로 쓴다.
     // 입력창 종류와 테마에 상관없이 키보드 위쪽 면과 같은 색으로 이어진다.
-    function syncKeyboardBackground() {
+    // atY: 색을 고를 높이. 생략하면 보이는 화면의 아래 끝이다.
+    function syncKeyboardBackground(atY) {
         const root = document.documentElement;
         if (!document.body.classList.contains("kb-open")) {
             root.style.removeProperty("--kb-bg");
             return;
         }
         const vv = window.visualViewport;
-        const y = Math.min(window.innerHeight - 1, Math.max(0, Math.round((vv?.offsetTop || 0) + (vv?.height || window.innerHeight) - 2)));
+        const bottom = atY ?? (vv?.offsetTop || 0) + (vv?.height || window.innerHeight) - 2;
+        const y = Math.min(window.innerHeight - 1, Math.max(0, Math.round(bottom)));
         for (let el = document.elementFromPoint(window.innerWidth / 2, y); el && el !== root; el = el.parentElement) {
             const color = getComputedStyle(el).backgroundColor;
             // 투명은 "transparent"이거나 알파가 0인 rgba다. rgb(0, 0, 0)(불투명 검정)은 투명이 아니다.
@@ -71,37 +87,139 @@
         root.style.removeProperty("--kb-bg");
     }
 
+    // 레이아웃을 바꾸는 동안 채팅은 맨 아래 메시지가 제자리에 있게 아래쪽을 기준으로 잡는다.
+    // 대화 목록은 위쪽이 기준이라 건드리지 않는다(스크롤 위치가 그대로 남는다).
+    function keepScrollerBottom(change) {
+        const anchors = [...document.querySelectorAll("#scroller")].map((el) => ({
+            el,
+            fromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
+        }));
+        change();
+        // 입력 바 여백이 바뀌면 높이 변수도 바로 맞춘다. ResizeObserver를 기다리면 한 프레임 뒤에 내용이 밀린다.
+        const wrap = document.getElementById("composerWrap");
+        if (wrap) document.documentElement.style.setProperty("--composer-h", `${wrap.offsetHeight}px`);
+        for (const { el, fromBottom } of anchors) {
+            el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom;
+        }
+    }
+
+    function setAppHeight(height) {
+        document.documentElement.style.setProperty("--app-height", `${height}px`);
+    }
+
+    // 키보드를 따라 움직이는 것: 입력 바와 그 위의 대화 내용
+    function keyboardMovers() {
+        return [document.getElementById("composerWrap"), ...document.querySelectorAll("#scroller > :not([hidden])")].filter(
+            (el) => el && el.offsetParent !== null,
+        );
+    }
+
+    // 입력 바가 키보드와 같이 움직이게 한다. 레이아웃(높이)은 한 번만 바꾸고 움직임은 transform으로만 만든다.
+    // 매 프레임 높이를 바꾸면 긴 대화 전체를 프레임마다 다시 배치해야 해서 휴대폰에서 끊긴다.
+    function canAnimateKeyboard() {
+        return !!window.visualViewport && coarsePointer?.matches && !reduceMotion?.matches && document.activeElement?.id === "composerInput";
+    }
+
+    function finishKeyboardMove() {
+        const move = keyboardMove;
+        keyboardMove = null;
+        move?.finish();
+    }
+
+    // 올라올 때: iOS는 키보드가 올라오기 시작할 때 높이를 알려 준다. 앱 높이는 그대로 둔 채 입력 바와 대화를
+    // 키보드 높이만큼 끌어올리고, 다 올라간 뒤에 앱 높이를 줄인다(줄인 상태로 시작하면 아래쪽이 잘려 보인다).
+    function moveWithOpeningKeyboard(height) {
+        const shift = vvLastHeight - height;
+        const els = keyboardMovers();
+        const before = els.map((el) => el.getBoundingClientRect().top);
+        // 입력 바 모양(여백, 모서리)은 지금 바꾸고, 그 차이도 아래 움직임에 함께 넣는다
+        keepScrollerBottom(() => document.body.classList.add("kb-open"));
+        // 올라가는 동안 입력 바 밑(키보드 둘레)에 비치는 색. 다 올라간 뒤 화면 아래 끝에 올 입력 바에서 미리 고른다.
+        const wrap = document.getElementById("composerWrap");
+        if (wrap) syncKeyboardBackground(wrap.getBoundingClientRect().bottom - 2);
+        const anims = els.map((el, i) =>
+            el.animate([{ transform: `translateY(${before[i] - el.getBoundingClientRect().top}px)` }, { transform: `translateY(${-shift}px)` }], {
+                duration: KB_OPEN_MS,
+                delay: KB_OPEN_DELAY_MS,
+                easing: KB_OPEN_EASE,
+                fill: "both",
+            }),
+        );
+        const move = {
+            height,
+            finish() {
+                keepScrollerBottom(() => setAppHeight(height));
+                for (const a of anims) a.cancel();
+                syncKeyboardBackground();
+            },
+        };
+        keyboardMove = move;
+        anims[0]?.finished.then(
+            () => keyboardMove === move && finishKeyboardMove(),
+            () => {
+                // 중간에 취소된 애니메이션은 finishKeyboardMove가 이미 마무리했다
+            },
+        );
+        if (!anims.length) finishKeyboardMove();
+    }
+
+    // 내려갈 때: 높이를 먼저 늘리고, 입력 바와 대화를 원래 보이던 자리에서 새 자리로 내려 보낸다.
+    function moveWithClosingKeyboard(height) {
+        const els = keyboardMovers();
+        const before = els.map((el) => el.getBoundingClientRect().top);
+        keepScrollerBottom(() => {
+            document.body.classList.remove("kb-open");
+            setAppHeight(height);
+        });
+        for (const [i, el] of els.entries()) {
+            const from = before[i] - el.getBoundingClientRect().top;
+            if (from) el.animate([{ transform: `translateY(${from}px)` }, { transform: "none" }], { duration: KB_CLOSE_MS, easing: KB_CLOSE_EASE });
+        }
+    }
+
     function syncViewportHeight() {
         if (window.scrollY) window.scrollTo(0, 0);
         const vv = window.visualViewport;
-        const height = Math.round(vv?.height || window.innerHeight);
+        let height = Math.round(vv?.height || window.innerHeight);
+        if (vv && height > vvFullHeight) vvFullHeight = height;
+        // 키보드를 내리는 중: iOS가 다 내려간 뒤에야 보내는 줄어든 높이로 다시 올라가지 않게 한다.
+        if (vv && performance.now() < kbClosingUntil && !isTextEntry(document.activeElement || document.body))
+            height = Math.max(height, vvFullHeight);
         const changed = vvLastHeight && Math.abs(height - vvLastHeight) > 1;
-        // 키보드로 높이가 바뀌어도 채팅은 맨 아래 메시지가 제자리에 있게 아래쪽을 기준으로 잡는다.
-        // 대화 목록은 위쪽이 기준이라 건드리지 않는다(스크롤 위치가 그대로 남는다).
-        const anchors = changed
-            ? [...document.querySelectorAll("#scroller")].map((el) => ({
-                  el,
-                  fromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
-              }))
-            : [];
-        document.documentElement.style.setProperty("--app-height", `${height}px`);
-        if (vv) {
-            if (height > vvFullHeight) vvFullHeight = height;
-            document.body.classList.toggle("kb-open", vvFullHeight - height > 100);
-        } else {
-            vvFullHeight = 0;
-            document.body.classList.remove("kb-open");
+        const kbOpen = !!vv && vvFullHeight - height > 100;
+        if (!vv) vvFullHeight = 0;
+        if (keyboardMove && (changed || keyboardMove.height !== height)) finishKeyboardMove();
+        if (changed && kbOpen && !document.body.classList.contains("kb-open") && canAnimateKeyboard()) {
+            moveWithOpeningKeyboard(height);
+        } else if (!keyboardMove && (changed || kbOpen !== document.body.classList.contains("kb-open"))) {
+            keepScrollerBottom(() => {
+                setAppHeight(height);
+                document.body.classList.toggle("kb-open", kbOpen);
+            });
+        } else if (!keyboardMove) {
+            setAppHeight(height);
         }
         vvLastHeight = height;
-        syncKeyboardBackground();
+        // 키보드를 따라 올라가는 중에는 화면 아래 끝이 아직 대화라서 색을 다시 고르지 않는다
+        if (!keyboardMove) syncKeyboardBackground();
         if (changed) {
-            for (const { el, fromBottom } of anchors) {
-                el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom;
-            }
             clearTimeout(revealTimer);
-            revealTimer = setTimeout(revealFocusedInput, REVEAL_DELAY_MS);
+            revealTimer = setTimeout(revealFocusedInput, REVEAL_DELAY_MS + (keyboardMove ? KB_OPEN_DELAY_MS + KB_OPEN_MS : 0));
         }
         document.body.style.transform = vv?.offsetTop ? `translateY(${Math.round(vv.offsetTop)}px)` : "";
+    }
+
+    // 입력창에서 포커스가 빠지면 키보드가 내려가기 시작한다. iOS의 높이 알림은 키보드가 다 내려가고
+    // 0.5초쯤 지나서야 오므로 기다리지 않고 바로 내린다. 다른 입력창으로 옮겨 가면 키보드는 그대로다.
+    function onFocusOut(e) {
+        if (e.target?.id !== "composerInput" || !document.body.classList.contains("kb-open")) return;
+        if (e.relatedTarget && isTextEntry(e.relatedTarget)) return;
+        if (!window.visualViewport || !coarsePointer?.matches || reduceMotion?.matches || !vvFullHeight) return;
+        finishKeyboardMove();
+        kbClosingUntil = performance.now() + KB_CLOSE_GRACE_MS;
+        moveWithClosingKeyboard(vvFullHeight);
+        vvLastHeight = vvFullHeight;
+        syncKeyboardBackground();
     }
 
     function isTextEntry(el) {
@@ -148,6 +266,7 @@
         window.visualViewport?.addEventListener("resize", syncViewportHeight, { passive: true });
         window.visualViewport?.addEventListener("scroll", syncViewportHeight, { passive: true });
         window.addEventListener("scroll", syncViewportHeight, { passive: true });
+        document.addEventListener("focusout", onFocusOut);
         document.addEventListener("focusin", () =>
             requestAnimationFrame(() => {
                 revealFocusedInput();
