@@ -1,0 +1,15 @@
+{
+    "id": "opencode-go",
+    "type": "openai-compatible",
+    "baseURL": "https://opencode.ai/inference/go/v1",
+    "keysUrl": "https://opencode.ai/auth",
+    "defaultContextWindow": 204800,
+    "extraHeaders": {
+        "User-Agent": "tabyBot"
+    },
+    "sessionHeader": "x-opencode-session",
+    "modelsDev": ["opencode-go", "opencode"],
+    "thinkingLevels": ["low", "medium", "high"],
+    "defaultThinkingLevel": "high",
+    "thinkingParam": "reasoning_effort"
+}

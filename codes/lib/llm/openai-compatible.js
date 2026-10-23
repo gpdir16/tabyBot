@@ -147,11 +147,13 @@ export function chatCompletions({
     thinkingLevel,
     thinkingParam = "reasoning_effort",
     providerRouting,
+    headers,
 }) {
     const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam, providerRouting });
     throwIfAborted(signal);
 
-    const requestOptions = signal ? { signal } : undefined;
+    // headers: 요청마다 붙일 헤더(대화별 세션 id 등)
+    const requestOptions = signal || headers ? { signal, headers } : undefined;
 
     const requestNonStream = async () => completionPayload(await client.chat.completions.create({ ...params, stream: false }, requestOptions));
 
@@ -186,6 +188,7 @@ export async function chatCompletionsPing({
     thinkingLevel,
     thinkingParam = "reasoning_effort",
     providerRouting,
+    headers,
 }) {
     const params = buildParams({ model, messages, tools, tool_choice, thinkingLevel, thinkingParam, providerRouting });
     const id = `${client.baseURL}|${model}`;
@@ -194,7 +197,7 @@ export async function chatCompletionsPing({
     let lastErr = null;
     for (const field of fields) {
         try {
-            const completion = await client.chat.completions.create({ ...params, stream: false, [field]: 1 }, { signal, maxRetries: 0 });
+            const completion = await client.chat.completions.create({ ...params, stream: false, [field]: 1 }, { signal, headers, maxRetries: 0 });
             pingCapField.set(id, field);
             return completion.usage ?? undefined;
         } catch (err) {

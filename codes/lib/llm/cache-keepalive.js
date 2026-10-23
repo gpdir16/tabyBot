@@ -14,6 +14,7 @@ import path from "node:path";
 import { CONFIG_DIR, SESSION_DIR, USER_DIR } from "../paths.js";
 import { readJsonFile, writeJsonAtomic } from "../atomic-file.js";
 import { getMergedProvider, loadUserConfig } from "../config-loader.js";
+import { cachedCacheReadRatio } from "./models.js";
 import { recordUsage } from "./usage-log.js";
 
 const STATS_FILE = path.join(USER_DIR, "cache-keepalive.json");
@@ -64,7 +65,9 @@ function profileOf(provider) {
     if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(provider.baseURL || "")) return null;
     // OpenAI API는 기본 보존 기간(24h 보존: 쉬는 시간 약 30분)을 가정하고, 짧으면 응답에서 고친다.
     if (/^https:\/\/api\.openai\.com\//.test(provider.baseURL || "")) return { ttlMs: 30 * MINUTE, read: 0.1, miss: 1 };
-    return { ttlMs: 5 * MINUTE, read: 0.25, miss: 1 };
+    // 모델 목록이 모델마다 캐시 읽기 단가를 알려 주면(OpenCode Go) 그 값을 쓴다.
+    const ratio = cachedCacheReadRatio(provider);
+    return { ttlMs: 5 * MINUTE, read: ratio ?? 0.25, miss: 1 };
 }
 
 const clampNumber = (value, min, max, fallback) => {

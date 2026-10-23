@@ -67,10 +67,11 @@ function normalizeModelsList(payload) {
 }
 
 // 엔드포인트마다 캐시를 따로 둔다. 주소 전체의 해시를 써서 앞부분이 같은 주소끼리 섞이지 않게 한다.
+// models.dev로 채우는 목록은 채우기 전에 받아 둔 캐시와 섞이지 않게 키를 달리한다.
 function cachePath(provider) {
     const safeBase = crypto
         .createHash("sha256")
-        .update(provider.baseURL || "")
+        .update(provider.modelsDev?.length ? `${provider.baseURL || ""}|${provider.modelsDev.join(",")}|cost` : provider.baseURL || "")
         .digest("base64url")
         .slice(0, 24);
     return path.join(USER_DIR, "temp", `models-cache-${provider.id}-${safeBase}.json`);
@@ -96,6 +97,49 @@ async function requestModels(baseURL, provider) {
     const list = payload?.data ?? payload?.models ?? payload;
     if (!Array.isArray(list)) throw new Error(`Unexpected /models response from ${baseURL}`);
     return normalizeModelsList(payload);
+}
+
+// 모델 목록이 id만 주는 곳(OpenCode Go)은 models.dev에서 이름, 컨텍스트 크기, 이미지 입력 여부, 캐시 읽기 단가를 채운다.
+// providerKeys는 찾아볼 models.dev 프로바이더 키를 앞에서부터 쓴다(Go에 없으면 같은 회사의 Zen).
+// 어디에도 없는 모델의 크기는 채운 모델 중 가장 작은 크기로 둔다. 모르는 크기를 크게 잡으면 요청이 넘친다.
+// models.dev를 못 받으면 목록에 있던 값 그대로 둔다.
+const MODELS_DEV_URL = "https://models.dev/api.json";
+
+async function fillFromModelsDev(models, providerKeys) {
+    let catalogs;
+    try {
+        const res = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const all = await res.json();
+        catalogs = providerKeys.map((key) => all?.[key]?.models).filter((c) => c && typeof c === "object");
+    } catch (err) {
+        console.warn(`tabyBot: models.dev unavailable (${err?.message || err}), using model list as is`);
+        return models;
+    }
+    if (!catalogs.length) return models;
+    const filled = models.map((m) => {
+        const info = catalogs.map((c) => c[m.id]).find(Boolean);
+        if (!info) return m;
+        const input = info.modalities?.input;
+        const filledEntry = {
+            ...m,
+            label: String(info.name || m.label).trim(),
+            contextWindow: info.limit?.context || m.contextWindow,
+            supportsVision: Array.isArray(input) ? input.includes("image") : m.supportsVision,
+        };
+        // 입력 단가 대비 캐시 읽기 단가. 캐시 유지가 핑 값을 셈할 때 쓴다(무료 모델은 단가가 0이라 비워 둔다).
+        const price = Number(info.cost?.input);
+        const cacheRead = Number(info.cost?.cache_read);
+        if (price > 0 && cacheRead >= 0 && info.cost?.cache_read != null) filledEntry.cacheReadRatio = cacheRead / price;
+        return filledEntry;
+    });
+    const known = filled.map((m) => m.contextWindow).filter((n) => n > 0);
+    if (known.length) {
+        const smallest = Math.min(...known);
+        for (const m of filled) m.contextWindow ||= smallest;
+    }
+    filled.sort((a, b) => a.label.localeCompare(b.label, "en"));
+    return filled;
 }
 
 export async function fetchProviderModels(provider, opts = {}) {
@@ -149,6 +193,7 @@ export async function fetchProviderModelsDetailed(provider, { useCache = true } 
             throw err;
         }
     }
+    if (provider.modelsDev?.length) models = await fillFromModelsDev(models, provider.modelsDev);
     writeFileAtomic(filePath, `${JSON.stringify({ fetchedAt: Date.now(), models }, null, 2)}\n`);
     return { models, baseURL: usedURL };
 }
@@ -199,6 +244,19 @@ function guessVisionFromModelId(modelId) {
     return /gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|claude-3|claude-4|claude-sonnet|claude-opus|claude-haiku|gemini|pixtral|llava|qwen.*vl|\/vl|vision|kimi|moonshot|internvl|glm-4v|grok-4/i.test(
         id,
     );
+}
+
+// 받아 둔 모델 목록에서 이 모델의 입력 단가 대비 캐시 읽기 단가. 목록을 새로 받지 않는다(만료된 목록도 읽는다).
+// 모르면 null. 캐시 유지가 핑 값을 셈하고 설정 화면에 예상을 보여 줄 때 쓴다.
+export function cachedCacheReadRatio(provider) {
+    if (!provider?.modelsDev?.length || !provider.model) return null;
+    try {
+        const cached = JSON.parse(fs.readFileSync(cachePath(provider), "utf8"));
+        const ratio = cached.models?.find((m) => m.id === provider.model)?.cacheReadRatio;
+        return Number.isFinite(ratio) ? ratio : null;
+    } catch {
+        return null;
+    }
 }
 
 export function findModelVisionSupport(models, modelId) {
