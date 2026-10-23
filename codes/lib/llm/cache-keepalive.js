@@ -67,10 +67,6 @@ function profileOf(provider) {
     return { ttlMs: 5 * MINUTE, read: 0.25, miss: 1 };
 }
 
-export function cacheKeepAliveSupported(provider) {
-    return Boolean(profileOf(provider));
-}
-
 const clampNumber = (value, min, max, fallback) => {
     const n = Number(value);
     return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
@@ -78,7 +74,7 @@ const clampNumber = (value, min, max, fallback) => {
 
 // 모델 프리셋별 설정: { mode: "auto" } | { mode: "off" } | { mode: "custom", ttlMinutes, keepHours }.
 // 저장하지 않은 프리셋은 자동이다(예전의 false는 끔). 예전에는 프로바이더 종류(id)로 저장했으므로 그 값도 읽는다.
-export function cacheKeepAliveSettings(provider, config = loadUserConfig()) {
+function cacheKeepAliveSettings(provider, config = loadUserConfig()) {
     const all = config.cacheKeepAlive || {};
     const raw = (provider.presetUid && all[provider.presetUid]) ?? all[provider.id || "default"];
     if (raw === false || raw?.mode === "off") return { mode: "off" };

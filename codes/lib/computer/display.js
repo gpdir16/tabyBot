@@ -480,4 +480,4 @@ export async function closeSession() {
     return { ok: true };
 }
 
-export { settleMs, validKey, validGeometry };
+export { settleMs, validGeometry };

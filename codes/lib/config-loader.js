@@ -74,7 +74,7 @@ export function loadProviderConfig(providerId) {
 
 // 저장된 프로바이더 프로필 하나의 설정(주소, 키). uid가 없거나 못 찾으면 고른 프로필, 즉 config.provider다.
 // 고른 프로필의 정본은 config.provider이고 프로필 목록의 것은 사본이다.
-export function providerConfigOf(userConfig, uid = "") {
+function providerConfigOf(userConfig, uid = "") {
     const active = userConfig?.activeProviderProfile || "";
     if (uid && uid !== active) {
         const profile = (userConfig?.providerProfiles || []).find((p) => p?.uid === uid);

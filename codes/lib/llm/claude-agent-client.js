@@ -4,7 +4,6 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { sanitizeMessagesForApi, sanitizeTextForLlm } from "./sanitize-messages.js";
 import { buildStreamResult } from "./responses-request.js";
 import { stoppedError, throwIfAborted } from "./transport.js";
@@ -46,6 +45,13 @@ const CLOSE_CLEANUP_MS = 5000;
 // 대화와 상관없는 내용이 섞이지 않게 함.
 const WORK_DIR = path.join(os.tmpdir(), "tabybot-claude-agent");
 const TOOL_SERVER_SCRIPT = fileURLToPath(new URL("./claude-tool-server.js", import.meta.url));
+
+// Claude Agent SDK는 불러오기만 해도 메모리를 30MB쯤 쓴다. Claude 구독을 처음 쓸 때 불러온다.
+let sdkQuery;
+async function loadQuery() {
+    sdkQuery ??= (await import("@anthropic-ai/claude-agent-sdk")).query;
+    return sdkQuery;
+}
 
 // 자식 프로세스에 넘길 환경 변수. API 키, 기본 URL, 클라우드 백엔드 전환 변수는 넘기지 않음.
 // 넘기면 구독 대신 API 과금으로 조용히 바뀔 수 있음.
@@ -642,7 +648,7 @@ class LiveProcess {
 
     start(options, loaded) {
         const seen = new Set(loaded.map((entry) => entry.uuid));
-        this.run = query({
+        this.run = sdkQuery({
             prompt: this.inbox,
             options: {
                 ...options,
@@ -950,6 +956,7 @@ async function startLive(conv, { model, system, messages, list, level, resume, e
                 },
             };
         }
+        await loadQuery();
         live.start(
             {
                 model,
@@ -1127,27 +1134,29 @@ function loadInfo(envOverride) {
     const idle = new Promise((resolve) => {
         release = resolve;
     });
-    const run = query({
-        prompt: emptyPrompt(idle),
-        options: {
-            tools: [],
-            settingSources: [],
-            strictMcpConfig: true,
-            permissionMode: "dontAsk",
-            persistSession: false,
-            cwd: WORK_DIR,
-            env: buildClaudeEnv(envOverride),
-            abortController,
-            stderr: () => {
-                // 초기화 정보만 읽으므로 로그는 쓰지 않음.
+    const run = loadQuery().then((query) =>
+        query({
+            prompt: emptyPrompt(idle),
+            options: {
+                tools: [],
+                settingSources: [],
+                strictMcpConfig: true,
+                permissionMode: "dontAsk",
+                persistSession: false,
+                cwd: WORK_DIR,
+                env: buildClaudeEnv(envOverride),
+                abortController,
+                stderr: () => {
+                    // 초기화 정보만 읽으므로 로그는 쓰지 않음.
+                },
             },
-        },
-    });
-    const account = run.accountInfo();
+        }),
+    );
+    const account = run.then((r) => r.accountInfo());
     // 모델을 바꿔 가며 읽으므로 계정 정보를 받은 뒤에 시작함.
     const models = account.then(
-        () => readModels(run),
-        () => readModels(run),
+        () => run.then(readModels),
+        () => run.then(readModels),
     );
     const record = { at: Date.now(), account, models };
     Promise.allSettled([account, models]).then((results) => {

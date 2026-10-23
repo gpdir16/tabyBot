@@ -43,7 +43,7 @@ function stampFormatter(timeZone) {
 
 // 사용자 메시지 앞에 붙이는 시각 표기. 저장된 at에서 만들어 매 턴 같은 문자열이 나오므로,
 // 시스템 프롬프트에 시계를 둘 때와 달리 뒤따르는 대화 기록의 프롬프트 캐시를 깨지 않는다.
-export function formatMessageStamp(at, timeZone = defaultTimeZone()) {
+function formatMessageStamp(at, timeZone = defaultTimeZone()) {
     const date = new Date(at);
     if (typeof at !== "string" || Number.isNaN(date.getTime())) return "";
     try {

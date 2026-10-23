@@ -104,7 +104,7 @@ export async function githubCopilotComplete({ model, messages, tools, tool_choic
         }
     }
 
-    const client = createOpenAIClient({
+    const client = await createOpenAIClient({
         baseURL: auth.baseURL,
         apiKey: auth.accessToken,
         extraHeaders: { ...COPILOT_HEADERS, ...VSCODE_HEADERS, ...(sessionToken ? { "Copilot-Session-Token": sessionToken } : {}) },

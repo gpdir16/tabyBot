@@ -1,8 +1,11 @@
-import OpenAI from "openai";
 import { sanitizeMessagesForApi } from "./sanitize-messages.js";
 import { requestOnce, stoppedError, streamWithFallback, throwIfAborted } from "./transport.js";
 
-export function createOpenAIClient({ baseURL, apiKey, extraHeaders = {} }) {
+// openai SDK는 불러오기만 해도 메모리를 15MB쯤 쓴다. OpenAI 호환 업체를 처음 부를 때 불러온다.
+let OpenAI;
+
+export async function createOpenAIClient({ baseURL, apiKey, extraHeaders = {} }) {
+    OpenAI ??= (await import("openai")).default;
     return new OpenAI({
         apiKey,
         baseURL,

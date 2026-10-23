@@ -31,7 +31,7 @@ function manifestPath(id) {
 }
 
 // 화면에서 여는 대화: 에이전트 스레드나 그룹 방. 그룹 안의 에이전트 세션은 내부용이라 열지 않는다.
-export function isValidId(id) {
+function isValidId(id) {
     return Boolean(conversationDir(id)) && !parseMemberKey(id);
 }
 

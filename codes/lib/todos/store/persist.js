@@ -84,7 +84,7 @@ function readLegacyRows(agent) {
     }
 }
 
-export function migrateLegacy() {
+function migrateLegacy() {
     const items = [];
     const suggestions = [];
     const seenIds = new Set();

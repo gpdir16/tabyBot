@@ -73,7 +73,7 @@ export function publicAgent(a) {
 
 // ── 설정 화면에 내려주는 스냅샷과 세션 압축 실행 경로. ──
 
-export const PROVIDER_LABELS = {
+const PROVIDER_LABELS = {
     default: "OpenAI",
     openrouter: "OpenRouter",
     grok: "Grok OAuth",
@@ -88,7 +88,7 @@ export const PROVIDER_LABELS = {
     orcarouter: "OrcaRouter",
 };
 
-export function providerPresets() {
+function providerPresets() {
     const dir = path.join(CODES_DIR, "config", "provider");
     let files = [];
     try {
@@ -239,11 +239,11 @@ function publicPresets(config) {
 // 동시에 하나만 돌리고, 시작/종료를 SSE로 알려 새로고침해도 진행 상태가 보이게 한다.
 let sessionCompressInFlight = false;
 
-export function isSessionCompressing() {
+function isSessionCompressing() {
     return sessionCompressInFlight;
 }
 
-export async function runSessionCompression(chatIds = null) {
+async function runSessionCompression(chatIds = null) {
     if (sessionCompressInFlight) return null;
     sessionCompressInFlight = true;
     emit({ type: "sessions_compress", running: true });
@@ -256,7 +256,7 @@ export async function runSessionCompression(chatIds = null) {
 }
 
 // GET/PUT 공용 설정 스냅샷. apiKey는 절대 포함하지 않는다.
-export function buildSettingsPayload() {
+function buildSettingsPayload() {
     const config = loadUserConfig();
     // 프로필과 프리셋이 없던 설정도 있는 것처럼 보여 준다. 저장은 다음 변경 때 한다.
     ensureProfiles(config, PROFILE_HELPERS);
@@ -483,7 +483,7 @@ function applyProviderPatch(config, providerPatch) {
 }
 
 // 반환: { error } 또는 { selfImprovementChanged }.
-export function applySettingsPatch(config, patch) {
+function applySettingsPatch(config, patch) {
     const generalError = applyGeneralFields(config, patch);
     if (generalError) return { error: generalError };
 

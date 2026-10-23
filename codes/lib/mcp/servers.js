@@ -1,5 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { loadMcpConfig } from "../config-loader.js";
 import { mcpConfigEditHint } from "../path-labels.js";
 
@@ -73,7 +71,17 @@ async function closeEntry(name) {
     servers.delete(name);
 }
 
+// MCP SDK는 불러오기만 해도 메모리를 20MB쯤 쓴다. 등록된 서버가 있을 때만 불러온다.
+let sdk;
+function loadMcpSdk() {
+    sdk ??= Promise.all([import("@modelcontextprotocol/sdk/client/index.js"), import("@modelcontextprotocol/sdk/client/stdio.js")]).then(
+        ([client, stdio]) => ({ Client: client.Client, StdioClientTransport: stdio.StdioClientTransport }),
+    );
+    return sdk;
+}
+
 async function connectServer(server) {
+    const { Client, StdioClientTransport } = await loadMcpSdk();
     const transport = new StdioClientTransport({
         command: server.command,
         args: server.args || [],

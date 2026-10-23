@@ -9,7 +9,7 @@ const MAX_MODEL = 200;
 const MAX_PIN = 64;
 const MAX_AUTO_MODEL_CANDIDATES = 30;
 
-export const INITIAL_PRESET_UID = "initial";
+const INITIAL_PRESET_UID = "initial";
 
 function legacyPin(config, model) {
     const pins = config.provider?.openRouterPins;
@@ -69,7 +69,7 @@ export function ensurePresets(config) {
     return changed;
 }
 
-export function normalizePresetName(name) {
+function normalizePresetName(name) {
     return String(name ?? "")
         .replace(/\s+/g, " ")
         .trim()

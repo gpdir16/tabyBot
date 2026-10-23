@@ -1,7 +1,5 @@
 import { loadUserConfig } from "./config-loader.js";
-import { getThinkingLevelForUser, normalizeThinkingLevel as normalizeThinkingForProvider, getCachedProviderThinkingMeta } from "./thinking-levels.js";
-
-export { getThinkingLevelForUser as getThinkingLevel, normalizeThinkingForProvider as normalizeThinkingLevel, getCachedProviderThinkingMeta };
+export { normalizeThinkingLevel, getCachedProviderThinkingMeta } from "./thinking-levels.js";
 
 // null = follow agent.json updateCheck.enabled
 export function getUserUpdateCheckEnabled(config = loadUserConfig()) {

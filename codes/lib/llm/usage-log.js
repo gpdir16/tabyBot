@@ -9,7 +9,7 @@ import { defaultTimeZone, isValidTimeZone } from "../scheduling/time.js";
 
 const LOG_FILE = path.join(USER_DIR, "usage-log.json");
 // 보관하는 날 수. 화면에서 고를 수 있는 가장 긴 기간과 같다.
-export const USAGE_KEEP_DAYS = 90;
+const USAGE_KEEP_DAYS = 90;
 const FIELDS = ["calls", "input", "cached", "written", "output", "pings", "pingInput", "pingCached"];
 
 let log = null;

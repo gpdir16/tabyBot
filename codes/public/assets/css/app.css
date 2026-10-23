@@ -927,9 +927,6 @@ kbd {
     line-height: 1.65;
     overflow-wrap: break-word;
 }
-.md.streaming {
-    white-space: pre-wrap;
-}
 .md > * + * {
     margin-top: 0.8em;
 }
