@@ -149,6 +149,7 @@
         deleteModelPreset: (uid) => request(`/api/model-presets/${enc(uid)}`, { method: "DELETE" }),
         compressAllSessions: (chatIds) =>
             request("/api/sessions/compress-all", { method: "POST", json: Array.isArray(chatIds) && chatIds.length ? { chatIds } : {} }),
+        restartAllSessions: () => request("/api/sessions/restart-all", { method: "POST", json: {} }),
 
         agents: () => request("/api/agents"),
         createAgent: (b) => request("/api/agents", { method: "POST", json: b }),

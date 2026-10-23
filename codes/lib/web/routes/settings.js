@@ -29,6 +29,9 @@ import {
     normalizeNsfwLevel,
 } from "../../user-settings.js";
 import { compressBotSessions } from "../../agent/summarize.js";
+import { loadChatHistory, replaceChatHistoryAfterCompression } from "../../agent/chat-history.js";
+import { isAgentSessionRunning } from "../../agent/session.js";
+import { stopConversation } from "../turns.js";
 import { trackTask } from "../tasks.js";
 import { applySelfImprovementPatch, getDreamingConfig, getProactiveConfig, getReviewConfig } from "../../self-improvement.js";
 import { emit } from "../bus.js";
@@ -253,6 +256,45 @@ async function runSessionCompression(chatIds = null) {
         sessionCompressInFlight = false;
         emit({ type: "sessions_compress", running: false });
     }
+}
+
+// 세션 다시 시작: 압축해도 요약에 꼬인 흐름이 남는 경우를 위해, 실행 중인 턴을 멈추고 기록을 보관한 뒤 빈 세션으로 연다.
+// 멈춘 턴은 끝나면서 기록을 저장하므로, 끝날 때까지 기다린 뒤 보관해야 새 세션에 섞이지 않는다.
+let sessionRestartInFlight = false;
+const RESTART_STOP_WAIT_MS = 60_000;
+
+async function waitForStop(chatId) {
+    const deadline = Date.now() + RESTART_STOP_WAIT_MS;
+    while (isAgentSessionRunning(chatId)) {
+        if (Date.now() > deadline) return false;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return true;
+}
+
+async function restartBotSessions() {
+    const result = { restarted: 0, skipped: 0, failed: 0 };
+    for (const chatId of listAgents()
+        .map((a) => a.uuid)
+        .filter(Boolean)) {
+        try {
+            const running = stopConversation(chatId);
+            if (running && !(await waitForStop(chatId))) {
+                result.failed += 1;
+                continue;
+            }
+            if (!running && !loadChatHistory(chatId).length) {
+                result.skipped += 1;
+                continue;
+            }
+            if (replaceChatHistoryAfterCompression(chatId, [], "", { reason: "manual_restart" })) result.restarted += 1;
+            else result.skipped += 1;
+        } catch (err) {
+            console.warn(`tabyBot: session restart failed for ${chatId}:`, err?.message || err);
+            result.failed += 1;
+        }
+    }
+    return result;
 }
 
 // GET/PUT 공용 설정 스냅샷. apiKey는 절대 포함하지 않는다.
@@ -758,11 +800,24 @@ export function registerSettingsRoutes(router) {
         const body = await ctx.json().catch(() => ({}));
         let chatIds = null;
         if (Array.isArray(body?.chatIds)) chatIds = body.chatIds.map(String).filter(Boolean).slice(0, 50);
-        if (isSessionCompressing()) return ctx.json409("already_running");
+        if (isSessionCompressing() || sessionRestartInFlight) return ctx.json409("already_running");
         try {
             ctx.json200(await runSessionCompression(chatIds));
         } catch (err) {
             ctx.json400(err?.message || String(err));
+        }
+    });
+
+    router.add("POST", "/api/sessions/restart-all", async (ctx) => {
+        // 압축과 동시에 돌면 압축이 옛 기록의 요약으로 새 세션을 덮어쓴다.
+        if (isSessionCompressing() || sessionRestartInFlight) return ctx.json409("already_running");
+        sessionRestartInFlight = true;
+        try {
+            ctx.json200(await restartBotSessions());
+        } catch (err) {
+            ctx.json400(err?.message || String(err));
+        } finally {
+            sessionRestartInFlight = false;
         }
     });
 
