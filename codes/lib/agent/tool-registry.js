@@ -11,6 +11,7 @@ import { prepareToolSecrets, redactDeep, redactText } from "../secrets/vault.js"
 import { userSayToolDefinitions, executeUserSayTool } from "../tools/user-say-tool.js";
 import { vizToolDefinitions, executeVizTool } from "../tools/visualization.js";
 import { xvfbGuiToolDefinitions, executeXvfbGuiTool } from "../tools/xvfb-gui.js";
+import { browserClickToolDefinitions, executeBrowserClick, withChallengeHint } from "../tools/browser-click.js";
 import { consultAgentToolDefinitions, executeConsultAgent } from "../tools/consult-agent.js";
 import { sessionSearchToolDefinitions, executeSessionSearchTool } from "../tools/session-search.js";
 import { listAgents } from "../agents-store.js";
@@ -51,6 +52,7 @@ export async function getAllToolDefinitions() {
         ...(listAgents().length ? consultAgentToolDefinitions : []),
         ...vizToolDefinitions,
         ...(isDockerRuntime() ? xvfbGuiToolDefinitions : []),
+        ...(isDockerRuntime() ? browserClickToolDefinitions : []),
         ...getDynamicMcpToolDefinitions(),
     ];
 }
@@ -75,7 +77,8 @@ async function runTool(name, args, ctx) {
         if (name.startsWith("skills_")) return await executeSkillsTool(name, args);
         if (name.startsWith("todo_")) return await executeTodoTool(name, args, ctx);
         if (name === "terminal_run" || name === "bg_status" || name === "bg_list" || name === "bg_kill") {
-            return await executeTerminalTool(name, args, ctx);
+            const result = await executeTerminalTool(name, args, ctx);
+            return isDockerRuntime() ? withChallengeHint(args, result) : result;
         }
         if (name === "send_file") return await executeSendFileTool(name, args, ctx);
         if (name === "user_ask") return await executeUserAskTool(name, args, ctx);
@@ -86,6 +89,7 @@ async function runTool(name, args, ctx) {
         if (name === "viz_create") return await executeVizTool(name, args);
         if (name.startsWith("mcp__")) return await invokeMcpTool(name, args, ctx);
         if (name === "xvfb_gui") return await executeXvfbGuiTool(name, args, ctx);
+        if (name === "browser_click") return await executeBrowserClick(args, ctx);
         return { error: `Unknown tool: ${name}` };
     } catch (err) {
         return { error: redactText(err?.message || String(err)) };
