@@ -57,6 +57,8 @@ function buildParams({ model, messages, tools, tool_choice, thinkingLevel, think
     return params;
 }
 
+const REASONING_TEXT_KEYS = new Set(["text", "summary", "data"]);
+
 // 스트림 조각을 모아 최종 응답 모양으로 만든다.
 class StreamAccumulator {
     constructor() {
@@ -65,6 +67,10 @@ class StreamAccumulator {
         this.finishReason = null;
         this.toolCalls = new Map(); // delta의 index별로 이어 붙인다
         this.model = null;
+        // 추론 내용. 다음 호출에 돌려주므로 버리지 않고 모은다(messages.js의 pickReasoning).
+        this.reasoning = "";
+        this.reasoningContent = "";
+        this.reasoningDetails = new Map(); // index별로 글을 이어 붙인다
     }
 
     add(chunk, onTextDelta) {
@@ -81,6 +87,27 @@ class StreamAccumulator {
         }
         if (Array.isArray(delta.tool_calls)) {
             for (const tc of delta.tool_calls) this.addToolCallDelta(tc);
+        }
+        if (typeof delta.reasoning === "string") this.reasoning += delta.reasoning;
+        if (typeof delta.reasoning_content === "string") this.reasoningContent += delta.reasoning_content;
+        if (Array.isArray(delta.reasoning_details)) {
+            for (const detail of delta.reasoning_details) this.addReasoningDetail(detail);
+        }
+    }
+
+    // 조각마다 같은 index의 글(text, summary, data)은 이어 붙이고 나머지(서명, 형식)는 최신 값으로 둔다.
+    addReasoningDetail(detail) {
+        if (!detail || typeof detail !== "object") return;
+        const idx = Number.isInteger(detail.index) ? detail.index : 0;
+        const acc = this.reasoningDetails.get(idx);
+        if (!acc) {
+            this.reasoningDetails.set(idx, { ...detail });
+            return;
+        }
+        for (const [key, value] of Object.entries(detail)) {
+            if (value == null) continue;
+            if (REASONING_TEXT_KEYS.has(key) && typeof value === "string") acc[key] = (acc[key] || "") + value;
+            else acc[key] = value;
         }
     }
 
@@ -99,6 +126,11 @@ class StreamAccumulator {
         if (this.toolCalls.size) {
             message.tool_calls = [...this.toolCalls.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
         }
+        if (this.reasoningDetails.size) {
+            message.reasoning_details = [...this.reasoningDetails.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+        }
+        if (this.reasoningContent) message.reasoning_content = this.reasoningContent;
+        if (this.reasoning) message.reasoning = this.reasoning;
         return { choices: [{ message, finish_reason: this.finishReason || "stop" }], usage: this.usage, model: this.model };
     }
 }

@@ -128,7 +128,7 @@ function persistCompletedTurn({
 // 긴 답변에서 전송량이 길이의 제곱으로 불어나고, 재접속용 이벤트 기록도 델타로 가득 찬다.
 const DELTA_FLUSH_MS = 60;
 
-function createDeltaStream({ sessionKey, automated, quietEmpty }) {
+function createDeltaStream({ sessionKey, automated }) {
     let full = "";
     let sent = 0;
     let timer = null;
@@ -137,8 +137,8 @@ function createDeltaStream({ sessionKey, automated, quietEmpty }) {
         clearTimeout(timer);
         timer = null;
         if (full.length <= sent) return;
-        // 자동 실행의 침묵 답변은 화면에 내보내지 않는다.
-        if (quietEmpty && full.trim().startsWith("__SILENT__")) return;
+        // 침묵 답변은 화면에 내보내지 않는다. 사람이 보낸 턴이면 루프가 되돌려 다시 답을 받는다.
+        if (full.trim().startsWith("__SILENT__")) return;
         emit({ type: "delta", conversationId: sessionKey, offset: sent, text: full.slice(sent), automated: automated || undefined });
         sent = full.length;
     }
@@ -195,7 +195,7 @@ export async function runTurn({
     // 턴이 어떻게 끝났는지: 남은 대기 메시지를 어떻게 할지 정한다.
     let outcome = "failed";
     let finalResult = null;
-    const deltas = createDeltaStream({ sessionKey, automated, quietEmpty });
+    const deltas = createDeltaStream({ sessionKey, automated });
 
     const status = (phase, detail = null) => {
         // 같은 phase 연속 방출은 클라이언트 상태 깜빡임만 유발하므로 스킵

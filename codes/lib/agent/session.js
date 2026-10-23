@@ -5,6 +5,9 @@ export const EMPTY_REPLY_HINT =
 
 export const QUIET_EMPTY_HINT = "If the user does not need a message, reply with ONLY __SILENT__. Do not narrate an empty check.";
 
+export const SILENT_TO_USER_HINT =
+    "Your __SILENT__ reply was not delivered. The user wrote to you and is waiting, and silence is only for automatic runs. Answer the user's latest message now in plain text.";
+
 // 직전 사용자 메시지에서 이 시간 안에 다음 메시지가 오면 끼워 넣지 않고 실행을 멈춘 뒤 새 턴으로 다시 시작한다.
 const QUICK_FOLLOWUP_MS = 15_000;
 
