@@ -1,7 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getEncoding } from "js-tiktoken";
-import { sanitizeTextForLlm } from "../llm/sanitize-messages.js";
 import { CODES_DIR } from "../paths.js";
 import { readMemoryFile, readAgentMemoryFile, formatAgentMemoryFilesListForPrompt, agentMemoryFilePath, agentMemoryDirPath } from "../memory-file.js";
 import { firstAgent, formatPeerAgentsForPrompt, getAgent } from "../agents-store.js";
@@ -17,6 +15,7 @@ import {
 } from "../user-settings.js";
 import { formatTodosForPrompt } from "../todos/store.js";
 import { estimateContentTokens } from "../llm/vision.js";
+import { estimateTextTokens, tokenScale } from "../llm/token-estimate.js";
 import { hydrateUserContent } from "../web/attachments.js";
 import { formatSkillsListForPrompt } from "../skills-catalog.js";
 import { formatSecretsForPrompt } from "../secrets/vault.js";
@@ -26,27 +25,8 @@ import { isStandalonePendingTurn } from "./history/messages.js";
 import { pickVolatileVars, resolvePromptState } from "./prompt-state.js";
 const SYSTEM_PATH = path.join(CODES_DIR, "lib", "prompts", "system.txt");
 
-let encoding;
-function getTokenizer() {
-    try {
-        if (!encoding) encoding = getEncoding("o200k_base");
-        return encoding;
-    } catch {
-        return null;
-    }
-}
-
 export function countTokens(text) {
-    const enc = getTokenizer();
-    const safe = sanitizeTextForLlm(typeof text === "string" ? text : (JSON.stringify(text) ?? ""));
-    if (enc) {
-        try {
-            return enc.encode(safe, undefined, []).length;
-        } catch {
-            return Math.ceil(safe.length / 4);
-        }
-    }
-    return Math.ceil(safe.length / 4);
+    return estimateTextTokens(typeof text === "string" ? text : (JSON.stringify(text) ?? ""));
 }
 
 export function countMessagesTokens(messages) {
@@ -60,6 +40,11 @@ export function countMessagesTokens(messages) {
         if (m.tool_calls) total += countTokens(JSON.stringify(m.tool_calls));
     }
     return total;
+}
+
+// 요청 하나의 입력 토큰 어림값. 메시지에 도구 정의를 더하고 그 모델의 배율로 보정한다.
+export function countRequestTokens(messages, { model = "", toolTokens = 0 } = {}) {
+    return Math.ceil((countMessagesTokens(messages) + toolTokens) * tokenScale(model));
 }
 
 function loadSystemPromptTemplate() {

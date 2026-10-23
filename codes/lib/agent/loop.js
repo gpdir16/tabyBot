@@ -6,7 +6,8 @@ import { buildToolResultContent } from "../llm/vision.js";
 import { extractTurnMessages } from "./chat-history.js";
 import { ensureWithinContextLimit } from "./summarize.js";
 import { clearFileReadCache } from "../tools/file.js";
-import { countMessagesTokens } from "./context.js";
+import { countMessagesTokens, countRequestTokens, countTokens } from "./context.js";
+import { learnTokenScale } from "../llm/token-estimate.js";
 import { firstAgentId, firstAgent, getAgent } from "../agents-store.js";
 import { buildPendingUserMessages } from "./history/messages.js";
 import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT } from "./session.js";
@@ -85,7 +86,19 @@ function buildToolImageObservation(result, { visionEnabled = false } = {}) {
 // 한 턴의 진행 상태. 메시지 목록·호출 횟수·중단 여부 같은 값을 묶어 두고,
 // 결과 만들기·체크포인트·빈 답변 복구를 메서드로 처리한다.
 class AgentTurn {
-    constructor({ llm, messages, contextBaseLength, session, setStatus, onTextDelta, onCheckpoint, quietEmpty, maxEmptyReplyRetries, cacheKey }) {
+    constructor({
+        llm,
+        messages,
+        contextBaseLength,
+        session,
+        setStatus,
+        onTextDelta,
+        onCheckpoint,
+        quietEmpty,
+        maxEmptyReplyRetries,
+        cacheKey,
+        toolTokens,
+    }) {
         this.llm = llm;
         this.cacheKey = cacheKey || null;
         this.inputTokens = 0;
@@ -101,6 +114,8 @@ class AgentTurn {
         this.toolCallCount = 0;
         this.modelCallCount = 0;
         this.partialText = null; // 스트리밍 중 지금까지 받은 본문. 중단되면 이것을 돌려준다.
+        this.toolTokens = toolTokens || 0; // 도구 정의의 어림 토큰 수. 도구를 켠 호출의 입력에 들어간다.
+        this.usageAnchor = null; // 마지막 호출에서 API가 센 입력 토큰 수와 그때 보낸 메시지 수
     }
 
     get stopRequested() {
@@ -109,14 +124,30 @@ class AgentTurn {
 
     stats() {
         const contextWindow = this.llm.modelMeta?.contextWindow ?? 128000;
-        const loadedContext = countMessagesTokens(this.messages.slice(0, this.contextBaseLength));
-        const peakContext = countMessagesTokens(this.messages);
         return {
             toolCallCount: this.toolCallCount,
             modelCallCount: this.modelCallCount,
-            tokensUsed: Math.max(loadedContext, peakContext),
+            tokensUsed: this.contextTokens(),
             contextWindow,
         };
+    }
+
+    // 지금 대화가 차지한 컨텍스트. 마지막 호출에서 API가 센 입력 토큰을 기준으로 그 뒤에 붙은 메시지만 어림해 더한다.
+    // 아직 호출 전이거나 그사이 모델이 바뀌었으면 전체를 어림한다.
+    contextTokens() {
+        const model = this.llm.modelMeta?.model || "";
+        const anchor = this.usageAnchor;
+        if (!anchor || anchor.model !== model) return countRequestTokens(this.messages, { model, toolTokens: this.toolTokens });
+        return anchor.tokens + countRequestTokens(this.messages.slice(anchor.length), { model });
+    }
+
+    // 호출의 실제 입력 토큰 수로 기준점을 옮기고, 같은 요청의 어림값과 견줘 모델별 배율을 배운다.
+    learnUsage(usage, sentLength, toolTokens) {
+        const actual = Number(usage?.prompt_tokens ?? usage?.input_tokens) || 0;
+        if (!actual) return;
+        const model = this.llm.modelMeta?.model || "";
+        learnTokenScale(model, countMessagesTokens(this.messages.slice(0, sentLength)) + toolTokens, actual);
+        this.usageAnchor = { model, length: sentLength, tokens: actual };
     }
 
     // 응답의 usage에서 입력 토큰과 그중 캐시에서 읽은 토큰을 모은다(Chat Completions와 Responses 모양 모두).
@@ -199,6 +230,7 @@ class AgentTurn {
 
             this.setStatus("thinking");
             this.modelCallCount += 1;
+            const sentLength = this.messages.length;
             let response;
             try {
                 response = await this.llm.complete({
@@ -217,6 +249,7 @@ class AgentTurn {
                 throw err;
             }
             this.recordUsage(response.usage);
+            this.learnUsage(response.usage, sentLength, 0);
 
             if (this.stopRequested) return null;
 
@@ -300,6 +333,7 @@ class AgentTurn {
             const result = await executeTool(tc.function.name, parsed.args, {
                 ...toolContext,
                 messages: this.messages,
+                contextTokens: () => this.contextTokens(),
                 toolCall: tc,
                 // user_ask·secret_request가 질문을 만들면(답을 기다리기 전에) 체크포인트를 남긴다.
                 // 그래야 질문 카드가 저장된 메시지 순서의 제자리에서 바로 그려지고 새로고침에도 살아남는다.
@@ -334,6 +368,7 @@ class AgentTurn {
     async callModel({ tools, toolsEnabled }) {
         this.setStatus("thinking");
         this.modelCallCount += 1;
+        const sentLength = this.messages.length;
         try {
             const response = await this.llm.complete({
                 messages: this.messages,
@@ -345,6 +380,7 @@ class AgentTurn {
                 cacheKey: this.cacheKey,
             });
             this.recordUsage(response.usage);
+            this.learnUsage(response.usage, sentLength, toolsEnabled ? this.toolTokens : 0);
             return { response };
         } catch (err) {
             if (isStoppedError(err, this.session)) {
@@ -454,7 +490,11 @@ async function runAgentTurn(
     // 이번 실행이 직접 다루는 메시지(지금 메시지와, 시작 전에 대기열에 쌓인 메시지)는
     // 기록에 대기 턴으로도 남아 있다. 프롬프트에 두 번 들어가지 않게 그 id를 넘긴다.
     const ownedMessageIds = [userMessageMeta?.id, ...(session?.pendingMessageIds?.() || [])].filter(Boolean);
+    // 도구 정의도 요청마다 입력에 들어가므로 압축할지 정할 때 함께 센다.
+    const tools = await getAllToolDefinitions();
+    const toolTokens = countTokens(tools);
     const contextResult = await ensureWithinContextLimit(llm, userMessage, llm.modelMeta, {
+        toolTokens,
         chatId: persistHistory === false ? null : resolvedSessionKey,
         onStatusPhase: setStatus,
         attachments,
@@ -488,11 +528,11 @@ async function runAgentTurn(
         quietEmpty,
         maxEmptyReplyRetries,
         cacheKey: resolvedSessionKey,
+        toolTokens,
     });
 
     if (turn.stopRequested) return turn.stopped(null);
 
-    const tools = await getAllToolDefinitions();
     const toolContext = {
         chatId,
         sessionKey: resolvedSessionKey,
