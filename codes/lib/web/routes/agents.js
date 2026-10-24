@@ -30,6 +30,7 @@ function publicGroup(g) {
         id: g.id,
         name: g.name,
         members: g.members,
+        folder: g.folder,
         createdAt: g.createdAt,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
     };
@@ -120,7 +121,7 @@ export function registerAgentsRoutes(router) {
 
     router.add("PATCH", "/api/groups/:id", async (ctx) => {
         const body = await ctx.json();
-        const result = updateGroup(ctx.params.id, { name: body.name, members: body.members });
+        const result = updateGroup(ctx.params.id, { name: body.name, members: body.members, folder: body.folder });
         if (result.error === "not_found") return ctx.json404();
         if (result.error) return ctx.json400(result.error);
         emit({ type: "conversations_changed" });

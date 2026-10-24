@@ -116,9 +116,11 @@
         return row;
     }
 
-    async function assignAgentFolder(agentId, folderId) {
+    // 대화 상대(에이전트나 그룹 대화방)를 폴더에 넣거나 뺀다. folderId가 비면 뺀다.
+    async function assignChatFolder(chat, folderId) {
         try {
-            const r = await T.api.updateAgent(agentId, { folder: folderId || "" });
+            const folder = folderId || "";
+            const r = chat.isGroup ? await T.api.updateGroup(chat.uuid, { folder }) : await T.api.updateAgent(chat.id, { folder });
             state.applyAgents(r);
         } catch (err) {
             T.toast.show("error", T.api.errorText(err, t("errorPrefix")));
@@ -384,7 +386,7 @@
     C.buildFolderHeader = buildFolderHeader;
     C.folderOf = folderOf;
     C.allExcludesFoldered = allExcludesFoldered;
-    C.assignAgentFolder = assignAgentFolder;
+    C.assignChatFolder = assignChatFolder;
     C.placeTabIndicator = placeTabIndicator;
     C.initFolderSwipe = initFolderSwipe;
     C.renderTabs = renderTabs;

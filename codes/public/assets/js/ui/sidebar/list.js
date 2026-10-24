@@ -186,9 +186,9 @@
         return el;
     }
 
-    // 목록 행의 아바타: 에이전트는 이름 첫 글자, 그룹 대화방은 여러 사람 아이콘.
+    // 목록 행의 아바타: 에이전트는 이름 첫 글자, 그룹 대화방은 멤버 아바타를 겹친 묶음.
     function avatarOf(chat) {
-        if (chat?.isGroup) return T.h("span", { class: "bot-avatar group-avatar" }, [T.icon("users", "icon-sm")]);
+        if (chat?.isGroup) return T.h("span", { class: "bot-avatar group-wrap" }, [T.groupAvatar(state.groupMembers(chat))]);
         return T.h("span", { class: "bot-avatar", text: initials(chat?.name || "?"), style: `background-color:${T.util.safeColor(chat?.color)}` });
     }
 
@@ -274,32 +274,35 @@
     /* ── 컨텍스트 메뉴 항목 ─────────────────────────────────
        우클릭과 길게 누르기가 같은 항목을 쓴다. 각 엘리먼트에 T.ctxmenu.attach로 붙인다. */
     function botMenuItems(bot) {
-        const newFolder = () => T.settingsUI.open({ tab: "folders", folderNew: true, folderAgent: bot.id });
-        const folders = state.state.folders || [];
         return [
             // 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링된다.
             { label: t("botSettings"), icon: "settings", defer: true, onSelect: () => C.settingsPush(bot.id) },
-            folders.length
-                ? { label: t("folderAdd"), icon: "folder", children: () => folderPickItems(bot, newFolder) }
-                : // 폴더가 하나도 없으면 고를 것이 없다. 곧장 만들기 폼으로 간다.
-                  { label: t("folderAdd"), icon: "folder", defer: true, onSelect: newFolder },
+            folderMenuItem(bot),
         ];
     }
 
     // 그룹 대화방 행: 대화 정보 창의 그룹 정보를 연다.
     function groupMenuItems(group) {
-        return [{ label: t("groupInfo"), icon: "settings", defer: true, onSelect: () => T.chatInfo.open(group) }];
+        return [{ label: t("groupInfo"), icon: "settings", defer: true, onSelect: () => T.chatInfo.open(group) }, folderMenuItem(group)];
+    }
+
+    // "폴더에 추가…": 폴더가 하나도 없으면 고를 것이 없으므로 곧장 만들기 폼으로 간다.
+    function folderMenuItem(chat) {
+        const newFolder = () => T.settingsUI.open({ tab: "folders", folderNew: true, folderChat: chat.uuid });
+        return (state.state.folders || []).length
+            ? { label: t("folderAdd"), icon: "folder", children: () => folderPickItems(chat, newFolder) }
+            : { label: t("folderAdd"), icon: "folder", defer: true, onSelect: newFolder };
     }
 
     // "폴더에 추가…" 하위 메뉴: 지금 들어 있는 폴더에는 체크가 붙고, 다시 누르면 폴더에서 뺀다.
-    // 맨 아래 "새 폴더"는 설정의 폴더 탭에 있는 만들기 폼을 이 에이전트를 미리 고른 채로 연다.
-    function folderPickItems(bot, newFolder) {
-        const current = C.folderOf(bot);
+    // 맨 아래 "새 폴더"는 설정의 폴더 탭에 있는 만들기 폼을 이 대화 상대를 미리 고른 채로 연다.
+    function folderPickItems(chat, newFolder) {
+        const current = C.folderOf(chat);
         return [
             ...(state.state.folders || []).map((f) => ({
                 label: f.name,
                 checked: f.id === current,
-                onSelect: () => void C.assignAgentFolder(bot.id, f.id === current ? "" : f.id),
+                onSelect: () => void C.assignChatFolder(chat, f.id === current ? "" : f.id),
             })),
             { sep: true },
             { label: t("folderNew"), icon: "plus", defer: true, onSelect: newFolder },
@@ -432,7 +435,7 @@
     function listRows(active) {
         const rows = [];
         // 최근 메시지 순: 안정 정렬이라 updatedAt이 없는 봇끼리는 에이전트 순서를 유지한다.
-        // 그룹 대화방은 폴더에 들지 않는다. 폴더 밖의 에이전트와 같이 놓인다.
+        // 그룹 대화방도 에이전트와 같이 폴더에 든다.
         const bots = state.chats().filter(matches);
         bots.sort((a, b) => recencyOf(b).localeCompare(recencyOf(a)));
         rows.push(...botRows(bots, active));

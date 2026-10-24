@@ -6,7 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { SESSION_DIR, USER_DIR } from "./paths.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-file.js";
-import { getAgentByUuid, listAgents } from "./agents-store.js";
+import { getAgentByUuid, listAgents, listFolders } from "./agents-store.js";
 
 const GROUPS_PATH = path.join(USER_DIR, "groups.json");
 const GROUPS_ROOT = path.join(SESSION_DIR, "groups");
@@ -61,11 +61,14 @@ function writeAll(groups) {
 }
 
 // 멤버 목록은 읽을 때마다 지금 있는 에이전트로 거른다(지워진 에이전트는 빠진다).
+// 폴더도 지금 있는 폴더만 인정한다. 지워진 폴더를 가리키는 방은 미분류로 본다.
 function publicShape(g) {
+    const folder = String(g.folder || "");
     return {
         id: g.id,
         name: g.name,
         members: normalizeMembers(g.members),
+        folder: folder && listFolders().some((f) => f.id === folder) ? folder : "",
         createdAt: g.createdAt || null,
         cursors: g.cursors && typeof g.cursors === "object" ? { ...g.cursors } : {},
     };
@@ -111,6 +114,11 @@ export function updateGroup(id, patch) {
         const list = normalizeMembers(patch.members);
         if (list.length < 2) return { error: "need_two_members" };
         next.members = list;
+    }
+    if (patch.folder !== undefined) {
+        const folderId = String(patch.folder || "");
+        if (folderId && !listFolders().some((f) => f.id === folderId)) return { error: "folder_not_found" };
+        next.folder = folderId;
     }
     groups[idx] = next;
     writeAll(groups);

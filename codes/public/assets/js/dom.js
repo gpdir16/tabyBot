@@ -39,6 +39,30 @@
         return svg;
     }
 
+    // 그룹 대화방 아바타: iOS 메시지처럼 멤버 아바타 몇 개를 겹쳐 놓는다.
+    // members는 { name, color } 목록(멤버 순서). 둘은 대각선, 셋은 삼각형, 넷부터는 2×2이고 다섯부터 마지막 칸은 +n이다.
+    // 크기는 감싸는 요소가 정한다(목록은 .bot-avatar, 헤더는 .hdr-avatar 안에 꽉 차게).
+    function groupAvatar(members, extraClass) {
+        const list = (members || []).filter(Boolean);
+        const n = Math.min(list.length, 4);
+        const wrap = h("span", { class: `group-avatar ga-${Math.max(n, 2)}${extraClass ? ` ${extraClass}` : ""}`, "aria-hidden": "true" });
+        if (!list.length) {
+            // 멤버를 아직 못 받았으면 여러 사람 아이콘으로 둔다.
+            wrap.classList.add("ga-empty");
+            wrap.append(icon("users", "icon-sm"));
+            return wrap;
+        }
+        const shown = list.length > 4 ? list.slice(0, 3) : list.slice(0, 4);
+        for (const m of shown) {
+            const color = /^#[0-9a-f]{6}$/i.test(String(m.color || "")) ? m.color : "var(--accent)";
+            wrap.append(
+                h("span", { class: "ga-dot", text: ([...String(m.name || "?").trim()][0] || "?").toUpperCase(), style: `background-color:${color}` }),
+            );
+        }
+        if (list.length > 4) wrap.append(h("span", { class: "ga-dot ga-more", text: `+${list.length - 3}` }));
+        return wrap;
+    }
+
     // 클립보드 복사(file:// 폴백 포함). 성공 여부 반환.
     function copyText(text) {
         try {
@@ -149,6 +173,7 @@
 
     T.h = h;
     T.icon = icon;
+    T.groupAvatar = groupAvatar;
     T.copyText = copyText;
     T.visibleHeight = visibleHeight;
     T.revealColumn = revealColumn;
