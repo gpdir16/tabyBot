@@ -8,6 +8,8 @@ Give it a task and it will do it, even if it takes hours or things go wrong.
 
 Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI apps work out of the box. No extra setup.
 
+<img width="1599" height="1103" alt="CleanShot 2026-10-24 at 4 46 09 PM" src="https://github.com/user-attachments/assets/06a90fc5-c668-41b4-9d29-62f726cb1150" />
+
 ## What it can do
 
 - **Everyday chat.** Get answers in the browser. It accepts text, images, files, and almost any other format.
