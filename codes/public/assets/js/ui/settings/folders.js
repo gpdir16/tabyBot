@@ -16,12 +16,28 @@
         return state.state.folders || [];
     }
 
+    // 폴더에 넣을 수 있는 대화 상대: 에이전트와 그룹 대화방(state.chats와 같은 모양).
     function folderMembers(folderId) {
-        return C.agentList().filter((a) => (a.folder || "") === folderId);
+        return state.chats().filter((c) => (c.folder || "") === folderId);
+    }
+
+    // 목록 아바타와 같다: 에이전트는 이름 첫 글자, 그룹 대화방은 멤버 아바타를 겹친 묶음.
+    function chatAvatar(c) {
+        if (c.isGroup) return T.h("span", { class: "bot-avatar group-wrap" }, [T.groupAvatar(state.groupMembers(c))]);
+        return T.h("span", {
+            class: "bot-avatar",
+            text: ([...String(c.name || "?").trim()][0] || "?").toUpperCase(),
+            style: /^#[0-9a-f]{6}$/i.test(String(c.color || "")) ? `background-color:${c.color}` : null,
+        });
     }
 
     function applyFolderResult(r) {
         state.applyAgents(r);
+    }
+
+    // 대화 상대의 폴더를 바꾼다. 응답은 /api/agents 계열 전체 스냅샷이다.
+    function setChatFolder(chat, folder) {
+        return chat.isGroup ? T.api.updateGroup(chat.uuid, { folder }) : T.api.updateAgent(chat.id, { folder });
     }
 
     // 확인을 받고 지운다. 지운 폴더의 편집 화면이 열려 있었으면 같이 닫는다.
@@ -151,25 +167,21 @@
         });
         form.append(C.fieldOf(t("folderName"), nameInput));
 
-        // 소속 에이전트: 에이전트는 폴더 하나에만 들어간다. 다른 폴더 소속이면 그 이름을 보여 준다.
+        // 소속 대화 상대: 에이전트와 그룹 대화방은 폴더 하나에만 들어간다. 다른 폴더 소속이면 그 이름을 보여 준다.
         const names = new Map(folderList().map((f) => [f.id, f.name]));
         const picks = new Map();
         const list = T.h("div", { class: "folder-agents" });
-        for (const a of C.agentList()) {
-            const inThis = !isNew && (a.folder || "") === folder.id;
-            const other = !inThis && a.folder && names.has(a.folder) ? names.get(a.folder) : "";
-            const box = T.h("input", { type: "checkbox", "aria-label": a.name });
-            box.checked = inThis || (isNew && editing.agentId === a.id);
-            picks.set(a.id, { box, was: inThis });
+        for (const c of state.chats()) {
+            const inThis = !isNew && (c.folder || "") === folder.id;
+            const other = !inThis && c.folder && names.has(c.folder) ? names.get(c.folder) : "";
+            const box = T.h("input", { type: "checkbox", "aria-label": c.name });
+            box.checked = inThis || (isNew && editing.chatUuid === c.uuid);
+            picks.set(c.uuid, { chat: c, box, was: inThis });
             list.append(
                 T.h("label", { class: "folder-agent" }, [
-                    T.h("span", {
-                        class: "bot-avatar",
-                        text: ([...String(a.name || "?").trim()][0] || "?").toUpperCase(),
-                        style: /^#[0-9a-f]{6}$/i.test(String(a.color || "")) ? `background-color:${a.color}` : null,
-                    }),
+                    chatAvatar(c),
                     T.h("span", { class: "folder-agent-meta" }, [
-                        T.h("span", { class: "folder-agent-name", text: a.name || "?" }),
+                        T.h("span", { class: "folder-agent-name", text: c.name || "?" }),
                         other ? T.h("span", { class: "ext-sub", text: t("folderAgentIn", { name: other }) }) : null,
                     ]),
                     box,
@@ -196,9 +208,9 @@
                     last = await T.api.updateFolder(id, { name });
                 }
                 if (id) {
-                    for (const [agentId, { box, was }] of picks) {
+                    for (const { chat, box, was } of picks.values()) {
                         if (box.checked === was) continue;
-                        last = await T.api.updateAgent(agentId, { folder: box.checked ? id : "" });
+                        last = await setChatFolder(chat, box.checked ? id : "");
                     }
                 }
                 C.folderEditing = null;

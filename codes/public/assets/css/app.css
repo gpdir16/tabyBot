@@ -1614,14 +1614,112 @@ kbd {
     display: none;
 }
 
-/* 할 일 행과 그룹 대화방 행: 메신저의 "저장한 메시지"처럼 강조색 원에 흰 아이콘 */
-.todo-avatar,
-.group-avatar {
+/* 할 일 행: 메신저의 "저장한 메시지"처럼 강조색 원에 흰 아이콘 */
+.todo-avatar {
     background-color: var(--accent);
     color: #fff;
 }
-.todo-avatar .icon,
-.group-avatar .icon {
+.todo-avatar .icon {
+    width: 46%;
+    height: 46%;
+}
+
+/* 그룹 대화방 아바타: iOS 메시지처럼 멤버 아바타를 겹쳐 놓는다(T.groupAvatar).
+   감싸는 칸(.bot-avatar, .hdr-avatar)은 바탕과 그라데이션을 비우고, 안의 작은 원들이 칸을 채운다.
+   칸의 규칙이 이 파일 뒤쪽에 있어서 두 클래스를 함께 써 우선한다. */
+.bot-avatar.group-wrap,
+.hdr-avatar.group-wrap {
+    background: none;
+}
+.group-avatar {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: block;
+    container-type: size;
+}
+.group-avatar .ga-dot {
+    position: absolute;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1;
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1));
+}
+.group-avatar .ga-more {
+    background-color: var(--surface-3);
+    color: var(--text);
+}
+/* 둘: 왼쪽 위와 오른쪽 아래가 겹친다. 오른쪽 아래가 앞이고, 뒤 원은 앞 원 둘레를 틈만큼 도려내
+   행 바탕(선택, 호버, 설정 목록)과 상관없이 두 원이 갈라져 보인다. cqw는 묶음 칸의 폭이다. */
+.ga-2 .ga-dot {
+    width: 64%;
+    height: 64%;
+    font-size: 30cqw;
+}
+.ga-2 .ga-dot:nth-child(1) {
+    left: 0;
+    top: 0;
+    mask-image: radial-gradient(circle 36cqw at 68cqw 68cqw, transparent 99%, #000 100%);
+}
+.ga-2 .ga-dot:nth-child(2) {
+    right: 0;
+    bottom: 0;
+}
+/* 셋: 위 가운데, 아래 왼쪽, 아래 오른쪽. 원끼리 거의 맞닿는 크기다. */
+.ga-3 .ga-dot {
+    width: 50%;
+    height: 50%;
+    font-size: 24cqw;
+}
+.ga-3 .ga-dot:nth-child(1) {
+    left: 25%;
+    top: 2%;
+}
+.ga-3 .ga-dot:nth-child(2) {
+    left: 0;
+    bottom: 0;
+}
+.ga-3 .ga-dot:nth-child(3) {
+    right: 0;
+    bottom: 0;
+}
+/* 넷 이상: 2×2. 다섯부터 마지막 칸은 +n */
+.ga-4 .ga-dot {
+    width: 49%;
+    height: 49%;
+    font-size: 23cqw;
+}
+.ga-4 .ga-dot:nth-child(1) {
+    left: 0;
+    top: 0;
+}
+.ga-4 .ga-dot:nth-child(2) {
+    right: 0;
+    top: 0;
+}
+.ga-4 .ga-dot:nth-child(3) {
+    left: 0;
+    bottom: 0;
+}
+.ga-4 .ga-dot:nth-child(4) {
+    right: 0;
+    bottom: 0;
+}
+.ga-4 .ga-more {
+    font-size: 18cqw;
+}
+/* 멤버를 아직 모르면 예전처럼 강조색 원에 여러 사람 아이콘 */
+.group-avatar.ga-empty {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background-color: var(--accent);
+    color: #fff;
+}
+.group-avatar.ga-empty .icon {
     width: 46%;
     height: 46%;
 }

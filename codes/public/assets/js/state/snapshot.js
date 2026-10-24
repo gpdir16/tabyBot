@@ -125,6 +125,7 @@
         botByUuid: C.botByUuid,
         currentBot: C.currentBot,
         chats: C.chats,
+        groupMembers: C.groupMembers,
         chatByUuid: C.chatByUuid,
         currentChat: C.currentChat,
         applySpeaker: C.applySpeaker,

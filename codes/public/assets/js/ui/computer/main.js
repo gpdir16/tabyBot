@@ -50,6 +50,7 @@
         const name = bot ? bot.name : "";
         if (hdrAvatar) {
             hdrAvatar.replaceChildren();
+            hdrAvatar.classList.remove("group-wrap");
             hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
             hdrAvatar.style.backgroundColor = bot?.color || "var(--surface-2)";
             hdrAvatar.style.color = "#fff";

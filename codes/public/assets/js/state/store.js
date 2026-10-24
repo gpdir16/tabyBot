@@ -105,14 +105,19 @@
         return state.currentId ? botByUuid(state.currentId) : null;
     }
 
-    // 그룹 대화방을 봇 목록과 같은 모양의 대화 상대로 만든다(uuid = 방 id).
+    // 그룹 대화방을 봇 목록과 같은 모양의 대화 상대로 만든다(uuid = 방 id). 폴더 소속도 봇과 같은 folder 필드로 둔다.
     function groupChat(g) {
-        return { uuid: g.id, id: null, name: g.name, members: g.members || [], isGroup: true };
+        return { uuid: g.id, id: null, name: g.name, members: g.members || [], folder: g.folder || "", isGroup: true };
     }
 
     // 목록에 보이는 대화 상대 전체: 에이전트와 그룹 대화방.
     function chats() {
         return [...state.bots, ...state.groups.map(groupChat)];
+    }
+
+    // 그룹 대화방 멤버 에이전트(멤버 순서). 지워진 에이전트는 빠진다. 아바타를 그릴 때 쓴다.
+    function groupMembers(chat) {
+        return (chat?.members || []).map(botByUuid).filter(Boolean);
     }
 
     // 에이전트 스레드나 그룹 대화방. 둘 다 아니면 null.
@@ -296,6 +301,7 @@
     C.botByUuid = botByUuid;
     C.currentBot = currentBot;
     C.chats = chats;
+    C.groupMembers = groupMembers;
     C.chatByUuid = chatByUuid;
     C.currentChat = currentChat;
     C.mostRecentBot = mostRecentBot;

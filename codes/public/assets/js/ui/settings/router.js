@@ -92,9 +92,9 @@
         C.mcpEditing = null;
         C.secretEditing = null;
         // open({tab:"folders", folderId}). 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
-        // open({tab:"folders", folderNew, folderAgent}). "폴더에 추가…" 안의 "새 폴더"가 그 에이전트를 미리 고른 만들기 폼을 연다.
+        // open({tab:"folders", folderNew, folderChat}). "폴더에 추가…" 안의 "새 폴더"가 그 대화 상대(uuid)를 미리 고른 만들기 폼을 연다.
         C.folderEditing = null;
-        if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", agentId: o.folderAgent || null };
+        if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", chatUuid: o.folderChat || null };
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
         C.modelSub = null;
         C.efficiencySub = null;
