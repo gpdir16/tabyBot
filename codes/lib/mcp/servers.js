@@ -87,7 +87,7 @@ async function connectServer(server) {
         args: server.args || [],
         env: { ...process.env, ...(server.env || {}) },
     });
-    const client = new Client({ name: "tabybot", version: "0.1.0" }, { capabilities: {} });
+    const client = new Client({ name: "tabybot", version: "0.6.0" }, { capabilities: {} });
     // 연결이 붙지 않으면 타임아웃으로 transport를 닫아 자식 프로세스를 회수한다.
     const timer = setTimeout(() => {
         transport.close().catch((err) => console.warn(`tabyBot: MCP transport close failed (${server.name}):`, err?.message || err));
