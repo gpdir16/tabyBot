@@ -40,8 +40,8 @@ export function getApprovalLevel(config = loadUserConfig()) {
     return normalizeApprovalLevel(config.approvalLevel);
 }
 
-// 컨텍스트 윈도우의 몇 %가 찼을 때 오래된 대화를 요약으로 압축할지.
-// UI에는 프리셋 드롭다운으로 노출하고, 실제 값은 10–95 범위로 정규화한다.
+// 컨텍스트 윈도우의 몇 %가 찼을 때 오래된 대화를 요약으로 압축할지. 모델 프리셋마다 고르고(선택지는 아래 목록),
+// 실제 값은 10–95 범위로 정규화한다. config.contextTriggerPercent는 예전 전역 설정으로, 프리셋이 비었을 때의 기본값이다.
 export const CONTEXT_TRIGGER_PRESETS = [50, 60, 70, 75, 80, 85, 90];
 const DEFAULT_CONTEXT_TRIGGER_PERCENT = 75;
 

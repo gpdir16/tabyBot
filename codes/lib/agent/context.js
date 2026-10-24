@@ -196,10 +196,11 @@ export function getContextWindow(modelMeta) {
     return modelMeta?.contextWindow || 128000;
 }
 
-export function getCompressTriggerTokens(modelMeta) {
+export function getCompressTriggerTokens(modelMeta, provider = null) {
     const agent = loadAgentConfig();
-    // 사용자 설정(설정의 모델 탭 고급 항목)이 우선, 없으면 agent.json 기본값을 쓴다.
-    const pct = normalizeContextTriggerPercent(loadUserConfig().contextTriggerPercent, agent.contextCompressTriggerPercent ?? 75);
+    // 모델 프리셋의 값이 우선이다. 없으면 예전 전역 설정(고급 설정에 있던 값, 이제 화면에서 고칠 수 없음), 그것도 없으면 agent.json 기본값을 쓴다.
+    const global = normalizeContextTriggerPercent(loadUserConfig().contextTriggerPercent, agent.contextCompressTriggerPercent ?? 75);
+    const pct = normalizeContextTriggerPercent(provider?.contextTriggerPercent, global);
     return Math.floor((getContextWindow(modelMeta) * pct) / 100);
 }
 

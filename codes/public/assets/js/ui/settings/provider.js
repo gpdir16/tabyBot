@@ -260,33 +260,8 @@
         return box;
     }
 
-    // 고급 설정 화면: 컨텍스트 한도와 모델 전환 시 오염 방지 옵션
+    // 고급 설정 화면: 모델 전환 시 오염 방지 옵션. 압축 시점은 모델 프리셋마다 정한다.
     function buildModelAdvanced(sec, s) {
-        // 컨텍스트 채움 한도: 이 비율부터 오래된 대화를 요약으로 압축한다.
-        // 옵션에는 현재 모델 윈도우 기준 실제 압축 시작 토큰 수를 함께 표시한다.
-        const ctxPct = Number(s.contextTriggerPercent) || 75;
-        const ctxWindow = Number(s.contextWindow) || 128000;
-        const ctxLabel = (n) => `${n}% (~${Math.round((ctxWindow * Number(n)) / 100).toLocaleString()})`;
-        sec.append(
-            T.h("div", { class: "set-row" }, [
-                T.h("div", { class: "set-label", text: t("ctxFillLimit") }),
-                C.settingSelect(
-                    C.presetOptions(
-                        (Array.isArray(s.contextTriggerOptions) && s.contextTriggerOptions.length
-                            ? s.contextTriggerOptions
-                            : [50, 60, 70, 75, 80, 85, 90]
-                        ).map((n) => ({ value: String(n), label: ctxLabel(n) })),
-                        String(ctxPct),
-                        ctxLabel(ctxPct),
-                    ),
-                    String(ctxPct),
-                    (v) => C.put({ contextTriggerPercent: Number(v) }),
-                    t("ctxFillLimit"),
-                ),
-            ]),
-            T.h("div", { class: "set-desc", text: t("ctxFillLimitDesc") }),
-        );
-
         // 모델이 바뀌면 모든 봇의 세션 압축 여부를 물어본다(실행은 사용자 확인 후).
         sec.append(
             T.h("div", { class: "set-row" }, [

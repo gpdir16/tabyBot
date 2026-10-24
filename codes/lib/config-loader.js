@@ -129,5 +129,7 @@ export function getMergedProvider(userConfig, presetUid = "") {
         autoModelCandidates: Array.isArray(preset.autoModelCandidates) ? preset.autoModelCandidates.map(String).filter(Boolean) : [],
         // OpenRouter 전용: 이 모델을 서빙할 업스트림 프로바이더 고정.
         openRouterPins: pin ? { [model]: pin } : {},
+        // 이 프리셋의 압축 시점(%). 0이면 기본값을 쓴다.
+        contextTriggerPercent: Number(preset.contextTriggerPercent) || 0,
     };
 }

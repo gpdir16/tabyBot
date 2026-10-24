@@ -293,7 +293,7 @@ export async function ensureWithinContextLimit(
 ) {
     const fullHistory = history ?? (chatId ? loadChatHistory(chatId) : []);
     const tokenCount = (messages) => countRequestTokens(messages, { model: modelMeta?.model, toolTokens });
-    const trigger = getCompressTriggerTokens(modelMeta);
+    const trigger = getCompressTriggerTokens(modelMeta, llm?.provider);
     const hardLimit = getContextLimit(modelMeta);
 
     // chatId가 없는 실행(드리밍 리뷰처럼 기록을 남기지 않는 실행)은 세션 스냅샷을 쓰지 않는다.
