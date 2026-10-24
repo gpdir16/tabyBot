@@ -1,13 +1,18 @@
 /* tabyBot 웹 클라이언트: PWA 알림/설치.
    - 탭이 숨겨져 있으면 Notification API로 즉시 표시
    - 브라우저가 닫혀 있으면 서비스 워커 웹 푸시로 전달
-   - 설치 프롬프트(beforeinstallprompt)는 설정 시트에서 노출 */
+   - 설치 프롬프트(beforeinstallprompt)는 설정 시트에서 노출
+   - 모바일 브라우저에서 처음 열면 홈 화면에 추가하는 방법을 한 번 안내한다 */
 ((T) => {
     "use strict";
 
     const KEY = "tabybot.notify.enabled";
     let swReg = null;
     let deferredInstall = null;
+    const GUIDE_KEY = "tabybot.installGuide.shown";
+    // beforeinstallprompt는 로드 뒤 조금 늦게 올 수 있다. 그동안 기다렸다가 안내 방식을 고른다.
+    const GUIDE_WAIT_MS = 3000;
+    let guideTimer = 0;
 
     function enabled() {
         try {
@@ -152,6 +157,62 @@
         return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     }
 
+    // 홈 화면에 추가할 수 있는 모바일 기기의 종류. 데스크톱이면 null.
+    // iOS의 모든 브라우저는 공유 메뉴로 추가하고, 안드로이드 Firefox는 메뉴 위치와 이름이 다르다.
+    function mobilePlatform() {
+        if (isIos()) return "ios";
+        if (/Android/i.test(navigator.userAgent)) return /Firefox/i.test(navigator.userAgent) ? "firefox" : "android";
+        return null;
+    }
+
+    function canGuideInstall() {
+        return Boolean(mobilePlatform()) && !isStandalone();
+    }
+
+    // 설치 안내 경고창. 브라우저가 설치 창을 열 수 있으면 설치 버튼을, 아니면 직접 추가하는 방법을 보여 준다.
+    function showInstallGuide() {
+        const platform = mobilePlatform();
+        if (!platform || isStandalone()) return;
+        const t = (k) => T.i18n.t(k);
+        const text = deferredInstall
+            ? t("installGuidePrompt")
+            : t({ ios: "installGuideIos", firefox: "installGuideFirefox", android: "installGuideAndroid" }[platform]);
+        T.notices.alert({
+            key: "install-guide",
+            title: t("installGuideTitle"),
+            text,
+            actions: deferredInstall ? [{ label: t("installApp"), run: () => void promptInstall() }] : [],
+        });
+    }
+
+    function guideShown() {
+        try {
+            return localStorage.getItem(GUIDE_KEY) === "1";
+        } catch (_) {
+            // 저장소를 못 쓰면 매번 띄우지 않도록 이미 본 것으로 친다
+            return true;
+        }
+    }
+
+    function showGuideOnce() {
+        clearTimeout(guideTimer);
+        guideTimer = 0;
+        if (guideShown() || !canGuideInstall()) return;
+        try {
+            localStorage.setItem(GUIDE_KEY, "1");
+        } catch {
+            // 저장하지 못해도 이번 안내는 띄운다
+        }
+        showInstallGuide();
+    }
+
+    // 부트가 끝난 뒤 한 번 부른다. 설치 창 이벤트가 오면 바로, 안 오면 잠시 뒤에 안내한다.
+    function offerInstallGuide() {
+        if (guideTimer || guideShown() || !canGuideInstall()) return;
+        if (deferredInstall) showGuideOnce();
+        else guideTimer = setTimeout(showGuideOnce, GUIDE_WAIT_MS);
+    }
+
     // 이 기기에서 알림을 켤 수 있는지. 못 켜면 이유를 돌려준다(설정 화면이 그 이유를 보여 준다).
     // "ok" | "insecure"(HTTPS 아님) | "ios-install"(홈 화면에 추가해야 함) | "unsupported" | "denied"(권한 차단)
     function support() {
@@ -214,6 +275,7 @@
             e.preventDefault();
             deferredInstall = e;
             T.state.emit("pwa", { installable: true });
+            if (guideTimer) showGuideOnce();
         });
         window.addEventListener("appinstalled", () => {
             deferredInstall = null;
@@ -236,6 +298,9 @@
         syncAuth,
         dropPush: disablePush,
         canInstall: () => Boolean(deferredInstall) && !isStandalone(),
+        canGuideInstall,
         promptInstall,
+        showInstallGuide,
+        offerInstallGuide,
     };
 })(window.Taby);

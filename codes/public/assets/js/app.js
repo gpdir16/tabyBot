@@ -512,6 +512,8 @@
             // 설정이 불완전하면 온보딩을 연다. 사용자가 /s/*로 직접 들어온 경우에는
             // 위에서 복원한 설정 페이지를 유지한다.
             if (bs.configured === false && !T.settingsUI.isOpen() && !T.onboarding.isSkipped()) T.onboarding.wizard();
+            // 모바일 브라우저로 처음 열었으면 홈 화면에 추가하는 방법을 한 번 안내한다(온보딩 중에는 다음 기회로 미룬다).
+            else T.notifications?.offerInstallGuide?.();
         } catch (e) {
             if (token !== bootToken) return;
             if (e instanceof T.api.ApiError && e.status === 401) {
