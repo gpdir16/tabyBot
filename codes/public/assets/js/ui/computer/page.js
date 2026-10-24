@@ -125,7 +125,24 @@
             },
             [T.icon("cursor")],
         );
-        const tools = T.h("div", { class: "cp-tools" }, [modeBtn, kbdBtn]);
+        // 브라우저 창 전환: 프로필과 탭마다 창이 따로 떠서 (0,0)에 겹치므로, 고른 창을 맨 앞으로 올린다.
+        let winTouch = false;
+        const winBtn = T.h(
+            "button",
+            {
+                class: "btn-icon cp-tool cp-winbtn",
+                "data-tip": t("computerWindows"),
+                "aria-label": t("computerWindows"),
+                onpointerdown: (e) => {
+                    winTouch = e.pointerType === "touch";
+                    e.preventDefault();
+                },
+                onmousedown: (e) => e.preventDefault(),
+                onclick: () => void openWindowMenu(winBtn, winTouch),
+            },
+            [T.icon("monitor")],
+        );
+        const tools = T.h("div", { class: "cp-tools" }, [winBtn, modeBtn, kbdBtn]);
 
         C.canvas = T.h("canvas", { class: "cp-canvas", tabindex: "0", role: "application", "aria-label": t("computerScreen") });
         const startBtn = T.h("button", { class: "btn cp-start", text: t("computerStartScreen"), onclick: () => C.startScreen() });
@@ -241,6 +258,41 @@
 
         C.bindScreenInput(C.canvas);
         C.setTouchMode(C.touchMode); // 아이콘·커서 표시 초기화
+    }
+
+    /* ── 브라우저 창 전환 ─────────────────────────────────── */
+    async function raiseWindow(user, tabId) {
+        try {
+            await T.api.computerRaiseWindow(user, tabId);
+        } catch {
+            T.toast.show("error", t("computerWindowFailed"));
+        }
+    }
+
+    // 프로필마다 한 줄. 탭이 여럿인 프로필은 하위 메뉴로 탭을 고른다.
+    async function openWindowMenu(btn, touch) {
+        let profiles = [];
+        try {
+            profiles = (await T.api.computerWindows()).profiles || [];
+        } catch {
+            T.toast.show("error", t("computerWindowFailed"));
+            return;
+        }
+        if (!profiles.length) {
+            T.toast.show("info", t("computerNoWindows"));
+            return;
+        }
+        const items = profiles.map((p) => {
+            const name = p.name ? `${p.name} (${p.user})` : p.user;
+            const tabLabel = (tab) => tab.title || tab.url || tab.tabId;
+            if (p.tabs.length === 1) {
+                const tab = p.tabs[0];
+                return { label: `${name}: ${tabLabel(tab)}`, onSelect: () => void raiseWindow(p.user, tab.tabId) };
+            }
+            return { label: name, children: p.tabs.map((tab) => ({ label: tabLabel(tab), onSelect: () => void raiseWindow(p.user, tab.tabId) })) };
+        });
+        if (touch) T.ctxmenu.open({ source: btn, touch: true, items });
+        else T.ctxmenu.open({ anchor: btn, items });
     }
 
     /* ── 파일 탭 ──────────────────────────────────────────── */

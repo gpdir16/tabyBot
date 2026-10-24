@@ -203,6 +203,8 @@
         computerScreenStart: (geometry) => request("/api/computer/screen/start", { method: "POST", json: geometry ? { geometry } : {} }),
         computerScreenStop: () => request("/api/computer/screen/stop", { method: "POST", json: {} }),
         computerBrowserOpen: (agentId, url) => request("/api/computer/browser/open", { method: "POST", json: { agentId, url } }),
+        computerWindows: () => request("/api/computer/windows"),
+        computerRaiseWindow: (user, tabId) => request("/api/computer/windows/raise", { method: "POST", json: { user, tabId } }),
         containerFiles: (path) => request(`/api/computer/files?path=${enc(path || "")}`),
         containerFileText: (path) => request(`/api/computer/files/text?path=${enc(path || "")}`),
         resolveContainerPaths: (paths) => request("/api/computer/files/resolve", { method: "POST", json: { paths: paths || [] } }),
