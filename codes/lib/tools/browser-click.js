@@ -5,13 +5,11 @@
 // 진짜 클릭(isTrusted)을 넘긴다.
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
-import { execFile } from "node:child_process";
 import { isDockerRuntime } from "../runtime.js";
 import { USER_DIR } from "../paths.js";
 import * as display from "../computer/display.js";
 import { camofoxUser } from "../computer/camofox-user.js";
-import { camofoxApi, camofoxUserTabs } from "../web/computer/camofox.js";
+import { evaluate, listOpenTabs, locateTabWindow, xdo } from "../web/computer/windows.js";
 
 const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
 const ACTIVE_TAB_FILE = path.join(USER_DIR, ".camofox", "active-tab");
@@ -89,49 +87,12 @@ const LOCATE_TURNSTILE = `(() => {
 })()`;
 const TURNSTILE_CHECKBOX_X = 24;
 
-function xdo(displayNum, args, { stdout = false } = {}) {
-    return new Promise((resolve) => {
-        execFile("xdotool", args, { env: { ...process.env, DISPLAY: `:${displayNum}` }, timeout: 10_000 }, (err, out, stderr) => {
-            resolve({ ok: !err, stdout: stdout ? String(out || "") : "", stderr: String(stderr || "") });
-        });
-    });
-}
-
-async function evaluate(user, tabId, expression) {
-    const r = await camofoxApi(`/tabs/${encodeURIComponent(tabId)}/evaluate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId: user, expression }),
-        timeoutMs: 10_000,
-    });
-    if (!r.ok || r.json?.ok === false) throw new Error(r.json?.error || `evaluate failed (status ${r.status})`);
-    return r.json?.result;
-}
-
 function readActiveTab() {
     try {
         return fs.readFileSync(ACTIVE_TAB_FILE, "utf8").trim();
     } catch {
         return "";
     }
-}
-
-// 열린 탭 전부. 봇이 `camofox --user <이름>`으로 따로 연 프로필의 탭도 같은 화면에 떠 있으므로 함께 본다.
-async function listOpenTabs(ownUser) {
-    const health = await camofoxApi("/health", { timeoutMs: 5_000 }).catch(() => null);
-    const users = new Set([ownUser, ...(Array.isArray(health?.json?.activeUserIds) ? health.json.activeUserIds : [])]);
-    let reachable = false;
-    const tabs = [];
-    for (const user of users) {
-        const list = await camofoxUserTabs(user);
-        if (!list) continue;
-        reachable = true;
-        for (const t of list) {
-            const tabId = t.tabId || t.targetId;
-            if (tabId) tabs.push({ user, tabId, url: t.url || "" });
-        }
-    }
-    return reachable ? tabs : null;
 }
 
 // 누를 탭을 고른다. 탭 목록 순서는 연 순서가 아니라서, turnstile은 확인 화면이 실제로 떠 있는 탭을 찾아 고른다.
@@ -160,37 +121,6 @@ async function resolveTab(ownUser, requested, target) {
         error: "No Cloudflare checkbox is visible on any open tab. If the page already passed, continue with it. Otherwise take a screenshot and pass x and y.",
         tabs: ordered.map((t) => ({ tabId: t.tabId, url: t.url })),
     };
-}
-
-// 탭과 X 창을 잇는 고리가 없어 제목에 잠깐 표식을 달아 창을 찾고, 그사이 화면 위 뷰포트 위치를 함께 읽는다.
-async function locateTabWindow(user, tabId, displayNum) {
-    const marker = `tabybot-click-${crypto.randomBytes(6).toString("hex")}`;
-    const info = await evaluate(
-        user,
-        tabId,
-        `(() => { const title = document.title; document.title = ${JSON.stringify(marker)}; return { title, left: window.mozInnerScreenX, top: window.mozInnerScreenY, scale: window.devicePixelRatio || 1 }; })()`,
-    );
-    let windowId = "";
-    try {
-        // xdotool search --name은 바뀐 제목을 한참 늦게 잡는다. 창 목록을 받아 이름을 직접 비교한다.
-        for (let i = 0; i < 10 && !windowId; i++) {
-            const ids = (await xdo(displayNum, ["search", "--class", "camoufox"], { stdout: true })).stdout.split("\n").filter(Boolean);
-            for (const id of ids) {
-                const name = await xdo(displayNum, ["getwindowname", id], { stdout: true });
-                if (name.stdout.includes(marker)) {
-                    windowId = id;
-                    break;
-                }
-            }
-            if (!windowId) await display.sleep(150);
-        }
-    } finally {
-        await evaluate(user, tabId, `document.title = ${JSON.stringify(info?.title ?? "")}`).catch(() => {
-            // 제목을 못 되돌려도 다음 페이지 이동 때 원래대로 바뀐다
-        });
-    }
-    if (!windowId) return { error: "Could not find this tab's window on the shared display." };
-    return { windowId: windowId.trim(), left: Number(info?.left) || 0, top: Number(info?.top) || 0, scale: Number(info?.scale) || 1 };
 }
 
 async function pointerAt(displayNum) {

@@ -4,10 +4,12 @@ import { createWsServer } from "../ws.js";
 import * as display from "../../computer/display.js";
 import { attachTerminal, killAllSessions, terminalEnabled } from "../../computer/pty.js";
 import { isDockerRuntime } from "../../runtime.js";
-import { getAgent, getAgentByUuid } from "../../agents-store.js";
+import { getAgent, getAgentByUuid, listAgents } from "../../agents-store.js";
+import { camofoxUser } from "../../computer/camofox-user.js";
 import { ensureBrowserWindow, openBrowser } from "./browser.js";
 import { startTabSnapshotter } from "./camofox.js";
 import { registerComputerFileRoutes } from "./files.js";
+import { listOpenTabs, raiseTabWindow } from "./windows.js";
 
 // ── 화면 스트림과 터미널 WebSocket 연결. ──
 
@@ -190,6 +192,29 @@ export function registerComputerRoutes(router) {
     router.add("POST", "/api/computer/screen/stop", async (ctx) => {
         await display.closeSession();
         ctx.json200(statusPayload());
+    });
+
+    // 공유 화면에 뜬 브라우저 창을 프로필별로 묶는다. 봇 자기 프로필이면 봇 이름을 붙인다.
+    router.add("GET", "/api/computer/windows", async (ctx) => {
+        const tabs = (await listOpenTabs()) || [];
+        const names = new Map(listAgents().map((a) => [camofoxUser(a), a.name]));
+        const profiles = new Map();
+        for (const tab of tabs) {
+            if (!profiles.has(tab.user)) profiles.set(tab.user, { user: tab.user, name: names.get(tab.user) || "", tabs: [] });
+            profiles.get(tab.user).tabs.push({ tabId: tab.tabId, title: tab.title, url: tab.url });
+        }
+        ctx.json200({ profiles: [...profiles.values()] });
+    });
+
+    router.add("POST", "/api/computer/windows/raise", async (ctx) => {
+        if (!isDockerRuntime()) return ctx.json400("docker_only");
+        const body = await ctx.json().catch(() => ({}));
+        const user = String(body?.user || "");
+        const tabId = String(body?.tabId || "");
+        if (!(await listOpenTabs())?.some((t) => t.user === user && t.tabId === tabId)) return ctx.json404();
+        const r = await raiseTabWindow(user, tabId);
+        if (r.error) return ctx.json400(r.error);
+        ctx.json200(r);
     });
 
     router.add("POST", "/api/computer/browser/open", async (ctx) => {
