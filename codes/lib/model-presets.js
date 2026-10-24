@@ -1,5 +1,6 @@
 // 모델 프리셋: 프로바이더(로그인이나 키를 담은 프로필), 모델, 추론 깊이, OpenRouter 고정을 한 묶음으로 저장해 두고 이름으로 고른다.
-// config.modelPresets = [{ uid, name, named?, profile, model, thinkingLevel, openRouterPin?, autoModelCandidates? }]
+// config.modelPresets = [{ uid, name, named?, profile, model, thinkingLevel, openRouterPin?, autoModelCandidates?, contextTriggerPercent? }]
+// contextTriggerPercent: 이 프리셋에서 컨텍스트가 몇 % 차면 압축할지. 없으면 기본값(context.js의 getCompressTriggerTokens)을 쓴다.
 // config.defaultModelPreset = uid. 에이전트는 프리셋 uid를 고르고, 고르지 않으면 기본 프리셋을 쓴다.
 // 프리셋이 없던 설정은 지금 프로바이더와 모델로 만든 첫 프리셋이 있는 것으로 읽는다(저장은 다음 변경 때 한다).
 import crypto from "node:crypto";
@@ -8,6 +9,9 @@ const MAX_NAME = 60;
 const MAX_MODEL = 200;
 const MAX_PIN = 64;
 const MAX_AUTO_MODEL_CANDIDATES = 30;
+// 압축 시점의 범위. user-settings.js의 normalizeContextTriggerPercent와 같다.
+const MIN_CONTEXT_TRIGGER = 10;
+const MAX_CONTEXT_TRIGGER = 95;
 
 const INITIAL_PRESET_UID = "initial";
 
@@ -108,6 +112,12 @@ export function applyPresetPatch(preset, patch, profiles) {
             .slice(0, MAX_PIN);
         if (tag) preset.openRouterPin = tag;
         else delete preset.openRouterPin;
+    }
+    if (patch.contextTriggerPercent !== undefined) {
+        // 비우거나 0이면 기본값을 쓴다.
+        const n = Math.round(Number(patch.contextTriggerPercent));
+        if (Number.isFinite(n) && n > 0) preset.contextTriggerPercent = Math.min(MAX_CONTEXT_TRIGGER, Math.max(MIN_CONTEXT_TRIGGER, n));
+        else delete preset.contextTriggerPercent;
     }
     if (patch.autoModelCandidates !== undefined) {
         if (!Array.isArray(patch.autoModelCandidates)) return { error: "invalid_auto_model_candidates" };

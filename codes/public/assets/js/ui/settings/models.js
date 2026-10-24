@@ -157,6 +157,26 @@
         return thinkingLevelsFor(providerId).find((l) => l.value === level)?.label || level || "";
     }
 
+    /* ── 압축 시점: 프리셋마다 고르고, 고르지 않으면 기본값을 쓴다 ── */
+    function globalCtxPercent() {
+        return Number(settings().contextTriggerPercent) || 75;
+    }
+
+    function ctxOptions() {
+        const list = settings().contextTriggerOptions;
+        return Array.isArray(list) && list.length ? list : [50, 60, 70, 75, 80, 85, 90];
+    }
+
+    function ctxLabel(pct) {
+        return pct ? `${pct}%` : t("presetCtxDefault", { pct: globalCtxPercent() });
+    }
+
+    // 모델의 컨텍스트 크기를 알면 실제로 압축을 시작하는 토큰 수를 함께 보여 준다.
+    function ctxTokens(profile, modelId, pct) {
+        const size = Number(modelsOf(profile).models.find((m) => m.id === modelId)?.contextWindow) || 0;
+        return size ? `~${Math.round((size * pct) / 100).toLocaleString()}` : "";
+    }
+
     // 프리셋 한 줄 설명: 프로바이더, 추론 깊이(이름이 따로 있으면 모델도).
     function presetSummary(preset) {
         const profile = profileByUid(preset.profile);
@@ -303,6 +323,8 @@
             thinkingLevel: preset ? preset.thinkingLevel || "" : defaultPreset()?.thinkingLevel || "",
             openRouterPin: preset?.openRouterPin || "",
             autoModelCandidates: preset?.autoModelCandidates ? [...preset.autoModelCandidates] : [],
+            // 0이면 기본 압축 시점을 쓴다.
+            contextTriggerPercent: Number(preset?.contextTriggerPercent) || 0,
         };
     }
 
@@ -367,6 +389,7 @@
             }
             sec.append(C.navRow(t("thinkingLevel"), thinkingLabel(profile?.id, draft.thinkingLevel), () => openPick(sub, "thinking")));
         }
+        sec.append(C.navRow(t("ctxFillLimit"), ctxLabel(draft.contextTriggerPercent), () => openPick(sub, "ctx")));
 
         if (profile?.id === "github-copilot" && draft.model === "auto") autoCandidateRows(sec, profile, draft);
 
@@ -465,6 +488,27 @@
                         backTo(parent);
                     },
                 }),
+            );
+            return;
+        }
+        if (sub.what === "ctx") {
+            const items = [
+                { value: "0", label: ctxLabel(0), sub: ctxTokens(profile, draft.model, globalCtxPercent()) },
+                ...ctxOptions().map((n) => ({ value: String(n), label: `${n}%`, sub: ctxTokens(profile, draft.model, n) })),
+            ];
+            sec.append(
+                searchList({
+                    items,
+                    current: String(draft.contextTriggerPercent || 0),
+                    placeholder: t("ctxFillLimit"),
+                    search: false,
+                    emptyText: "-",
+                    onPick(v) {
+                        draft.contextTriggerPercent = Number(v) || 0;
+                        backTo(parent);
+                    },
+                }),
+                T.h("div", { class: "set-desc", text: t("presetCtxDesc") }),
             );
             return;
         }
@@ -807,7 +851,8 @@
     function modelSubTitle(sub) {
         if (sub === "adv") return t("advanced");
         if (sub?.kind === "preset") return sub.uid ? presetName(presetByUid(sub.uid)) : t("addPreset");
-        if (sub?.kind === "pick") return t({ pin: "openRouterPin", profile: "provider", thinking: "thinkingLevel" }[sub.what] || "model");
+        if (sub?.kind === "pick")
+            return t({ pin: "openRouterPin", profile: "provider", thinking: "thinkingLevel", ctx: "ctxFillLimit" }[sub.what] || "model");
         if (sub?.kind === "profile") return profileByUid(sub.uid)?.name || t("provider");
         if (sub?.kind === "addProfile") return t("addProvider");
         return t("modelsTab");

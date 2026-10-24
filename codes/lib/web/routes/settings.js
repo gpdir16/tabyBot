@@ -25,7 +25,6 @@ import {
     getCompressOnModelChange,
     getContextTriggerPercent,
     normalizeApprovalLevel,
-    normalizeContextTriggerPercent,
     normalizeNsfwLevel,
 } from "../../user-settings.js";
 import { compressBotSessions } from "../../agent/summarize.js";
@@ -67,8 +66,8 @@ export function publicAgent(a) {
         model: a.model || "",
         thinkingLevel: a.thinkingLevel || "",
         color: a.color || agentColor(a.id),
-        backgroundTasks: agentBackgroundEnabled(a),
         colorChoice: a.color || "",
+        backgroundTasks: agentBackgroundEnabled(a),
         folder: a.folder || "",
         createdAt: a.createdAt ?? null,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
@@ -234,6 +233,8 @@ function publicPresets(config) {
             thinkingLevel: normalizeThinkingLevel(p.thinkingLevel, providerId),
             openRouterPin: providerId === "openrouter" ? p.openRouterPin || "" : "",
             autoModelCandidates: Array.isArray(p.autoModelCandidates) ? p.autoModelCandidates : [],
+            // 0이면 기본 압축 시점을 쓴다.
+            contextTriggerPercent: Number(p.contextTriggerPercent) || 0,
             isDefault: p.uid === def.uid,
             // 효율적인 운영 탭: 이 프리셋의 캐시 유지 설정과 예상. 핑이 이득이 없는 프로바이더(요청 수 과금, 로컬)는 null.
             cacheKeepAlive: merged ? cacheKeepAliveSummary(merged, config) : null,
@@ -423,9 +424,6 @@ function applyGeneralFields(config, patch) {
     if (patch.nsfwLevel !== undefined) config.nsfwLevel = normalizeNsfwLevel(patch.nsfwLevel);
     if (patch.approvalLevel !== undefined) config.approvalLevel = normalizeApprovalLevel(patch.approvalLevel);
     if (patch.cacheKeepAlive !== undefined) applyCacheKeepAlive(config, patch);
-    if (patch.contextTriggerPercent !== undefined) {
-        config.contextTriggerPercent = normalizeContextTriggerPercent(patch.contextTriggerPercent);
-    }
     return null;
 }
 
