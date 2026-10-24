@@ -430,6 +430,14 @@
         oauthReloginConfirmText: "The current login is removed as soon as this starts. If you stop midway, the provider stays logged out.",
         notificationsDenied: "Notification permission was denied",
         installApp: "Install app",
+        installGuideTitle: "Install tabyBot",
+        installGuidePrompt: "Add tabyBot to your home screen to open it like an app and get notifications.",
+        installGuideIos:
+            "Add tabyBot to your home screen to open it like an app and get notifications. Tap the **Share** button, choose **Add to Home Screen**, then open tabyBot from the new icon.",
+        installGuideFirefox:
+            "Add tabyBot to your home screen to open it like an app. Open the browser menu (⋮), then tap **Install** or **Add app to Home screen**.",
+        installGuideAndroid:
+            "Add tabyBot to your home screen to open it like an app. Open the browser menu (⋮), then tap **Install app** or **Add to Home screen**.",
         menu: "Menu",
         todos: "Todos",
         todosQuickAdd: "Add a todo",

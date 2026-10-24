@@ -431,6 +431,14 @@
         oauthReloginConfirmText: "開始するとすぐに現在のログインが削除されます。途中でやめるとログインのない状態になります。",
         notificationsDenied: "通知の許可が拒否されました",
         installApp: "アプリをインストール",
+        installGuideTitle: "tabyBotをインストール",
+        installGuidePrompt: "tabyBotをホーム画面に追加すると、アプリのように開いて通知も受け取れます。",
+        installGuideIos:
+            "tabyBotをホーム画面に追加すると、アプリのように開いて通知も受け取れます。**共有**ボタンをタップして**ホーム画面に追加**を選び、追加されたアイコンからtabyBotを開いてください。",
+        installGuideFirefox:
+            "tabyBotをホーム画面に追加すると、アプリのように開けます。ブラウザのメニュー（⋮）を開き、**インストール**または**ホーム画面にアプリを追加**をタップしてください。",
+        installGuideAndroid:
+            "tabyBotをホーム画面に追加すると、アプリのように開けます。ブラウザのメニュー（⋮）を開き、**アプリをインストール**または**ホーム画面に追加**をタップしてください。",
         menu: "メニュー",
         todos: "ToDo",
         todosQuickAdd: "ToDo を追加",

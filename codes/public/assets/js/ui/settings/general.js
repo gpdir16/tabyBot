@@ -98,10 +98,12 @@
             ]),
         );
 
-        if (T.notifications?.canInstall()) {
+        // 설치 창을 열 수 있으면 그 창을, 못 여는 모바일 브라우저(iOS 등)면 직접 추가하는 방법을 띄운다.
+        if (T.notifications?.canInstall() || T.notifications?.canGuideInstall()) {
             sec.append(
                 C.actionRow(t("installApp"), () => {
-                    T.notifications.promptInstall().then(() => C.build());
+                    if (T.notifications.canInstall()) T.notifications.promptInstall().then(() => C.build());
+                    else T.notifications.showInstallGuide();
                 }),
             );
         }

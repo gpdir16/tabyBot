@@ -427,6 +427,14 @@
         oauthReloginConfirmText: "시작하는 즉시 지금 로그인이 지워집니다. 중간에 그만두면 로그인이 없는 상태로 남습니다.",
         notificationsDenied: "알림 권한이 거부되었습니다",
         installApp: "앱 설치",
+        installGuideTitle: "tabyBot 설치",
+        installGuidePrompt: "tabyBot을 홈 화면에 추가하면 앱처럼 열고 알림도 받을 수 있습니다.",
+        installGuideIos:
+            "tabyBot을 홈 화면에 추가하면 앱처럼 열고 알림도 받을 수 있습니다. **공유** 버튼을 누르고 **홈 화면에 추가**를 고른 뒤, 새로 생긴 아이콘으로 tabyBot을 여세요.",
+        installGuideFirefox:
+            "tabyBot을 홈 화면에 추가하면 앱처럼 열 수 있습니다. 브라우저 메뉴(⋮)를 열고 **설치** 또는 **홈 화면에 앱 추가**를 누르세요.",
+        installGuideAndroid:
+            "tabyBot을 홈 화면에 추가하면 앱처럼 열 수 있습니다. 브라우저 메뉴(⋮)를 열고 **앱 설치** 또는 **홈 화면에 추가**를 누르세요.",
         menu: "메뉴",
         todos: "할 일",
         todosQuickAdd: "할 일 추가",
