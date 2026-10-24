@@ -95,6 +95,26 @@
         return { persona, nodes: [T.h("hr", { class: "divider" }), C.fieldOf(t("persona"), persona, t("personaDesc"))] };
     }
 
+    // 백그라운드 작업(자동 체크인, 세션 리뷰, 드림 스윕) 한 번에 끄기. 저장할 때 값을 읽는다.
+    function buildBackgroundSwitch(agent) {
+        const sw = C.switchEl(
+            agent ? agent.backgroundTasks !== false : true,
+            () => {
+                // 저장 버튼을 누를 때 읽는다
+            },
+            t("agentBackground"),
+        );
+        const input = sw.querySelector("input");
+        return {
+            nodes: [
+                T.h("hr", { class: "divider" }),
+                C.labeledRow(t("agentBackground"), sw),
+                T.h("div", { class: "set-desc", text: t("agentBackgroundDesc") }),
+            ],
+            value: () => input.checked,
+        };
+    }
+
     function saveErrorMessage(err) {
         const key = SAVE_ERROR_KEYS[err?.payload?.error || ""];
         return key ? `${t("saveFailed")}: ${t(key)}` : T.api.errorText(err, t("saveFailed"));
@@ -171,6 +191,8 @@
         editor.append(colorPicker.row);
         const personaSection = buildPersonaSection(agent);
         editor.append(...personaSection.nodes);
+        const backgroundSwitch = buildBackgroundSwitch(agent);
+        editor.append(...backgroundSwitch.nodes);
 
         C.headAction(host?.saveLabel || t("save"), async () => {
             const n = name.value.trim();
@@ -178,7 +200,13 @@
                 name.focus();
                 return;
             }
-            const body = { name: n, persona: personaSection.persona.value, color: colorPicker.value(), ...presetPicker.values() };
+            const body = {
+                name: n,
+                persona: personaSection.persona.value,
+                color: colorPicker.value(),
+                backgroundTasks: backgroundSwitch.value(),
+                ...presetPicker.values(),
+            };
             await saveAgent(agent, body, host);
         });
 

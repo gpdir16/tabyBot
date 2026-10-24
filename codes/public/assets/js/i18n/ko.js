@@ -617,6 +617,8 @@
         agentPresetDesc: "프리셋은 설정의 모델과 프로바이더에서 만들고 고칠 수 있어요.",
         agentLegacyModel: "예전 설정 유지 ({model})",
         invalidModelPreset: "없는 모델 프리셋이에요",
+        agentBackground: "백그라운드 작업",
+        agentBackgroundDesc: "자동 체크인, 세션 리뷰, 드림 스윕을 이 에이전트에서 돌려요. 끄면 셋 다 멈춰요.",
         openRouterPin: "프로바이더 고정",
         openRouterPinDesc: "이 모델을 OpenRouter의 특정 업스트림 프로바이더로만 보냅니다. 고정하면 폴백이 꺼집니다.",
         openRouterPinAuto: "자동",

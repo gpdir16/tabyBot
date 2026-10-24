@@ -253,6 +253,11 @@ function normalizeAgentColor(value) {
 }
 
 export const AVATAR_COLORS = ["#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ff9f0a", "#32d74b", "#64d2ff"];
+// 자동 체크인, 세션 리뷰, 드림 스윕을 이 에이전트에서 돌리는지. 따로 끄지 않았으면 켜져 있다.
+export function agentBackgroundEnabled(agent) {
+    return agent?.backgroundTasks !== false;
+}
+
 export function agentColor(id) {
     let hash = 0;
     for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
@@ -283,7 +288,7 @@ function canAddAgent() {
     return listAgents().length < MAX_AGENTS;
 }
 
-export function addAgent({ name, persona, modelPreset, model, thinkingLevel, color }) {
+export function addAgent({ name, persona, modelPreset, model, thinkingLevel, color, backgroundTasks }) {
     const named = normalizeAgentName(name);
     if (named.error) return named;
     const person = normalizeAgentPersona(persona);
@@ -314,6 +319,7 @@ export function addAgent({ name, persona, modelPreset, model, thinkingLevel, col
         color: col.color,
         createdAt: new Date().toISOString(),
     };
+    if (backgroundTasks === false) agent.backgroundTasks = false;
     store.agents.push(agent);
     saveAgentsStore(store);
     ensureAgentMemory(id);
@@ -354,6 +360,10 @@ export function updateAgent(id, patch) {
         const col = normalizeAgentColor(patch.color);
         if (col.error) return col;
         current.color = col.color;
+    }
+    if (patch.backgroundTasks !== undefined) {
+        if (patch.backgroundTasks === false) current.backgroundTasks = false;
+        else delete current.backgroundTasks;
     }
     if (patch.folder !== undefined) {
         const folderId = String(patch.folder || "");
