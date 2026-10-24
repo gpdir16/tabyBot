@@ -8,6 +8,8 @@ Grok Bot의 오픈소스 대안입니다. 제 이전 프로젝트 [tabyAgent](ht
 
 메모리, 스킬, 자기개선, 예약 작업, 할 일 목록, 웹 브라우징, GUI 앱 사용 등의 기능이 추가 설정 없이 작동합니다.
 
+<img width="1599" height="1103" alt="CleanShot 2026-10-24 at 4 46 09 PM" src="https://github.com/user-attachments/assets/06a90fc5-c668-41b4-9d29-62f726cb1150" />
+
 ## 할 수 있는 것
 
 - **일상적인 채팅.** 브라우저에서 바로 답변을 받습니다. 텍스트와 이미지, 파일 등 거의 모든 형식을 지원합니다.
