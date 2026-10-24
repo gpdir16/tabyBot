@@ -35,7 +35,8 @@ export const browserClickToolDefinitions = [
                     y: { type: "number", description: "Y in pixels from the top of the tab screenshot." },
                     tab_id: {
                         type: "string",
-                        description: "camofox tab id. Defaults to the tab the camofox CLI last opened, else this bot's newest tab.",
+                        description:
+                            'camofox tab id, from any `--user` profile. Defaults to the tab showing the Cloudflare check for target "turnstile", else the tab the camofox CLI last opened.',
                     },
                     button: { type: "number", enum: [1, 2, 3], description: "1=left (default), 2=middle, 3=right." },
                     double: { type: "boolean", description: "Double-click." },
@@ -60,8 +61,11 @@ export function withChallengeHint(args, result) {
     return { ...result, hint: CHALLENGE_HINT };
 }
 
-// Turnstile 위젯의 자리(CSS 픽셀). 위젯 iframe이 보이면 그 상자를, 닫힌 shadow root 안이라 안 보이면
-// 위젯 크기(약 300x65)인 가장 안쪽 상자를 쓴다. 체크박스는 위젯 왼쪽 끝에서 약 22px, 세로 가운데에 있다.
+// Turnstile 위젯의 자리(CSS 픽셀). 위젯 iframe이 보이면 그 상자를 쓴다. 닫힌 shadow root 안이라 안 보이면
+// 응답 input을 감싼 위젯 높이(약 65)의 상자를 쓰는데, Cloudflare 확인 화면에서는 이 상자가 본문 폭(약 900)으로
+// 넓고 위젯은 그 왼쪽에 붙어 있다. 그것도 없으면 위젯 크기(약 300x65)인 가장 안쪽 상자를 쓰되, 아무 페이지의
+// 비슷한 상자를 누르지 않게 Turnstile 스크립트를 불러온 페이지에서만 쓴다.
+// 체크박스는 위젯 왼쪽 끝에서 약 24px, 세로 가운데에 있다(2026-10-23 regbu.net에서 이 자리를 눌러 통과).
 const LOCATE_TURNSTILE = `(() => {
     const shown = (r) => r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
     const box = (r, via) => ({ left: r.left, top: r.top, width: r.width, height: r.height, via });
@@ -69,6 +73,13 @@ const LOCATE_TURNSTILE = `(() => {
         const r = f.getBoundingClientRect();
         if (/challenges\\.cloudflare\\.com|turnstile/i.test(f.src || "") && shown(r)) return box(r, "iframe");
     }
+    for (const input of document.querySelectorAll('input[name="cf-turnstile-response"], input[id^="cf-chl-widget"]')) {
+        for (let el = input.parentElement; el && el !== document.body; el = el.parentElement) {
+            const r = el.getBoundingClientRect();
+            if (r.height >= 50 && r.height <= 90 && r.width >= 250 && shown(r)) return box(r, "response");
+        }
+    }
+    if (![...document.scripts].some((s) => /challenges\\.cloudflare\\.com|turnstile/i.test(s.src || ""))) return null;
     let found = null;
     for (const el of document.querySelectorAll("div, span, label")) {
         const r = el.getBoundingClientRect();
@@ -76,7 +87,7 @@ const LOCATE_TURNSTILE = `(() => {
     }
     return found;
 })()`;
-const TURNSTILE_CHECKBOX_X = 22;
+const TURNSTILE_CHECKBOX_X = 24;
 
 function xdo(displayNum, args, { stdout = false } = {}) {
     return new Promise((resolve) => {
@@ -105,15 +116,50 @@ function readActiveTab() {
     }
 }
 
-async function resolveTabId(user, requested) {
-    const tabs = await camofoxUserTabs(user);
+// 열린 탭 전부. 봇이 `camofox --user <이름>`으로 따로 연 프로필의 탭도 같은 화면에 떠 있으므로 함께 본다.
+async function listOpenTabs(ownUser) {
+    const health = await camofoxApi("/health", { timeoutMs: 5_000 }).catch(() => null);
+    const users = new Set([ownUser, ...(Array.isArray(health?.json?.activeUserIds) ? health.json.activeUserIds : [])]);
+    let reachable = false;
+    const tabs = [];
+    for (const user of users) {
+        const list = await camofoxUserTabs(user);
+        if (!list) continue;
+        reachable = true;
+        for (const t of list) {
+            const tabId = t.tabId || t.targetId;
+            if (tabId) tabs.push({ user, tabId, url: t.url || "" });
+        }
+    }
+    return reachable ? tabs : null;
+}
+
+// 누를 탭을 고른다. 탭 목록 순서는 연 순서가 아니라서, turnstile은 확인 화면이 실제로 떠 있는 탭을 찾아 고른다.
+async function resolveTab(ownUser, requested, target) {
+    const tabs = await listOpenTabs(ownUser);
     if (!tabs) return { error: "The camofox server is not responding. Open a page with `camofox open <url>` first." };
-    const ids = tabs.map((t) => t.tabId || t.targetId).filter(Boolean);
-    if (!ids.length) return { error: "This bot has no open browser tab. Open one with `camofox open <url>` first." };
-    if (requested)
-        return ids.includes(requested) ? { tabId: requested } : { error: `Tab ${requested} is not one of this bot's tabs: ${ids.join(", ")}` };
+    if (!tabs.length) return { error: "No browser tab is open. Open one with `camofox open <url>` first." };
+    if (requested) {
+        const hit = tabs.find((t) => t.tabId === requested);
+        return hit || { error: `Tab ${requested} is not open. Open tabs: ${tabs.map((t) => t.tabId).join(", ")}` };
+    }
+    // CLI가 마지막으로 연 탭, 이 봇 프로필의 탭(나중 것부터), 다른 프로필의 탭 순서로 본다
     const active = readActiveTab();
-    return { tabId: ids.includes(active) ? active : ids[ids.length - 1] };
+    const rest = tabs.filter((t) => t.tabId !== active);
+    const ordered = [
+        ...tabs.filter((t) => t.tabId === active),
+        ...rest.filter((t) => t.user === ownUser).reverse(),
+        ...rest.filter((t) => t.user !== ownUser).reverse(),
+    ];
+    if (!target) return ordered[0];
+    for (const tab of ordered) {
+        const widget = await evaluate(tab.user, tab.tabId, LOCATE_TURNSTILE).catch(() => null);
+        if (widget) return { ...tab, widget };
+    }
+    return {
+        error: "No Cloudflare checkbox is visible on any open tab. If the page already passed, continue with it. Otherwise take a screenshot and pass x and y.",
+        tabs: ordered.map((t) => ({ tabId: t.tabId, url: t.url })),
+    };
 }
 
 // 탭과 X 창을 잇는 고리가 없어 제목에 잠깐 표식을 달아 창을 찾고, 그사이 화면 위 뷰포트 위치를 함께 읽는다.
@@ -208,13 +254,13 @@ async function clickOnce(args, { agentId } = {}) {
     const sess = display.loadSession();
     if (!sess) return { error: "The shared display is not running." };
 
-    const user = camofoxUser(agentId);
-    const tab = await resolveTabId(user, args.tab_id ? String(args.tab_id) : "");
+    const tab = await resolveTab(camofoxUser(agentId), args.tab_id ? String(args.tab_id) : "", target);
     if (tab.error) return tab;
+    const { user } = tab;
     const win = await locateTabWindow(user, tab.tabId, sess.display);
     if (win.error) return win;
     if (target) {
-        const widget = await evaluate(user, tab.tabId, LOCATE_TURNSTILE).catch(() => null);
+        const widget = tab.widget || (await evaluate(user, tab.tabId, LOCATE_TURNSTILE).catch(() => null));
         if (!widget) {
             return {
                 error: "No Cloudflare checkbox is visible on this tab. If the page already passed, continue with it. Otherwise take a screenshot and pass x and y.",
