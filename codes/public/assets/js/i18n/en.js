@@ -621,6 +621,8 @@
         agentLegacyModel: "Keep previous setting ({model})",
         invalidModelPreset: "That model preset doesn't exist",
         openRouterPin: "Provider pinning",
+        agentBackground: "Background tasks",
+        agentBackgroundDesc: "Runs proactive check-ins, session reviews, and dream sweeps for this agent. Turn off to stop all three.",
         openRouterPinDesc: "Send this model only to one upstream provider on OpenRouter. While pinned, fallbacks are disabled.",
         openRouterPinAuto: "Automatic",
         openRouterPinAutoDesc: "Let OpenRouter choose (fallbacks allowed)",

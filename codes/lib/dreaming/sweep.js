@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SESSION_DIR, USER_DIR } from "../paths.js";
-import { agentMemoryPath, listAgents } from "../agents-store.js";
+import { agentBackgroundEnabled, agentMemoryPath, listAgents } from "../agents-store.js";
 import { extractSessionTextLines } from "../agent/chat-history.js";
 import { createLlmClient } from "../llm/client.js";
 import { readJsonFile, writeFileAtomic } from "../atomic-file.js";
@@ -15,6 +15,11 @@ const TOTAL_CHAR_CAP = 24000;
 const MEMORY_INPUT_CAP = 40000;
 const AGENT_MEMORY_INPUT_CAP = 20000;
 const MAX_SESSION_FILES = 200;
+
+// 백그라운드 작업을 끈 에이전트는 대화를 읽지도, 메모리를 고치지도 않는다.
+function sweptAgents() {
+    return listAgents().filter(agentBackgroundEnabled);
+}
 
 function readText(filePath, cap) {
     try {
@@ -31,7 +36,7 @@ function collectCandidates(state) {
     let scannedFiles = 0;
     let totalChars = 0;
 
-    for (const agent of listAgents()) {
+    for (const agent of sweptAgents()) {
         const root = path.join(SESSION_DIR, agent.uuid);
         const manifest = readJsonFile(path.join(root, "manifest.json"));
         if (!manifest?.sessions?.length) continue;
@@ -112,7 +117,7 @@ Rules:
 
 function formatMemorySections() {
     const parts = [`### target "shared" (memory.md)\n\n${readText(MEMORY_PATH, MEMORY_INPUT_CAP) || "(empty)"}`];
-    for (const agent of listAgents()) {
+    for (const agent of sweptAgents()) {
         const body = readText(agentMemoryPath(agent.id), AGENT_MEMORY_INPUT_CAP) || "(empty)";
         parts.push(`### target "${agent.id}" (${agent.name} private memory)\n\n${body}`);
     }
@@ -237,7 +242,7 @@ function backupOnce(backupDir, filePath, label, done) {
 }
 
 function applyOps(ops, { maxOps, backupDir, resolveTarget = targetFileFor } = {}) {
-    const agentsById = new Map(listAgents().map((a) => [a.id, a]));
+    const agentsById = new Map(sweptAgents().map((a) => [a.id, a]));
     const results = [];
     const contents = new Map();
     const backedUp = new Set();
@@ -295,7 +300,7 @@ const ROUTINE_PROMOTE_CAP = 2;
 function accumulateRoutines(routines, state, { backupDir, diary = [] } = {}) {
     state.routineWatch = state.routineWatch || {};
     const now = Date.now();
-    const agents = new Set(listAgents().map((a) => a.id));
+    const agents = new Set(sweptAgents().map((a) => a.id));
     const promotions = [];
 
     for (const raw of Array.isArray(routines) ? routines : []) {

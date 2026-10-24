@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { listAgents } from "./agents-store.js";
+import { agentBackgroundEnabled, listAgents } from "./agents-store.js";
 import { writeJsonAtomic } from "./atomic-file.js";
 import { USER_DIR } from "./paths.js";
 import { scheduleWork } from "./agent-queue.js";
@@ -85,7 +85,7 @@ function proactiveTick(now = new Date()) {
     if (!isUserIdle(cfg.idleMs)) return { ran: 0, reason: "user_active" };
     const pending = [];
     for (const agent of listAgents()) {
-        if (inFlight.has(agent.uuid)) continue;
+        if (inFlight.has(agent.uuid) || !agentBackgroundEnabled(agent)) continue;
         // 기록이 없는 에이전트(새로 만들었거나 첫 실행)는 지금을 기준으로 삼아 한 주기 뒤에 첫 체크인을 한다.
         if (!lastRunAt.has(agent.uuid)) {
             lastRunAt.set(agent.uuid, now.getTime());

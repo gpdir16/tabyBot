@@ -1,5 +1,5 @@
 // 설정과 모델 목록 API. 설정 스냅샷 만들기와 패치 적용도 여기에 있다.
-import { AVATAR_COLORS, agentColor, listAgents } from "../../agents-store.js";
+import { AVATAR_COLORS, agentBackgroundEnabled, agentColor, listAgents } from "../../agents-store.js";
 import * as conversationsStore from "../conversations.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -67,6 +67,7 @@ export function publicAgent(a) {
         model: a.model || "",
         thinkingLevel: a.thinkingLevel || "",
         color: a.color || agentColor(a.id),
+        backgroundTasks: agentBackgroundEnabled(a),
         colorChoice: a.color || "",
         folder: a.folder || "",
         createdAt: a.createdAt ?? null,

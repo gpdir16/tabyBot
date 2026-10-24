@@ -51,6 +51,7 @@ export function registerAgentsRoutes(router) {
             model: body.model,
             thinkingLevel: body.thinkingLevel,
             color: body.color,
+            backgroundTasks: body.backgroundTasks,
         });
         if (result.error) return ctx.json400(result.error);
         ctx.json200({ ...agentsPayload(), agent: publicAgent(result.agent) });
@@ -68,6 +69,7 @@ export function registerAgentsRoutes(router) {
             model: body.model,
             thinkingLevel: body.thinkingLevel,
             color: body.color,
+            backgroundTasks: body.backgroundTasks,
             folder: body.folder,
         });
         if (result.error) return ctx.json400(result.error);

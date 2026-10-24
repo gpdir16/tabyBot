@@ -622,6 +622,8 @@
         agentPresetDesc: "プリセットは設定の「モデルとプロバイダー」で作成、編集します。",
         agentLegacyModel: "以前の設定のまま ({model})",
         invalidModelPreset: "そのモデルプリセットはありません",
+        agentBackground: "バックグラウンド作業",
+        agentBackgroundDesc: "このエージェントで自動チェックイン、セッションレビュー、ドリームスイープを実行します。オフにすると三つとも止まります。",
         openRouterPin: "プロバイダーの固定",
         openRouterPinDesc: "このモデルを OpenRouter の特定のアップストリームプロバイダーにのみ送ります。固定中はフォールバックが無効になります。",
         openRouterPinAuto: "自動",
