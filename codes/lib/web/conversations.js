@@ -381,8 +381,9 @@ export function toDisplayTurns(rawTurns) {
         if (isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen)) continue;
         const toolResults = toolResultsOf(turn?.messages);
         const messages = (turn?.messages || []).flatMap((m) => displayMessage(m, legacyQueuedSeen, toolResults));
-        // 도구 프레임 제거로 빈 turn이 되면 아예 생략. 질문 카드만 남은 턴도 화면에 남긴다.
-        if (messages.some((m) => m.role === "user" || m.role === "assistant" || m.role === "ask")) turns.push({ ...turn, messages });
+        // 도구 프레임 제거로 빈 turn이 되면 아예 생략. 질문 카드만 남은 턴과 방의 안내 줄도 화면에 남긴다.
+        if (messages.some((m) => m.role === "user" || m.role === "assistant" || m.role === "ask" || m.role === "notice"))
+            turns.push({ ...turn, messages });
     }
     return turns;
 }

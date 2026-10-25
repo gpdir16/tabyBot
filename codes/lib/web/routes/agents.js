@@ -19,9 +19,9 @@ import { purgeAgentComputer } from "../computer.js";
 import { requestAgentStop } from "../../agent/session.js";
 import { cancelQueuedAgentWork } from "../../agent-queue.js";
 import { askSessionCompression, publicAgent } from "./settings.js";
-import { addGroup, listGroups, removeGroup, updateGroup } from "../../groups-store.js";
+import { addGroup, dropAgentFromGroups, listGroups, removeGroup, updateGroup } from "../../groups-store.js";
 import { ensureConversation, getConversationMeta } from "../conversations.js";
-import { stopGroup } from "../group-turns.js";
+import { afterAgentRemoved, prepareAgentRemoval, stopGroup } from "../group-turns.js";
 
 // 그룹 방을 클라이언트에 내려줄 때의 공개 모양. 읽은 위치(cursors)는 서버 내부용이다.
 function publicGroup(g) {
@@ -89,6 +89,11 @@ export function registerAgentsRoutes(router) {
 
     router.add("DELETE", "/api/agents/:id", (ctx) => {
         // 마지막으로 남은 봇은 삭제할 수 없다.
+        const target = getAgent(ctx.params.id);
+        if (!target) return ctx.json404();
+        if (listAgents().length <= 1) return ctx.json400("last_agent");
+        // 그룹 방에서 지금 답하고 있으면 그 차례만 멈추고 남은 차례에서 뺀다. 방은 다른 멤버로 이어간다.
+        if (target.uuid) prepareAgentRemoval(target.uuid);
         const result = removeAgent(ctx.params.id);
         if (result.error === "last_agent") return ctx.json400("last_agent");
         if (result.error) return ctx.json404();
@@ -98,6 +103,13 @@ export function registerAgentsRoutes(router) {
                 requestAgentStop(result.agent.uuid);
             } catch (err) {
                 console.error(`tabyBot: stopping deleted agent failed (${result.agent.uuid}):`, err?.message || err);
+            }
+            // 그룹 방에서 빼고(멤버, 읽은 위치, 방 안의 자기 세션), 남은 방에는 나갔다는 안내를 남긴다.
+            // 멤버가 하나도 남지 않은 방은 지운다. 한 명만 남은 방은 둔다(그 에이전트와 계속 쓰거나 멤버를 더 넣을 수 있다).
+            try {
+                afterAgentRemoved(result.agent.name, dropAgentFromGroups(result.agent.uuid));
+            } catch (err) {
+                console.error(`tabyBot: removing deleted agent from groups failed (${result.agent.uuid}):`, err?.message || err);
             }
         }
         // 삭제된 봇의 컴퓨터 자원(브라우저 세션·프로필·PTY)을 해제한다.

@@ -119,7 +119,8 @@ function persistCompletedTurn({
     const skipPersist = automated && isUnremarkableAutoTurn(result);
     if (!skipPersist) {
         saveChatTurn(sessionKey, result, { turnId, messageId, displayText, attachments, baseMessages: resumed ? recoveryBaseMessages : null });
-        if (result?.error && !isStoppedByUser(result)) markChatTurnInterrupted(sessionKey);
+        // 자동 턴이 답을 못 받고 끝난 것(빈 답, 라운드 소진)은 끊긴 턴이 아니다. 재시작 때 다시 돌리지 않는다.
+        if (result?.error && !isStoppedByUser(result) && !(automated && isReplyFailure(result))) markChatTurnInterrupted(sessionKey);
     }
     maybeScheduleSessionReview({ sessionKey, agentId, result, automated });
 }
@@ -128,19 +129,43 @@ function persistCompletedTurn({
 // 긴 답변에서 전송량이 길이의 제곱으로 불어나고, 재접속용 이벤트 기록도 델타로 가득 찬다.
 const DELTA_FLUSH_MS = 60;
 
+// 침묵 마커. 답의 앞이나 끝에 붙으면 그 답은 사용자에게 가지 않는다(loop.js와 같은 규칙).
+const SILENT_MARKER = "__SILENT__";
+
+// 본문 끝이 마커의 앞부분과 겹치는 길이. 그만큼은 아직 내보내지 않는다(마커가 완성될 수 있다).
+function markerPrefixTail(text) {
+    for (let n = Math.min(SILENT_MARKER.length, text.length); n > 0; n -= 1) {
+        if (SILENT_MARKER.startsWith(text.slice(-n))) return n;
+    }
+    return 0;
+}
+
 function createDeltaStream({ sessionKey, automated }) {
     let full = "";
     let sent = 0;
     let timer = null;
 
+    function send(offset, text) {
+        emit({ type: "delta", conversationId: sessionKey, offset, text, automated: automated || undefined });
+    }
+
     function flush() {
         clearTimeout(timer);
         timer = null;
-        if (full.length <= sent) return;
+        const trimmed = full.trimEnd();
         // 침묵 답변은 화면에 내보내지 않는다. 사람이 보낸 턴이면 루프가 되돌려 다시 답을 받는다.
-        if (full.trim().startsWith("__SILENT__")) return;
-        emit({ type: "delta", conversationId: sessionKey, offset: sent, text: full.slice(sent), automated: automated || undefined });
-        sent = full.length;
+        if (full.trim().startsWith(SILENT_MARKER)) return;
+        // 끝에 마커가 붙었으면 이미 보낸 부분까지 거둔다(빈 본문을 처음부터 보내면 화면이 비운다).
+        if (trimmed.endsWith(SILENT_MARKER)) {
+            if (sent > 0) send(0, "");
+            sent = 0;
+            return;
+        }
+        // 끝이 마커로 이어질 수 있는 부분은 다음 조각을 볼 때까지 붙잡아 둔다.
+        const ready = trimmed.length - markerPrefixTail(trimmed);
+        if (ready <= sent) return;
+        send(sent, full.slice(sent, ready));
+        sent = ready;
     }
 
     return {
@@ -177,6 +202,7 @@ export async function runTurn({
     messageAt = null,
     recovery = false,
     quietEmpty = false,
+    silenceHint = null,
     automated = false,
     todoId = null,
     mirror = null,
@@ -215,6 +241,7 @@ export async function runTurn({
                 agentId,
                 session,
                 quietEmpty,
+                silenceHint,
                 todoId,
                 attachments: appendToRecovery ? [] : attachments,
                 userMessageMeta: appendToRecovery || !messageId ? null : { id: messageId, at: messageAt },
@@ -239,9 +266,9 @@ export async function runTurn({
             });
 
         let result = await run(userText, recovery);
-        if (!recovery && !quietEmpty && shouldRecover(result)) {
-            markChatTurnInterrupted(sessionKey);
-            prepareChatTurnRecovery(sessionKey);
+        // 이어 돌릴 끊긴 턴이 있을 때만 복구한다. 체크포인트 하나 없이 실패한 턴(예: 그룹 멤버 세션의 빈 답)에서
+        // 복구하면 앞의 끝난 턴을 이어 써서 이번 메시지가 사라지고 지난 답이 되풀이된다.
+        if (!recovery && !quietEmpty && shouldRecover(result) && markChatTurnInterrupted(sessionKey) && prepareChatTurnRecovery(sessionKey)) {
             recoveryBaseMessages = lastChatTurnMessages(sessionKey);
             // 끊긴 턴에 함께 묶인 대기 메시지는 이미 기록으로 모델에 들어간다. 대기열에서 또 넣지 않는다.
             session.dropPendingMessages(new Set(userMessageIdsOf(recoveryBaseMessages)));
@@ -414,11 +441,16 @@ export function dispatchMessage({ sessionKey, agentId, id = null, userText, atta
 }
 
 // 재시작으로 끊긴 턴을 이어서 돌린다. 한꺼번에 모델을 호출하지 않도록 하나씩 차례로 이어간다.
-export function recoverInterruptedTurns() {
-    const targets = listConversations().filter((conversation) => hasRecoverableChatTurn(conversation.id));
+// 그룹 방의 멤버 세션도 같다: 끊긴 멤버 턴은 그 세션에서 이어 돌리고, 방의 화면 기록에도 옮겨 적는다.
+export function recoverInterruptedTurns({ memberSessions = [] } = {}) {
+    const threads = listConversations()
+        .filter((conversation) => hasRecoverableChatTurn(conversation.id))
+        .map((conversation) => ({ sessionKey: conversation.id, agentId: conversation.agentId }));
+    const members = memberSessions.filter((m) => hasRecoverableChatTurn(m.sessionKey));
+    const targets = [...threads, ...members];
     void (async () => {
         for (const conversation of targets) {
-            const sessionKey = conversation.id;
+            const { sessionKey } = conversation;
             if (!prepareChatTurnRecovery(sessionKey)) continue;
             try {
                 await scheduleWork(
@@ -427,6 +459,7 @@ export function recoverInterruptedTurns() {
                         runTurn({
                             sessionKey,
                             agentId: conversation.agentId,
+                            mirror: conversation.mirror || null,
                             userText: RECOVERY_PROMPT,
                             recovery: true,
                         }),

@@ -1,5 +1,6 @@
 // 설정과 모델 목록 API. 설정 스냅샷 만들기와 패치 적용도 여기에 있다.
 import { AVATAR_COLORS, agentBackgroundEnabled, agentColor, listAgents } from "../../agents-store.js";
+import { listMemberSessionKeys } from "../../groups-store.js";
 import * as conversationsStore from "../conversations.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -278,9 +279,13 @@ async function waitForStop(chatId) {
 
 async function restartBotSessions() {
     const result = { restarted: 0, skipped: 0, failed: 0 };
-    for (const chatId of listAgents()
-        .map((a) => a.uuid)
-        .filter(Boolean)) {
+    const keys = [
+        ...listAgents()
+            .map((a) => a.uuid)
+            .filter(Boolean),
+        ...listMemberSessionKeys(),
+    ];
+    for (const chatId of keys) {
         try {
             const running = stopConversation(chatId);
             if (running && !(await waitForStop(chatId))) {

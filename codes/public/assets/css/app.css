@@ -629,6 +629,8 @@ kbd {
     place-items: center;
     color: #fff;
     font-size: 10px;
+    /* 지워진 에이전트처럼 색이 없으면 회색 */
+    background-color: var(--text-tertiary, #8e8e93);
     background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1));
 }
 /* 라이브 중간 과정 버블(툴 호출 전 코멘트) */

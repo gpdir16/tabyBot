@@ -34,6 +34,21 @@ const MESSAGES = {
         ko: "모델이 변경되었습니다. 깔끔하게 시작하도록 세션을 압축할까요?",
         ja: "モデルが変更されました。セッションを圧縮してすっきり始めますか？",
     },
+    group_member_failed: {
+        en: "{name} could not reply: {detail}",
+        ko: "{name} 응답 실패: {detail}",
+        ja: "{name}が応答できませんでした: {detail}",
+    },
+    group_capped: {
+        en: "The discussion reached its limit, so {names} did not get a turn. Mention them to continue.",
+        ko: "대화 상한에 도달해 {names}에게 차례가 가지 않았어요. 이어가려면 멘션해 주세요.",
+        ja: "会話の上限に達したため、{names}には順番が回りませんでした。続けるにはメンションしてください。",
+    },
+    group_member_left: {
+        en: "{name} was deleted and left the room.",
+        ko: "{name}이(가) 삭제되어 방에서 나갔어요.",
+        ja: "{name}は削除されたため、ルームから退出しました。",
+    },
 };
 
 export function t(key, lang = "en", vars = {}) {

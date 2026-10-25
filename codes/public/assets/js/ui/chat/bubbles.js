@@ -266,15 +266,15 @@
             });
     }
 
-    // 그룹 대화방에서 말한 에이전트의 이름표. 지워진 에이전트면 이름 없이 둔다.
-    function buildSpeakerLabel(uuid) {
+    // 그룹 대화방에서 말한 에이전트의 이름표. 지워진 에이전트면 기록에 남은 이름(fallbackName)을 회색으로 단다.
+    function buildSpeakerLabel(uuid, fallbackName = "") {
         const bot = T.state.botByUuid(uuid);
-        const name = bot?.name || "";
+        const name = bot?.name || fallbackName || "";
         return T.h("div", { class: "msg-speaker" }, [
             T.h("span", {
                 class: "msg-speaker-avatar",
                 text: ([...name.trim()][0] || "?").toUpperCase(),
-                style: `background-color:${T.util.safeColor(bot?.color)}`,
+                style: bot ? `background-color:${T.util.safeColor(bot.color)}` : "",
                 "aria-hidden": "true",
             }),
             T.h("span", { class: "msg-speaker-name", text: name }),
@@ -295,7 +295,7 @@
 
         const stack = T.h("div", { class: "msg-stack" }, [bubble]);
         // 그룹 대화방: 누가 말했는지 버블 위에 이름을 단다.
-        if (o.speaker) stack.prepend(buildSpeakerLabel(o.speaker));
+        if (o.speaker) stack.prepend(buildSpeakerLabel(o.speaker, o.speakerName));
         const atts = buildMessageAttachments(o.attachments);
         if (atts) stack.append(atts);
         C.placeTime(C.msgTimeEl(o.at), stack, bubble);

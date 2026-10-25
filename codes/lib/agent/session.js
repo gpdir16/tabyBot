@@ -8,6 +8,14 @@ export const QUIET_EMPTY_HINT = "If the user does not need a message, reply with
 export const SILENT_TO_USER_HINT =
     "Your __SILENT__ reply was not delivered. The user wrote to you and is waiting, and silence is only for automatic runs. Answer the user's latest message now in plain text.";
 
+// 그룹 방에서 침묵을 되돌릴 때: 사용자가 직접 불렀거나, 다른 멤버가 불렀거나, 아직 아무도 사용자에게 답하지 않았을 때.
+export const GROUP_SILENCE_HINTS = {
+    user: "Your __SILENT__ reply was not delivered. The user addressed you directly in this room and is waiting. Reply now: your answer, your result, or why you cannot.",
+    member: "Your __SILENT__ reply was not delivered. Another member mentioned you and is waiting on you. Reply now: what they asked for, or why you cannot.",
+    unanswered:
+        "Your __SILENT__ reply was not delivered. No one in the room has answered the user's message yet. Reply to it now, or hand it to the member best suited to start with @name and say what you need from them.",
+};
+
 // 직전 사용자 메시지에서 이 시간 안에 다음 메시지가 오면 끼워 넣지 않고 실행을 멈춘 뒤 새 턴으로 다시 시작한다.
 const QUICK_FOLLOWUP_MS = 15_000;
 
