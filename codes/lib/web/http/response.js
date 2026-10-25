@@ -51,7 +51,10 @@ export function sendJson(res, status, body, req = null) {
     res.end(payload);
 }
 
-export async function readJsonBody(req, limitBytes = 20 * 1024 * 1024) {
+// 요청 본문을 한도까지 읽는다. 넘으면 "payload too large" 오류를 던진다.
+export async function readRawBody(req, limitBytes) {
+    const declared = Number(req.headers?.["content-length"]);
+    if (Number.isFinite(declared) && declared > limitBytes) throw new Error("payload too large");
     const chunks = [];
     let size = 0;
     for await (const chunk of req) {
@@ -59,7 +62,11 @@ export async function readJsonBody(req, limitBytes = 20 * 1024 * 1024) {
         if (size > limitBytes) throw new Error("payload too large");
         chunks.push(chunk);
     }
-    const raw = Buffer.concat(chunks).toString("utf8").trim();
+    return Buffer.concat(chunks);
+}
+
+export async function readJsonBody(req, limitBytes = 20 * 1024 * 1024) {
+    const raw = (await readRawBody(req, limitBytes)).toString("utf8").trim();
     if (!raw) return {};
     try {
         return JSON.parse(raw);

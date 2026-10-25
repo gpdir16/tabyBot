@@ -202,7 +202,13 @@ export function createStaticServer({ publicDir }) {
     }
 
     return function serveStatic(req, res, url) {
-        const urlPath = url.pathname;
+        // 파일 이름의 공백이나 한글처럼 인코딩된 글자를 풀어서 찾는다. 잘못 인코딩된 주소는 그대로 둔다(없는 파일로 404).
+        let urlPath = url.pathname;
+        try {
+            urlPath = decodeURIComponent(urlPath);
+        } catch {
+            // 풀 수 없는 주소다
+        }
         // SPA 폴백: 정적 파일이 아닌 경로(/a/<uuid> 등)는 index.html로 서빙한다.
         // 단, 하위 경로에서 상대 URL로 요청된 에셋(/a/assets/...)은 실제 파일로 되돌린다.
         const normalizedAsset = urlPath.match(/^\/(?:[^/]+\/)+?(assets\/.+)$/);

@@ -21,16 +21,6 @@
         return state.chats().filter((c) => (c.folder || "") === folderId);
     }
 
-    // 목록 아바타와 같다: 에이전트는 이름 첫 글자, 그룹 대화방은 멤버 아바타를 겹친 묶음.
-    function chatAvatar(c) {
-        if (c.isGroup) return T.h("span", { class: "bot-avatar group-wrap" }, [T.groupAvatar(state.groupMembers(c))]);
-        return T.h("span", {
-            class: "bot-avatar",
-            text: ([...String(c.name || "?").trim()][0] || "?").toUpperCase(),
-            style: /^#[0-9a-f]{6}$/i.test(String(c.color || "")) ? `background-color:${c.color}` : null,
-        });
-    }
-
     function applyFolderResult(r) {
         state.applyAgents(r);
     }
@@ -179,7 +169,7 @@
             picks.set(c.uuid, { chat: c, box, was: inThis });
             list.append(
                 T.h("label", { class: "folder-agent" }, [
-                    chatAvatar(c),
+                    T.chatAvatar(c),
                     T.h("span", { class: "folder-agent-meta" }, [
                         T.h("span", { class: "folder-agent-name", text: c.name || "?" }),
                         other ? T.h("span", { class: "ext-sub", text: t("folderAgentIn", { name: other }) }) : null,

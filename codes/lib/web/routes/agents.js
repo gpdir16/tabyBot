@@ -1,4 +1,5 @@
-// 에이전트, 폴더, 그룹 방 API.
+// 에이전트, 폴더, 그룹 방, 프로필 사진 API.
+import fs from "node:fs";
 import { loadUserConfig } from "../../config-loader.js";
 import { getCompressOnModelChange } from "../../user-settings.js";
 import {
@@ -12,6 +13,7 @@ import {
     updateFolder,
     removeFolder,
     setFoldersOrder,
+    getAgentByUuid,
 } from "../../agents-store.js";
 import { purgeAgentTodos } from "../../todos/store.js";
 import { emit } from "../bus.js";
@@ -19,7 +21,8 @@ import { purgeAgentComputer } from "../computer.js";
 import { requestAgentStop } from "../../agent/session.js";
 import { cancelQueuedAgentWork } from "../../agent-queue.js";
 import { askSessionCompression, publicAgent } from "./settings.js";
-import { addGroup, dropAgentFromGroups, listGroups, removeGroup, updateGroup } from "../../groups-store.js";
+import { addGroup, dropAgentFromGroups, getGroup, listGroups, removeGroup, updateGroup } from "../../groups-store.js";
+import { MAX_AVATAR_BYTES, avatarFile, listAvatarPresets, removeAvatar, saveAvatar } from "../../avatars-store.js";
 import { ensureConversation, getConversationMeta } from "../conversations.js";
 import { afterAgentRemoved, prepareAgentRemoval, stopGroup } from "../group-turns.js";
 
@@ -31,6 +34,7 @@ function publicGroup(g) {
         name: g.name,
         members: g.members,
         folder: g.folder,
+        avatar: g.avatar,
         createdAt: g.createdAt,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
     };
@@ -175,5 +179,54 @@ export function registerAgentsRoutes(router) {
         const result = setFoldersOrder(body.ids);
         if (result.error) return ctx.json400(result.error);
         ctx.json200(agentsPayload());
+    });
+
+    // 프로필 사진: key는 에이전트 uuid나 그룹 방 id다. 본문은 이미지 바이트 그대로다.
+    const avatarOwner = (key) => {
+        const agent = getAgentByUuid(key);
+        if (agent) return { setVersion: (avatar) => storeUpdateAgent(agent.id, { avatar }) };
+        if (getGroup(key)) return { setVersion: (avatar) => updateGroup(key, { avatar }) };
+        return null;
+    };
+
+    // 미리 준비해 둔 사진 목록. 웹 화면은 처음 한 번만 받아 둔다.
+    router.add("GET", "/api/avatar-presets", (ctx) => {
+        ctx.json200({ presets: listAvatarPresets() });
+    });
+
+    router.add("PUT", "/api/avatars/:key", async (ctx) => {
+        const owner = avatarOwner(ctx.params.key);
+        if (!owner) return ctx.json404();
+        const saved = saveAvatar(ctx.params.key, await ctx.raw(MAX_AVATAR_BYTES));
+        if (saved.error) return ctx.json400(saved.error);
+        const result = owner.setVersion(saved.version);
+        if (result.error) return ctx.json400(result.error);
+        emit({ type: "conversations_changed" });
+        ctx.json200(agentsPayload());
+    });
+
+    router.add("DELETE", "/api/avatars/:key", (ctx) => {
+        const owner = avatarOwner(ctx.params.key);
+        if (!owner) return ctx.json404();
+        removeAvatar(ctx.params.key);
+        const result = owner.setVersion("");
+        if (result.error) return ctx.json400(result.error);
+        emit({ type: "conversations_changed" });
+        ctx.json200(agentsPayload());
+    });
+
+    // 주소에 버전(?v=)이 붙어 사진이 바뀌면 주소도 바뀐다. 그래서 오래 캐시해도 된다.
+    router.add("GET", "/api/avatars/:key", (ctx) => {
+        const found = avatarFile(ctx.params.key);
+        if (!found) return ctx.json404();
+        ctx.res.writeHead(200, {
+            "Content-Type": found.mime,
+            "Content-Length": found.size,
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        });
+        fs.createReadStream(found.file)
+            .on("error", () => ctx.res.destroy())
+            .pipe(ctx.res);
     });
 }

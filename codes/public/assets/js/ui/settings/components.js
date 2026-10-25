@@ -184,6 +184,7 @@
 
     // 폼의 입력값을 처음과 견준다. 달라지기 전에는 저장 버튼이 꺼져 있고, 달라진 채로 떠나려 하면 묻는다(layout.js의 confirmLeave).
     // 폼을 다 채운 뒤에 부른다. extra: 입력 요소가 아닌 값(색상 선택 등)을 문자열로 돌려주는 함수.
+    // 화면에 붙어 있는지와 상관없이 달라졌는지만 보는 함수를 돌려준다(한 단계 들어간 화면에 가려진 폼을 지킬 때 쓴다).
     function trackForm(root, extra) {
         const read = () =>
             JSON.stringify([
@@ -191,7 +192,9 @@
                 extra ? extra() : null,
             ]);
         const initial = read();
-        C.viewSlot.dirty = () => root.isConnected && read() !== initial;
+        const changed = () => read() !== initial;
+        C.viewSlot.dirty = () => root.isConnected && changed();
+        return changed;
     }
 
     function fieldOf(label, control, desc) {
@@ -214,6 +217,207 @@
         return T.h("div", { class: "select-wrap" }, [sel, T.icon("chevron")]);
     }
 
+    /* ── 프로필 사진 ─────────────────────────────────────────
+       에이전트와 그룹 대화방의 편집 화면에는 사진 행을 두고, 누르면 사진 화면(avatarScreen)으로 한 단계 들어간다.
+       사진 화면에서 고르거나 지운 것은 편집 화면에 담아 두었다가 그 화면의 저장 버튼을 누를 때 올린다(commit). */
+    const AVATAR_PX = 256;
+
+    // 고른 이미지를 가운데 정사각형으로 잘라 AVATAR_PX 이하 PNG로 만든다. 브라우저가 못 읽는 이미지면 오류를 던진다.
+    async function squareAvatar(file) {
+        const url = URL.createObjectURL(file);
+        try {
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            const side = Math.min(img.naturalWidth, img.naturalHeight);
+            if (!side) throw new Error("empty_image");
+            const out = Math.min(AVATAR_PX, side);
+            const canvas = T.h("canvas", { width: String(out), height: String(out) });
+            const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, out, out);
+            return await new Promise((resolve, reject) => {
+                canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("encode_failed"))), "image/png");
+            });
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    // who: 사진을 고를 대상(에이전트 또는 state.chats() 모양의 그룹 대화방, 새로 만들 때는 null이나 이름 없는 모양).
+    // onOpen: 사진 행을 누르면 사진 화면을 연다(설정과 대화 정보 창이 여는 방법이 다르다).
+    // row: 편집 화면에 넣을 행. value(): 고친 상태를 문자열로(trackForm의 extra). commit(key): 고친 것을 서버에 반영하고
+    // 받은 /api/agents 스냅샷을 돌려준다(고친 것이 없으면 null). 실패하면 오류를 던진다.
+    function avatarPicker(who, onOpen) {
+        const fallback = { ...(who || {}), avatar: "" };
+        let pending = null; // 새로 고른 사진(Blob)
+        let removed = false;
+        let picks = 0;
+        const urls = new Set();
+        const preview = T.h("span", { class: "avatar-preview-slot" });
+        const row = T.h("button", { type: "button", class: "set-row nav-row avatar-row", onclick: () => onOpen() }, [
+            T.h("span", { class: "set-label", text: t("agentPhoto") }),
+            preview,
+            T.icon("chevron", "nav-chev"),
+        ]);
+
+        // 지금 상태의 아바타(새로 고른 사진, 지운 뒤의 기본 모양, 원래 모양). cls로 크기를 정한다.
+        const face = (cls) => {
+            if (!pending) return T.chatAvatar(removed ? fallback : who || fallback, cls);
+            const url = URL.createObjectURL(pending);
+            urls.add(url);
+            return T.h("span", { class: `${cls} has-img` }, [T.h("img", { class: "avatar-img", src: url, alt: "" })]);
+        };
+        // 사진이 바뀌면 행의 미리보기를 다시 그리고, 저장 버튼이 알도록 change를 낸다.
+        const changed = () => {
+            for (const url of urls) URL.revokeObjectURL(url);
+            urls.clear();
+            preview.replaceChildren(face("bot-avatar avatar-preview"));
+            row.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        preview.append(face("bot-avatar avatar-preview"));
+        // 사진 화면이 열리기 전에 미리 준비한 사진을 받아 둔다.
+        loadPresets().catch(() => {
+            // 못 받으면 사진 화면을 열 때 다시 받는다
+        });
+
+        return {
+            row,
+            face,
+            hasPhoto: () => Boolean(pending) || (!removed && Boolean(who?.avatar)),
+            pick(blob) {
+                pending = blob;
+                removed = false;
+                picks += 1;
+                changed();
+            },
+            remove() {
+                pending = null;
+                removed = Boolean(who?.avatar);
+                changed();
+            },
+            value: () => (pending ? `new:${picks}` : removed ? "removed" : ""),
+            commit(key) {
+                if (!key) return Promise.resolve(null);
+                if (pending) return T.api.setAvatar(key, pending);
+                if (removed) return T.api.removeAvatar(key);
+                return Promise.resolve(null);
+            },
+        };
+    }
+
+    // 사진 화면: 큰 미리보기, 사진 선택, (사진이 있으면) 사진 지우기, 그 아래 미리 준비해 둔 사진들.
+    // 고르거나 지우면 편집 화면의 picker에 담고 done()으로 돌아간다.
+    // picker(): 지금 편집 화면의 avatarPicker(편집 화면이 다시 그려졌을 수 있어 쓸 때마다 묻는다).
+    function avatarScreen(body, picker, done) {
+        const p = picker();
+        if (!p) return;
+        // 파일 입력은 고를 때만 문서에 붙이고, 고르거나 취소하면 뗀다.
+        const file = T.h("input", { type: "file", accept: "image/*", hidden: true, "aria-hidden": "true", tabindex: "-1" });
+        file.addEventListener("cancel", () => file.remove());
+        // 고른 이미지를 정사각형으로 줄여 담고 편집 화면으로 돌아간다.
+        // 한 화면에서는 처음 고른 것 하나만 담는다. 사진을 받는 동안 또 누르거나 화면을 떠났다가 늦게 도착한 것을
+        // 담으면, 저장한 뒤 새로 그린 편집 화면이 다시 고친 상태가 되어 떠날 때 버릴지 묻는다.
+        let using = false;
+        const use = async (image) => {
+            if (using) return;
+            using = true;
+            let blob;
+            try {
+                blob = await squareAvatar(await image());
+            } catch {
+                using = false;
+                if (body.isConnected) T.toast.show("error", t("avatarInvalid"));
+                return;
+            }
+            if (!body.isConnected) return;
+            picker()?.pick(blob);
+            done();
+        };
+        file.addEventListener("change", () => {
+            file.remove();
+            const picked = file.files?.[0];
+            file.value = "";
+            if (picked) void use(() => picked);
+        });
+
+        const sec = T.h("div", { class: "set-section" });
+        sec.append(T.h("div", { class: "avatar-hero" }, [p.face("bot-avatar avatar-big")]));
+        // 파일 고르기 창은 사용자 제스처 안에서만 열리므로 누른 자리에서 바로 연다.
+        sec.append(
+            C.actionRow(t("avatarChoose"), () => {
+                document.body.append(file);
+                file.click();
+            }),
+        );
+        if (p.hasPhoto()) {
+            sec.append(
+                C.actionRow(
+                    t("avatarRemove"),
+                    () => {
+                        picker()?.remove();
+                        done();
+                    },
+                    { danger: true },
+                ),
+            );
+        }
+        sec.append(...presetRows(use));
+        body.append(sec);
+    }
+
+    // 미리 준비해 둔 사진(codes/public/assets/avatars/)을 소제목 아래 목록으로 보인다. 행은 대화 정보 창의 멤버 행과 같은 모양이다
+    // (C.itemRow에 아바타를 앞에 붙인 것, .ci-agent-row). 하나도 없으면 둘 다 감춘다. 같은 칸(set-section) 안에 두어야
+    // 앞 묶음과의 구획 간격이 붙는다. 목록은 늦게 도착해 groupRows가 묶어 주지 못하므로 직접 묶음(set-group)에 담는다.
+    // 목록은 바뀌지 않으므로 처음 한 번만 받아 두고 다시 그릴 때마다 그것을 쓴다(못 받았으면 다음에 다시 받는다).
+    let presetList = null;
+    // 편집 화면에 사진 행이 생길 때 목록과 사진을 미리 받아 둔다. 사진 화면을 열면 바로 보이고, 고를 때도 캐시에서 읽는다
+    // (주소에 버전이 붙어 있어 오래 캐시된다).
+    function loadPresets() {
+        if (presetList) return presetList;
+        presetList = T.api.avatarPresets().then(
+            (r) => {
+                for (const p of r?.presets || []) new Image().src = p.href;
+                return r;
+            },
+            (err) => {
+                presetList = null;
+                throw err;
+            },
+        );
+        return presetList;
+    }
+    function presetRows(use) {
+        const list = T.h("div", { class: "set-group", hidden: true });
+        const label = C.fieldLabel(t("avatarPresets"));
+        const desc = T.h("div", { class: "set-desc", text: t("avatarPresetsDesc"), hidden: true });
+        label.hidden = true;
+        loadPresets()
+            .then(({ presets = [] }) => {
+                list.replaceChildren(
+                    ...presets.map((p) => {
+                        const row = itemRow({
+                            name: p.name,
+                            onclick: () =>
+                                use(async () => {
+                                    const res = await fetch(p.href);
+                                    if (!res.ok) throw new Error(`http_${res.status}`);
+                                    return res.blob();
+                                }),
+                        });
+                        row.classList.add("ci-agent-row");
+                        row.prepend(T.h("span", { class: "bot-avatar has-img" }, [T.h("img", { class: "avatar-img", src: p.href, alt: "" })]));
+                        return row;
+                    }),
+                );
+                label.hidden = desc.hidden = list.hidden = !presets.length;
+            })
+            .catch(() => {
+                // 목록을 못 받으면 미리 준비한 사진 칸만 감춘 채 둔다(직접 고르기는 그대로 된다)
+            });
+        return [label, desc, list];
+    }
+
     C.confirmDelete = confirmDelete;
     C.switchEl = switchEl;
     C.settingSelect = settingSelect;
@@ -232,4 +436,6 @@
     C.fieldOf = fieldOf;
     C.editorSelect = editorSelect;
     C.selectWrap = selectWrap;
+    C.avatarPicker = avatarPicker;
+    C.avatarScreen = avatarScreen;
 })(window.Taby);

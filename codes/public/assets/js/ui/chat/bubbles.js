@@ -270,15 +270,11 @@
     function buildSpeakerLabel(uuid, fallbackName = "") {
         const bot = T.state.botByUuid(uuid);
         const name = bot?.name || fallbackName || "";
-        return T.h("div", { class: "msg-speaker" }, [
-            T.h("span", {
-                class: "msg-speaker-avatar",
-                text: ([...name.trim()][0] || "?").toUpperCase(),
-                style: bot ? `background-color:${T.util.safeColor(bot.color)}` : "",
-                "aria-hidden": "true",
-            }),
-            T.h("span", { class: "msg-speaker-name", text: name }),
-        ]);
+        // 지워진 에이전트는 색 없이(회색) 기록에 남은 이름의 첫 글자만 둔다.
+        const face = T.h("span", { class: "msg-speaker-avatar", "aria-hidden": "true" });
+        if (bot) T.avatarFace(face, bot);
+        else face.textContent = T.initial(name);
+        return T.h("div", { class: "msg-speaker" }, [face, T.h("span", { class: "msg-speaker-name", text: name })]);
     }
 
     function buildAssistant(text, opt) {

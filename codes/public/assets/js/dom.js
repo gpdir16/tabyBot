@@ -39,8 +39,28 @@
         return svg;
     }
 
+    // 이름 첫 글자(아바타에 들어가는 글자).
+    function initial(name) {
+        return ([...String(name || "?").trim()][0] || "?").toUpperCase();
+    }
+
+    // 아바타 칸 하나를 채운다: 프로필 사진이 있으면 사진, 없으면 색 원 안의 이름 첫 글자.
+    // who는 { uuid, name, color, avatar }(에이전트 또는 그룹 대화방). avatar는 사진 버전이고 주소에 붙는다.
+    function avatarFace(el, who) {
+        const photo = who?.avatar && who.uuid ? T.api.avatarHref(who.uuid, who.avatar) : "";
+        el.classList.toggle("has-img", Boolean(photo));
+        if (photo) {
+            el.style.backgroundColor = "";
+            el.replaceChildren(h("img", { class: "avatar-img", src: photo, alt: "", draggable: "false" }));
+            return el;
+        }
+        el.textContent = initial(who?.name);
+        el.style.backgroundColor = T.util.safeColor(who?.color);
+        return el;
+    }
+
     // 그룹 대화방 아바타: iOS 메시지처럼 멤버 아바타 몇 개를 겹쳐 놓는다.
-    // members는 { name, color } 목록(멤버 순서). 둘은 대각선, 셋은 삼각형, 넷부터는 2×2이고 다섯부터 마지막 칸은 +n이다.
+    // members는 에이전트 목록(멤버 순서). 둘은 대각선, 셋은 삼각형, 넷부터는 2×2이고 다섯부터 마지막 칸은 +n이다.
     // 크기는 감싸는 요소가 정한다(목록은 .bot-avatar, 헤더는 .hdr-avatar 안에 꽉 차게).
     function groupAvatar(members, extraClass) {
         const list = (members || []).filter(Boolean);
@@ -53,14 +73,16 @@
             return wrap;
         }
         const shown = list.length > 4 ? list.slice(0, 3) : list.slice(0, 4);
-        for (const m of shown) {
-            const color = /^#[0-9a-f]{6}$/i.test(String(m.color || "")) ? m.color : "var(--accent)";
-            wrap.append(
-                h("span", { class: "ga-dot", text: ([...String(m.name || "?").trim()][0] || "?").toUpperCase(), style: `background-color:${color}` }),
-            );
-        }
+        for (const m of shown) wrap.append(avatarFace(h("span", { class: "ga-dot" }), m));
         if (list.length > 4) wrap.append(h("span", { class: "ga-dot ga-more", text: `+${list.length - 3}` }));
         return wrap;
+    }
+
+    // 목록 행의 아바타: 프로필 사진이 있으면 사진, 없으면 에이전트는 이름 첫 글자, 그룹 대화방은 멤버 아바타를 겹친 묶음.
+    // chat은 state.chats()의 한 항목(에이전트 또는 그룹 대화방).
+    function chatAvatar(chat, cls = "bot-avatar") {
+        if (chat?.isGroup && !chat.avatar) return h("span", { class: `${cls} group-wrap` }, [groupAvatar(T.state.groupMembers(chat))]);
+        return avatarFace(h("span", { class: cls }), chat);
     }
 
     // 클립보드 복사(file:// 폴백 포함). 성공 여부 반환.
@@ -153,6 +175,14 @@
         }
         el.classList.add("col-in");
         el.style.animationDelay = `${-gone}ms`;
+        // 다 들어오면 표시를 걷는다. 남겨 두면 열을 다시 붙일 때(옆에 새 열이 열릴 때) 이 열도 처음부터 다시 미끄러져 나온다.
+        const done = (e) => {
+            if (e.target !== el) return;
+            el.removeEventListener("animationend", done);
+            el.classList.remove("col-in");
+            el.style.animationDelay = "";
+        };
+        el.addEventListener("animationend", done);
     }
 
     // 닫히는 열: 왼쪽 이웃 열 밑으로 미끄러져 들어간 뒤 치워진다(app.css의 col-out).
@@ -173,7 +203,10 @@
 
     T.h = h;
     T.icon = icon;
+    T.initial = initial;
+    T.avatarFace = avatarFace;
     T.groupAvatar = groupAvatar;
+    T.chatAvatar = chatAvatar;
     T.copyText = copyText;
     T.visibleHeight = visibleHeight;
     T.revealColumn = revealColumn;

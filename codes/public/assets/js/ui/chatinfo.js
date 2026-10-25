@@ -28,15 +28,6 @@
         return (state.state.groups || []).find((g) => g.id === id) || null;
     }
 
-    function avatar(agent) {
-        const name = String(agent?.name || "?").trim();
-        return T.h("span", {
-            class: "bot-avatar",
-            text: ([...name][0] || "?").toUpperCase(),
-            style: `background-color:${T.util.safeColor(agent?.color)}`,
-        });
-    }
-
     function addHistory() {
         if (historyEntry) return;
         try {
@@ -300,7 +291,7 @@
                 if (!box.checked && at >= 0) chosen.splice(at, 1);
             });
             const row = T.h("label", { class: "folder-agent" }, [
-                avatar(a),
+                T.chatAvatar(a),
                 T.h("span", { class: "folder-agent-meta" }, [T.h("span", { class: "folder-agent-name", text: a.name || "?" })]),
                 box,
                 T.h("span", { class: "folder-check", "aria-hidden": "true" }, [T.icon("check", "icon-sm")]),
@@ -327,12 +318,13 @@
         const preset = C.modelPresetByUid(a.modelPreset) || C.defaultModelPreset();
         const row = C.itemRow({ name: a.name, sub: C.modelPresetName(preset), ...opts });
         row.classList.add("ci-agent-row");
-        row.prepend(avatar(a));
+        row.prepend(T.chatAvatar(a));
         return row;
     }
 
     /* ── 새 에이전트, 에이전트 정보 ─────────────────────────── */
     function agentScreen(uuid) {
+        let editor = null; // 지금 그린 편집 화면. 사진 화면이 그 사진 고르기에 담는다.
         return {
             key: `agent:${uuid || "new"}`,
             chat: uuid,
@@ -344,21 +336,35 @@
                     body.append(T.h("div", { class: "empty-note", text: t("agentGone") }));
                     return;
                 }
-                body.append(
-                    C.agentEditor(agent, {
-                        saveLabel: agent ? t("save") : t("create"),
-                        onSaved(saved) {
-                            if (!agent) {
-                                openChat(saved?.uuid);
-                                return;
-                            }
-                            T.toast.show("success", t("saved"));
-                            for (const s of stack) s.view.spDirty = null;
-                            refresh();
-                        },
-                        onDeleted: () => close(),
-                    }),
-                );
+                editor = C.agentEditor(agent, {
+                    saveLabel: agent ? t("save") : t("create"),
+                    onSaved(saved) {
+                        if (!agent) {
+                            openChat(saved?.uuid);
+                            return;
+                        }
+                        T.toast.show("success", t("saved"));
+                        for (const s of stack) s.view.spDirty = null;
+                        refresh();
+                    },
+                    onDeleted: () => close(),
+                    openPhoto: () => push(photoScreen(() => editor?.photo)),
+                });
+                body.append(editor);
+                // 사진 화면이 위에 올라와 화면에서 빠져 있어도 고친 것을 지킨다(다시 그리지 않고, 닫을 때 묻는다).
+                C.viewSlot.dirty = editor.changed;
+            },
+        };
+    }
+
+    // 사진 행에서 한 단계 들어간 사진 화면. 고르거나 지우면 편집 화면의 사진 고르기에 담고 돌아간다(저장은 편집 화면에서).
+    // picker(): 그 편집 화면의 C.avatarPicker.
+    function photoScreen(picker) {
+        return {
+            key: "photo",
+            title: () => t("agentPhoto"),
+            build(body) {
+                C.avatarScreen(body, picker, () => pop());
             },
         };
     }
@@ -393,6 +399,7 @@
     }
 
     function groupNameScreen(members) {
+        let photo = null;
         return {
             key: "group:new:name",
             title: () => t("groupNew"),
@@ -406,6 +413,9 @@
                     "aria-label": t("groupName"),
                 });
                 sec.append(C.fieldOf(t("groupName"), name));
+                // 사진을 고르지 않으면 멤버 아바타를 겹쳐 보인다. 고른 사진은 방을 만든 뒤에 올린다.
+                photo = C.avatarPicker({ isGroup: true, members, name: "" }, () => push(photoScreen(() => photo)));
+                sec.append(photo.row);
                 sec.append(C.fieldLabel(t("groupMemberCount", { n: members.length })));
                 for (const uuid of members) {
                     const a = agentByUuid(uuid);
@@ -419,9 +429,16 @@
                         return;
                     }
                     try {
-                        const r = await T.api.createGroup({ name: n, members });
+                        let r = await T.api.createGroup({ name: n, members });
+                        const groupId = r?.group?.id;
+                        // 사진만 실패하면 알리고 방으로는 그대로 간다(방을 두 번 만들지 않게).
+                        try {
+                            r = (await photo.commit(groupId)) || r;
+                        } catch (err) {
+                            T.toast.show("error", T.api.errorText(err, t("avatarSaveFailed")));
+                        }
                         state.applyAgents(r);
-                        openChat(r?.group?.id);
+                        openChat(groupId);
                     } catch (err) {
                         T.toast.show("error", T.api.errorText(err, t("saveFailed")));
                     }
@@ -429,7 +446,7 @@
                 name.addEventListener("keydown", (e) => {
                     if (e.key === "Enter" && !e.isComposing && !create.disabled) create.click();
                 });
-                C.viewSlot.dirty = () => name.value.trim() !== "";
+                C.viewSlot.dirty = () => name.value.trim() !== "" || photo.value() !== "";
             },
         };
     }
@@ -467,6 +484,7 @@
     }
 
     function groupScreen(id) {
+        let photo = null;
         return {
             key: `group:${id}`,
             chat: id,
@@ -482,21 +500,32 @@
                 const name = T.h("input", { class: "input", type: "text", value: group.name, maxlength: "32", "aria-label": t("groupName") });
                 form.append(C.labeledRow(t("groupName"), name));
                 sec.append(form);
+                // 사진은 이름과 따로 한 묶음이다. 사진 화면에서 고른 것은 저장 버튼을 누를 때 올린다.
+                photo = C.avatarPicker(state.chatByUuid(id), () => push(photoScreen(() => photo)));
+                sec.append(photo.row);
                 const save = C.headAction(t("save"), async () => {
                     const n = name.value.trim();
                     if (!n) {
                         name.focus();
                         return;
                     }
-                    if (await saveGroup(group, { name: n })) {
-                        for (const s of stack) s.view.spDirty = null;
-                        refresh();
+                    if (n !== group.name && !(await saveGroup(group, { name: n }))) return;
+                    try {
+                        const r = await photo.commit(id);
+                        if (r) state.applyAgents(r);
+                    } catch (err) {
+                        T.toast.show("error", T.api.errorText(err, t("avatarSaveFailed")));
+                        return;
                     }
+                    T.toast.show("success", t("saved"));
+                    for (const s of stack) s.view.spDirty = null;
+                    refresh();
                 });
                 name.addEventListener("keydown", (e) => {
                     if (e.key === "Enter" && !e.isComposing && !save.disabled) save.click();
                 });
-                C.trackForm(form);
+                // 사진 화면이 위에 올라와 화면에서 빠져 있어도 고친 것을 지킨다.
+                C.viewSlot.dirty = C.trackForm(form, photo.value);
 
                 // 멤버: 누르면 그 에이전트 정보가 다음 화면에 열린다. 빼기는 길게 누르거나 우클릭한 메뉴에서 한다.
                 sec.append(C.fieldLabel(t("groupMemberCount", { n: group.members.length })));

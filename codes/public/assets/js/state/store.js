@@ -107,7 +107,7 @@
 
     // 그룹 대화방을 봇 목록과 같은 모양의 대화 상대로 만든다(uuid = 방 id). 폴더 소속도 봇과 같은 folder 필드로 둔다.
     function groupChat(g) {
-        return { uuid: g.id, id: null, name: g.name, members: g.members || [], folder: g.folder || "", isGroup: true };
+        return { uuid: g.id, id: null, name: g.name, members: g.members || [], folder: g.folder || "", avatar: g.avatar || "", isGroup: true };
     }
 
     // 목록에 보이는 대화 상대 전체: 에이전트와 그룹 대화방.

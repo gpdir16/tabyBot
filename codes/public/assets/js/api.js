@@ -179,6 +179,10 @@
         createGroup: (b) => request("/api/groups", { method: "POST", json: b }),
         updateGroup: (id, b) => request(`/api/groups/${enc(id)}`, { method: "PATCH", json: b }),
         deleteGroup: (id) => request(`/api/groups/${enc(id)}`, { method: "DELETE" }),
+        // 프로필 사진. key는 에이전트 uuid나 그룹 방 id. 응답은 /api/agents와 같은 전체 스냅샷이다.
+        setAvatar: (key, blob) => request(`/api/avatars/${enc(key)}`, { method: "PUT", raw: blob, rawType: blob.type || "application/octet-stream" }),
+        removeAvatar: (key) => request(`/api/avatars/${enc(key)}`, { method: "DELETE" }),
+        avatarPresets: () => request("/api/avatar-presets"),
 
         todos: () => request("/api/todos"),
         createTodo: (b) => request("/api/todos", { method: "POST", json: b }),
@@ -233,6 +237,13 @@
             const path = `/api/files/${enc(id)}`;
             const tk = getToken();
             return tk ? `${path}?token=${encodeURIComponent(tk)}` : path;
+        },
+        // 사진이 바뀌면 버전(v)이 바뀌어 주소도 바뀐다. img는 헤더를 못 붙이므로 토큰은 쿼리로 보낸다.
+        avatarHref: (key, version) => {
+            const qs = new URLSearchParams({ v: String(version || "") });
+            const tk = getToken();
+            if (tk) qs.set("token", tk);
+            return `/api/avatars/${enc(key)}?${qs.toString()}`;
         },
     };
 

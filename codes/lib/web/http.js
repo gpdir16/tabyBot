@@ -1,7 +1,7 @@
 // 의존성 없는 최소 HTTP 라우터: JSON API, SSE, 정적 파일 서빙, 선택적 세션 인증.
 // 구현 조각은 http/ 아래에 있다(압축, JSON, 인증, SSE, 정적 서빙).
 import { createAuthGate, presentedToken } from "./http/auth.js";
-import { readJsonBody, sendJson } from "./http/response.js";
+import { readJsonBody, readRawBody, sendJson } from "./http/response.js";
 import { createSse } from "./http/response.js";
 import { createStaticServer, headOnly } from "./http/static.js";
 
@@ -79,6 +79,7 @@ export function createRouter({ publicDir, auth = {} }) {
             query: Object.fromEntries(url.searchParams),
             token: presentedToken(url, req),
             json: () => readJsonBody(req),
+            raw: (limitBytes) => readRawBody(req, limitBytes),
             sendJson: (status, body) => sendJson(res, status, body, req),
             json200: (body) => sendJson(res, 200, body, req),
             json400: (error) => sendJson(res, 400, { error }),

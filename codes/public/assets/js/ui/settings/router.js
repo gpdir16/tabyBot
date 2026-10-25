@@ -98,6 +98,8 @@
         else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
         C.modelSub = null;
         C.efficiencySub = null;
+        C.avatarEditing = null;
+        C.agentDraft = null;
         C.keyEditing = null;
         C.credsEditing = null;
         returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;
