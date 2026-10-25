@@ -95,6 +95,7 @@ class AgentTurn {
         onTextDelta,
         onCheckpoint,
         quietEmpty,
+        silenceHint,
         maxEmptyReplyRetries,
         cacheKey,
         toolTokens,
@@ -110,6 +111,8 @@ class AgentTurn {
         this.onTextDelta = onTextDelta;
         this.onCheckpoint = onCheckpoint;
         this.quietEmpty = quietEmpty;
+        // 침묵을 되돌릴 때 붙이는 안내. 그룹 방에서는 누가 불렀는지에 맞춰 바꾼다.
+        this.silenceHint = silenceHint || SILENT_TO_USER_HINT;
         this.maxEmptyReplyRetries = maxEmptyReplyRetries;
         this.toolCallCount = 0;
         this.modelCallCount = 0;
@@ -156,7 +159,7 @@ class AgentTurn {
     rejectSilence() {
         if (this.quietEmpty || this.silenceRejected) return false;
         this.silenceRejected = true;
-        this.messages.push({ role: "user", content: SILENT_TO_USER_HINT });
+        this.messages.push({ role: "user", content: this.silenceHint });
         return true;
     }
 
@@ -304,7 +307,7 @@ class AgentTurn {
             return this.replyResult(recovered);
         }
 
-        if (this.quietEmpty) return this.result({ text: null, silent: true });
+        // 자동 턴(quietEmpty)이어도 끝내 답을 못 받은 것은 침묵이 아니라 실패다. 실패로 알려야 "할 말 없음"과 가려진다.
         return this.result({ text: null, error: "empty_reply_exhausted" });
     }
 
@@ -429,7 +432,6 @@ class AgentTurn {
             return this.replyResult(latest);
         }
 
-        if (this.quietEmpty) return this.result({ text: null, silent: true });
         return this.result({ text: null, error: "tool_rounds_exceeded" });
     }
 }
@@ -482,6 +484,7 @@ async function runAgentTurn(
         consultDepth = 0,
         onCheckpoint,
         quietEmpty = false,
+        silenceHint = null,
         todoId = null,
         userMessageMeta = null,
     } = {},
@@ -543,6 +546,7 @@ async function runAgentTurn(
         onTextDelta,
         onCheckpoint,
         quietEmpty,
+        silenceHint,
         maxEmptyReplyRetries,
         cacheKey: resolvedSessionKey,
         toolTokens,

@@ -133,6 +133,31 @@ export function removeGroup(id) {
     return { ok: true };
 }
 
+// 지워진 에이전트를 모든 방에서 뺀다(멤버, 읽은 위치, 이 방에서 쓰던 자기 세션 폴더).
+// 방 자체는 남긴다. 멤버가 하나도 남지 않은 방만 지운다(기록 폴더는 removeGroup처럼 남긴다).
+// 돌려주는 값: 그 에이전트가 있던 방들 [{ id, remaining, removed }].
+export function dropAgentFromGroups(agentUuid) {
+    const groups = readAll().slice();
+    const touched = [];
+    const next = [];
+    for (const g of groups) {
+        const members = Array.isArray(g.members) ? g.members : [];
+        if (!members.includes(agentUuid)) {
+            next.push(g);
+            continue;
+        }
+        const cursors = { ...(g.cursors || {}) };
+        delete cursors[agentUuid];
+        const updated = { ...g, members: members.filter((uuid) => uuid !== agentUuid), cursors };
+        const remaining = normalizeMembers(updated.members).length;
+        touched.push({ id: g.id, remaining, removed: remaining === 0 });
+        if (remaining > 0) next.push(updated);
+        fs.rmSync(memberDir(g.id, agentUuid), { recursive: true, force: true });
+    }
+    if (touched.length) writeAll(next);
+    return touched;
+}
+
 // 에이전트가 이 방의 화면 기록을 어디까지 읽었는지(턴 개수). 그 뒤의 발화만 다음 차례에 전한다.
 export function setGroupCursor(id, agentUuid, count) {
     const groups = readAll().slice();
@@ -153,6 +178,16 @@ export function parseMemberKey(key) {
     const m = MEMBER_KEY_RE.exec(String(key || ""));
     if (!m || !isGroupId(m[1]) || !getAgentByUuid(m[2])) return null;
     return { groupId: m[1], agentUuid: m[2] };
+}
+
+// 모든 방의 멤버 세션 키(지금 멤버인 에이전트만). 세션 압축·다시 시작·재시작 복구가 에이전트 스레드와 함께 다룬다.
+export function listMemberSessionKeys() {
+    return listGroups().flatMap((g) => g.members.map((uuid) => memberSessionKey(g.id, uuid)));
+}
+
+// 세션 키의 주인 에이전트 uuid: 에이전트 스레드면 그대로, 멤버 세션이면 그 에이전트.
+export function sessionOwnerUuid(key) {
+    return parseMemberKey(key)?.agentUuid || key;
 }
 
 export function groupDir(groupId) {

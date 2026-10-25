@@ -5,6 +5,7 @@ import { CODES_DIR } from "../paths.js";
 import { isDockerRuntime } from "../runtime.js";
 import { isConfigReady } from "../onboarding.js";
 import { recoverInterruptedTurns } from "./turns.js";
+import { memberSessionsForRecovery } from "./group-turns.js";
 import { subscribe, currentSeq } from "./bus.js";
 import * as accountAuth from "./auth.js";
 import { createRouter } from "./http.js";
@@ -60,7 +61,7 @@ export function startWebServer() {
     });
     server.listen(PORT, HOST, () => {
         console.log(`tabyBot: web UI ready at http://${HOST}:${PORT}${accountAuth.hasAccount() ? " (account required)" : ""}`);
-        if (isConfigReady()) recoverInterruptedTurns();
+        if (isConfigReady()) recoverInterruptedTurns({ memberSessions: memberSessionsForRecovery() });
     });
     return server;
 }

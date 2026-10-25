@@ -15,6 +15,7 @@ import {
     turnToMessages,
 } from "./chat-history.js";
 import { listAgents, getAgentByUuid } from "../agents-store.js";
+import { listMemberSessionKeys, sessionOwnerUuid } from "../groups-store.js";
 import { isAgentSessionRunning } from "./session.js";
 import { createLlmClient } from "../llm/client.js";
 import { tokenScale } from "../llm/token-estimate.js";
@@ -374,16 +375,19 @@ async function compressSessionHistory(llm, chatId) {
     return compressed !== null;
 }
 
-// chatIds를 생략하면 모든 봇의 활성 세션을 압축한다.
+// chatIds를 생략하면 모든 봇의 활성 세션과 그룹 방의 멤버 세션을 압축한다.
 // 반환: { compressed, skipped, failed }. 실행 중/빈 세션은 skipped로 센다.
 // onProgress(done, total): 압축 대상 중 몇 개를 끝냈는지 알린다.
 export async function compressBotSessions(chatIds = null, onProgress = null) {
     const ids =
         Array.isArray(chatIds) && chatIds.length
             ? chatIds
-            : listAgents()
-                  .map((a) => a.uuid)
-                  .filter(Boolean);
+            : [
+                  ...listAgents()
+                      .map((a) => a.uuid)
+                      .filter(Boolean),
+                  ...listMemberSessionKeys(),
+              ];
     const result = { compressed: 0, skipped: 0, failed: 0 };
     // 압축할 게 하나도 없으면 모델 클라이언트 자체를 만들지 않는다.
     const candidates = ids.filter(sessionNeedsCompression);
@@ -395,7 +399,7 @@ export async function compressBotSessions(chatIds = null, onProgress = null) {
     // 요약한다. 같은 오버라이드 조합은 클라이언트를 재사용한다.
     const clients = new Map();
     const clientFor = async (chatId) => {
-        const agent = getAgentByUuid(chatId);
+        const agent = getAgentByUuid(sessionOwnerUuid(chatId));
         const preset = agent?.modelPreset || "";
         const model = agent?.model?.trim() || "";
         const thinkingLevel = agent?.thinkingLevel || "";

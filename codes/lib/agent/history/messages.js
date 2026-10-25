@@ -1,7 +1,7 @@
 // 저장된 메시지의 모양: 내부 메시지 판별, 표식, 침묵 마커, 말하기 호출 추출, 턴 변환.
 import crypto from "node:crypto";
 import { stripReasoning } from "../../llm/messages.js";
-import { EMPTY_REPLY_HINT, QUIET_EMPTY_HINT, SILENT_TO_USER_HINT, STOP_BY_USER_HINT } from "../session.js";
+import { EMPTY_REPLY_HINT, GROUP_SILENCE_HINTS, QUIET_EMPTY_HINT, SILENT_TO_USER_HINT, STOP_BY_USER_HINT } from "../session.js";
 
 // ── 저장된 메시지의 모양: 내부 메시지 판별, 침묵 마커, 말하기 호출 추출, 턴 변환. ──
 
@@ -15,6 +15,7 @@ const INTERNAL_USER_HINTS = new Set([
     QUIET_EMPTY_HINT,
     SILENT_TO_USER_HINT,
     RECOVERY_PROMPT,
+    ...Object.values(GROUP_SILENCE_HINTS),
 ]);
 
 export const RECOVERABLE_TURN_STATUSES = new Set(["pending", "in_progress", "interrupted"]);

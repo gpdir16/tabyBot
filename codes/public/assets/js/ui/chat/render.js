@@ -117,9 +117,9 @@
     // 그룹 대화방: 에이전트가 바뀌는 첫 발화에만 이름표를 단다. 이름표를 달 에이전트 uuid, 아니면 null.
     function speakerLabelAt(visible, i) {
         const f = visible[i];
-        const speaker = f.m.role !== "user" ? f.turn.speaker || null : null;
+        const speaker = f.m.role !== "user" && f.m.role !== "notice" ? f.turn.speaker || null : null;
         const prev = i > 0 ? visible[i - 1] : null;
-        return speaker && !(prev && prev.m.role !== "user" && prev.turn.speaker === speaker) ? speaker : null;
+        return speaker && !(prev && prev.m.role !== "user" && prev.m.role !== "notice" && prev.turn.speaker === speaker) ? speaker : null;
     }
 
     // 보이는 메시지 [from, to)의 행과 날짜 구분선을 만듦.
@@ -137,9 +137,12 @@
                 frag.append(T.h("div", { class: "date-sep", role: "separator" }, [T.h("span", { text: C.fmtMsgDate(msgAt) })]));
             }
             const label = speakerLabelAt(visible, i);
-            if (f.m.role === "ask") {
+            if (f.m.role === "notice") {
+                // 방의 안내 줄(응답 실패, 상한 도달): 가운데 한 줄. 이름표와 통계는 달지 않는다.
+                el = T.h("div", { class: "thread-intro room-notice", role: "status" }, [T.h("span", { text: f.m.content || "" })]);
+            } else if (f.m.role === "ask") {
                 const stack = T.h("div", { class: "msg-stack" }, [C.buildAskCard(f.m)]);
-                if (label) stack.prepend(C.buildSpeakerLabel(label));
+                if (label) stack.prepend(C.buildSpeakerLabel(label, f.turn.speakerName));
                 el = T.h("div", { class: "msg-row assistant ask-row" }, [stack]);
             } else if (f.m.role === "user") {
                 const text = f.m.content || (f.m.isParts && !f.m.attachments?.length && !f.m.imageUrl ? t("imagePlaceholder") : "");
@@ -150,9 +153,10 @@
                     attachments: f.attachments,
                     at: msgAt,
                     speaker: label,
+                    speakerName: f.turn.speakerName,
                 });
             }
-            if (f.m.role !== "user" && f.turn.speaker) el.dataset.speaker = f.turn.speaker;
+            if (f.m.role !== "user" && f.m.role !== "notice" && f.turn.speaker) el.dataset.speaker = f.turn.speaker;
             el.dataset.midx = String(i); // 딥링크 ?m=<인덱스> 대상
             el.dataset.t = String(f.t); // 검색 결과 네비게이션: 턴/메시지 인덱스
             el.dataset.m = String(f.mi);
