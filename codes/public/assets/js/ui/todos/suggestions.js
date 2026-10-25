@@ -189,11 +189,10 @@
             .slice(0, 300);
         return T.h("div", { class: "td-sug", role: "listitem", dataset: { id: row.id } }, [
             T.h("div", { class: "td-sug-head" }, [
-                T.h("span", {
-                    class: "td-sug-avatar",
-                    text: ([...String(row.agentName || "?").trim()][0] || "?").toUpperCase(),
-                    style: `background:${T.util.safeColor(row.agentColor)}`,
-                }),
+                T.avatarFace(
+                    T.h("span", { class: "td-sug-avatar" }),
+                    (T.state.state.bots || []).find((b) => b.id === row.agentId) || { name: row.agentName, color: row.agentColor },
+                ),
                 T.h("span", { class: "td-sug-name", text: row.agentName || row.agentId || "" }),
                 T.h("span", { class: `td-sug-badge ${kind}`, text: kindLabel }),
             ]),

@@ -144,7 +144,7 @@
         // 컴퓨터 뷰가 열려 있으면 헤더/타이틀은 그 페이지가 소유한다.
         if (T.computerUI?.isOpen?.()) return;
         hdrAvatar.replaceChildren();
-        hdrAvatar.classList.remove("group-wrap");
+        hdrAvatar.classList.remove("group-wrap", "has-img");
         setHeaderInfo(false);
         if (T.todosUI?.isOpen?.()) {
             const name = t("todos");
@@ -160,14 +160,17 @@
         // 그룹 대화방에는 봇 컴퓨터가 없다. 헤더의 컴퓨터 버튼을 자리는 둔 채 감춘다.
         document.body.classList.toggle("group-chat", Boolean(bot?.isGroup));
         document.title = name ? `${name} · tabyBot` : "tabyBot";
-        hdrAvatar.classList.toggle("group-wrap", Boolean(bot?.isGroup));
-        if (bot?.isGroup) {
-            // 그룹 대화방: 멤버 아바타를 겹친 묶음. 바탕은 비워 두고 묶음이 칸을 채운다.
+        const groupWrap = Boolean(bot?.isGroup && !bot.avatar);
+        hdrAvatar.classList.toggle("group-wrap", groupWrap);
+        if (groupWrap) {
+            // 사진이 없는 그룹 대화방: 멤버 아바타를 겹친 묶음. 바탕은 비워 두고 묶음이 칸을 채운다.
             hdrAvatar.append(T.groupAvatar(T.state.groupMembers(bot)));
             hdrAvatar.style.backgroundColor = "transparent";
+        } else if (bot) {
+            T.avatarFace(hdrAvatar, bot);
         } else {
-            hdrAvatar.textContent = name ? ([...String(name).trim()][0] || "").toUpperCase() : "";
-            hdrAvatar.style.backgroundColor = bot?.color || "var(--surface-2)";
+            hdrAvatar.classList.remove("has-img");
+            hdrAvatar.style.backgroundColor = "var(--surface-2)";
         }
         hdrAvatar.style.color = "#fff";
         hdrName.textContent = name;

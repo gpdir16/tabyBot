@@ -6,6 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { SESSION_DIR, USER_DIR } from "./paths.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-file.js";
+import { removeAvatar } from "./avatars-store.js";
 import { getAgentByUuid, listAgents, listFolders } from "./agents-store.js";
 
 const GROUPS_PATH = path.join(USER_DIR, "groups.json");
@@ -70,6 +71,7 @@ function publicShape(g) {
         members: normalizeMembers(g.members),
         folder: folder && listFolders().some((f) => f.id === folder) ? folder : "",
         createdAt: g.createdAt || null,
+        avatar: typeof g.avatar === "string" ? g.avatar : "",
         cursors: g.cursors && typeof g.cursors === "object" ? { ...g.cursors } : {},
     };
 }
@@ -120,6 +122,11 @@ export function updateGroup(id, patch) {
         if (folderId && !listFolders().some((f) => f.id === folderId)) return { error: "folder_not_found" };
         next.folder = folderId;
     }
+    // 프로필 사진의 버전(내용 해시). 빈 값이면 사진이 없다(멤버 아바타를 겹쳐 보인다).
+    if (patch.avatar !== undefined) {
+        if (patch.avatar) next.avatar = String(patch.avatar);
+        else delete next.avatar;
+    }
     groups[idx] = next;
     writeAll(groups);
     return { group: publicShape(next) };
@@ -130,6 +137,7 @@ export function removeGroup(id) {
     const groups = readAll();
     if (!groups.some((g) => g.id === id)) return { error: "not_found" };
     writeAll(groups.filter((g) => g.id !== id));
+    removeAvatar(id);
     return { ok: true };
 }
 
@@ -153,6 +161,7 @@ export function dropAgentFromGroups(agentUuid) {
         touched.push({ id: g.id, remaining, removed: remaining === 0 });
         if (remaining > 0) next.push(updated);
         fs.rmSync(memberDir(g.id, agentUuid), { recursive: true, force: true });
+        if (remaining === 0) removeAvatar(g.id);
     }
     if (touched.length) writeAll(next);
     return touched;

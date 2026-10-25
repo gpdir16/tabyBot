@@ -3513,6 +3513,52 @@ body.sb-collapsed .sp-expand {
     color: var(--text);
 }
 
+/* 프로필 사진(T.avatarFace): 아바타 칸을 사진이 꽉 채운다. 색 원의 그라데이션은 걷어 낸다. */
+:is(.bot-avatar, .hdr-avatar, .msg-speaker-avatar, .td-sug-avatar, .sp-tile, .ga-dot).has-img {
+    overflow: hidden;
+    background-color: var(--surface-2);
+    background-image: none;
+}
+.avatar-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+/* 편집 화면의 사진 행: 오른쪽에 작은 미리보기와 꺾쇠. 누르면 사진 화면으로 들어간다.
+   .bot-avatar의 목록 크기(뒤쪽 규칙과 모바일 규칙)를 이기도록 두 클래스로 크기를 고정한다. */
+.avatar-row .avatar-preview-slot {
+    display: flex;
+    flex: 1;
+    justify-content: flex-end;
+}
+.avatar-preview-slot .bot-avatar.avatar-preview {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+    align-self: center;
+}
+/* 사진 화면: 맨 위 가운데에 큰 미리보기, 그 아래 동작 행 */
+.avatar-hero {
+    display: flex;
+    justify-content: center;
+    padding: var(--sp-4) 0 var(--sp-5);
+}
+.avatar-hero .bot-avatar.avatar-big {
+    width: 120px;
+    height: 120px;
+    font-size: 48px;
+}
+/* 사진 화면의 사전 준비된 사진 목록은 늦게 채워진다. 채우기 전과 사진이 하나도 없을 때는 소제목, 설명, 묶음을 감춘다. */
+.set-section > .set-group[hidden],
+.set-section > .set-desc[hidden],
+.set-section > .field-label[hidden] {
+    display: none;
+}
+
 /* 목록의 항목 행(설정의 스킬·MCP·시크릿·폴더 탭): 이름과 배지, 그 아래 설명 한 줄 */
 .ext-row {
     display: flex;

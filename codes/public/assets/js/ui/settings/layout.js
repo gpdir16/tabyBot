@@ -33,7 +33,7 @@
     ];
 
     // 편집 폼(상세에서 한 단계 더 들어간 화면)을 여는 상태들. 탭마다 하나씩 갖는다.
-    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub"];
+    const FORM_KEYS = ["folderEditing", "skillEditing", "mcpEditing", "secretEditing", "credsEditing", "modelSub", "efficiencySub", "avatarEditing"];
 
     function formOpen() {
         return FORM_KEYS.some((k) => C[k]);
@@ -119,6 +119,7 @@
         if (C.credsEditing) return t(C.credsEditing === "password" ? "authPassword" : "authUsername");
         if (C.modelSub) return C.modelSubTitle(C.modelSub);
         if (C.efficiencySub) return C.efficiencyTitle();
+        if (C.avatarEditing) return t("agentPhoto");
         return "";
     }
 
@@ -163,11 +164,7 @@
             navItem({
                 active: tab === "agents" && agentId === a.id,
                 label: a.name || "?",
-                tile: T.h("span", {
-                    class: "sp-tile round",
-                    text: ([...String(a.name || "?").trim()][0] || "?").toUpperCase(),
-                    style: /^#[0-9a-f]{6}$/i.test(String(a.color || "")) ? `background-color:${a.color}` : null,
-                }),
+                tile: T.avatarFace(T.h("span", { class: "sp-tile round" }), a),
                 onclick: () => C.navigate("agents", a.id),
             }),
         );
@@ -246,6 +243,12 @@
                     "aria-label": t("back"),
                     async onclick(e) {
                         const level = e.currentTarget.closest(".sp-view")?.dataset.level;
+                        // 사진 화면에서는 고친 것을 들고 편집 화면으로 돌아간다(묻지 않는다).
+                        if (level === "2" && C.avatarEditing) {
+                            C.avatarEditing = null;
+                            build();
+                            return;
+                        }
                         if (!(await confirmLeave())) return;
                         if (level === "2" || level === "3") {
                             closeForm();

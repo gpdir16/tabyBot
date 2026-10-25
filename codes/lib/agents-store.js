@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { SESSION_DIR, USER_DIR } from "./paths.js";
 import { readJsonFile, writeFileAtomic, writeJsonAtomic } from "./atomic-file.js";
+import { removeAvatar } from "./avatars-store.js";
 
 const DEFAULT_AGENT_ID = "main";
 export const DEFAULT_AGENT_NAME = "tabyBot";
@@ -365,6 +366,11 @@ export function updateAgent(id, patch) {
         if (patch.backgroundTasks === false) current.backgroundTasks = false;
         else delete current.backgroundTasks;
     }
+    // 프로필 사진의 버전(내용 해시). 사진 저장은 avatars-store가 하고 여기에는 버전만 남긴다. 빈 값이면 사진이 없다.
+    if (patch.avatar !== undefined) {
+        if (patch.avatar) current.avatar = String(patch.avatar);
+        else delete current.avatar;
+    }
     if (patch.folder !== undefined) {
         const folderId = String(patch.folder || "");
         if (folderId && !store.folders.some((f) => f.id === folderId)) return { error: "folder_not_found" };
@@ -388,7 +394,10 @@ export function removeAgent(id) {
     const [removed] = store.agents.splice(idx, 1);
     saveAgentsStore(store);
     removeDir(agentHomeDir(id));
-    if (removed.uuid) removeDir(path.join(SESSION_DIR, removed.uuid));
+    if (removed.uuid) {
+        removeDir(path.join(SESSION_DIR, removed.uuid));
+        removeAvatar(removed.uuid);
+    }
     return { agent: removed };
 }
 

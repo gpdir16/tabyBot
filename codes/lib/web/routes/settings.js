@@ -70,6 +70,7 @@ export function publicAgent(a) {
         colorChoice: a.color || "",
         backgroundTasks: agentBackgroundEnabled(a),
         folder: a.folder || "",
+        avatar: a.avatar || "",
         createdAt: a.createdAt ?? null,
         preview: typeof meta?.preview === "string" ? meta.preview : "",
     };

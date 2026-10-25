@@ -11,12 +11,6 @@
     const mobileConnDot = document.getElementById("mobileConnDot");
     const settingsBtn = document.getElementById("btnSettings");
 
-    // 서버 색상은 UI 팔레트 해시 값이므로 CSS 주입을 막기 위해 형식을 강제한다.
-
-    function initials(name) {
-        return ([...String(name || "?").trim()][0] || "?").toUpperCase();
-    }
-
     function snippet(text) {
         const strip = T.md?.stripPreview;
         const out = strip
@@ -186,16 +180,10 @@
         return el;
     }
 
-    // 목록 행의 아바타: 에이전트는 이름 첫 글자, 그룹 대화방은 멤버 아바타를 겹친 묶음.
-    function avatarOf(chat) {
-        if (chat?.isGroup) return T.h("span", { class: "bot-avatar group-wrap" }, [T.groupAvatar(state.groupMembers(chat))]);
-        return T.h("span", { class: "bot-avatar", text: initials(chat?.name || "?"), style: `background-color:${T.util.safeColor(chat?.color)}` });
-    }
-
     function buildHitRow(hit) {
         const bot = state.chatByUuid(hit.conversationId);
         const row = T.h("div", { class: "bot-row", role: "button", tabindex: "0" }, [
-            avatarOf(bot),
+            T.chatAvatar(bot),
             T.h("span", { class: "bot-meta" }, [
                 T.h("span", { class: "bot-line" }, [
                     T.h("span", { class: "bot-name" }, [T.h("span", { class: "bot-name-text", text: bot?.name || "" })]),
@@ -237,7 +225,7 @@
                 tabindex: "0",
             },
             [
-                avatarOf(bot),
+                T.chatAvatar(bot),
                 T.h("span", { class: "bot-meta" }, [
                     T.h("span", { class: "bot-line" }, [
                         T.h("span", { class: "bot-name" }, [
