@@ -159,5 +159,5 @@
         body.append(sec);
     }
 
-    C.buildSelfImprovement = buildSelfImprovement;
+    C.defineTab("selfimprovement", { build: buildSelfImprovement });
 })(window.Taby);

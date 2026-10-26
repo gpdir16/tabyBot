@@ -97,7 +97,7 @@
             if (approveBtn) approveBtn.disabled = busy;
             rejectBtn.disabled = busy;
         };
-        const act = async (fn, doneMsg) => {
+        const act = async (flow, doneMsg) => {
             if (actingSug.has(row.id)) return;
             const cur = C.suggestions().find((r) => r.id === row.id);
             if (!cur) {
@@ -107,22 +107,17 @@
                 });
                 return;
             }
-            if (C.saving) {
-                actingSug.add(row.id);
-                C.queuePending(() => {
-                    actingSug.delete(row.id);
-                    act(fn, doneMsg);
-                });
-                return;
-            }
             actingSug.add(row.id);
             setBusy(true);
+            let locked = false;
             try {
-                const res = await fn();
-                if (res === false) {
+                if (!(await flow.prepare())) {
                     setBusy(false);
                     return;
                 }
+                await C.lock();
+                locked = true;
+                const res = await flow.send();
                 const newId = res?.item?.id;
                 if (newId && kind === "add") C.scrollToRow = { id: newId, until: Date.now() + 1200 };
                 await C.refresh();
@@ -139,35 +134,45 @@
                     /* 실패해도 다음 이벤트나 재접속 때 다시 받는다 */
                 });
             } finally {
+                if (locked) C.unlock();
                 actingSug.delete(row.id);
             }
         };
-        const approveFlow = async () => {
-            // 삭제 제안을 승인하면 그 할 일이 지워진다. 되돌릴 수 없으므로 한 번 더 묻는다.
-            if (kind === "delete") {
-                const ok = await T.confirm({
-                    title: t("confirmDeleteTitle", { name }),
-                    text: t("confirmDeleteText"),
-                    confirmLabel: t("delete"),
-                    danger: true,
-                });
-                if (!ok) return false;
-            }
-            // 편집 중인 항목을 고치는 제안이면 편집 내용을 먼저 저장한다.
-            if (C.editId === row.targetId && C.draft && kind !== "delete" && !(await C.commitDraft())) return false;
-            const res = await T.api.approveTodo(row.id, { timezone: C.browserTz() });
-            if (kind === "delete" && C.editId === row.targetId) C.closeGoneEditor(row.targetId);
-            return res;
+        // 묻기와 고친 것 저장은 잠그기 전에(prepare), 서버에 보내기는 잠근 뒤에(send) 한다.
+        const approveFlow = {
+            async prepare() {
+                // 삭제 제안을 승인하면 그 할 일이 지워진다. 되돌릴 수 없으므로 한 번 더 묻는다.
+                if (kind === "delete") {
+                    const ok = await T.confirm({
+                        title: t("confirmDeleteTitle", { name }),
+                        text: t("confirmDeleteText"),
+                        confirmLabel: t("delete"),
+                        danger: true,
+                    });
+                    if (!ok) return false;
+                }
+                // 고치는 제안이면 그 할 일의 창에서 고친 내용을 먼저 저장한다.
+                const ed = C.eds.get(row.targetId);
+                return !(ed?.draft && kind !== "delete" && !(await C.commitDraft(ed)));
+            },
+            async send() {
+                const res = await T.api.approveTodo(row.id, { timezone: C.browserTz() });
+                // 지우는 제안이면 고친 것을 버린다(창들은 대상이 없어 닫힌다).
+                const ed = C.eds.get(row.targetId);
+                if (kind === "delete" && ed) ed.draft = null;
+                return res;
+            },
         };
         // 거절한 제안은 다시 불러올 수 없다.
-        const rejectFlow = async () => {
-            const ok = await T.confirm({
-                title: t("todosRejectConfirmTitle", { name }),
-                text: t("todosRejectConfirmText"),
-                confirmLabel: t("todosReject"),
-                danger: true,
-            });
-            return ok ? T.api.rejectTodo(row.id) : false;
+        const rejectFlow = {
+            prepare: () =>
+                T.confirm({
+                    title: t("todosRejectConfirmTitle", { name }),
+                    text: t("todosRejectConfirmText"),
+                    confirmLabel: t("todosReject"),
+                    danger: true,
+                }),
+            send: () => T.api.rejectTodo(row.id),
         };
         rejectBtn.addEventListener("click", () => act(rejectFlow, t("todosSugRejected")));
         if (approveBtn) approveBtn.addEventListener("click", () => act(approveFlow, kind === "add" ? t("todosAdded") : t("todosSugApproved")));

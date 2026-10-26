@@ -14,8 +14,8 @@
     /* ── 대화 열기 ──────────────────────────────────────────── */
     const REVALIDATE_AFTER_MS = 3000;
 
-    // 설정·할 일·컴퓨터 페이지는 자기 경로를 쓰므로, 채팅이 주소를 덮어쓰면 안 된다.
-    const OTHER_ROUTE_RE = /^\/(?:s(?:\/|$)|t(?:\/|$)|c\/)/;
+    // 할 일·컴퓨터 페이지는 자기 경로를 쓰므로, 채팅이 주소를 덮어쓰면 안 된다.
+    const OTHER_ROUTE_RE = /^\/(?:t(?:\/|$)|c\/)/;
 
     // 주소를 /a/<uuid>?m=&q= 로 맞춘다. 다른 페이지가 열려 있으면 건드리지 않는다.
     function syncUrlForChat(id, params) {
@@ -76,11 +76,10 @@
     }
 
     // 검색 결과를 클릭하면 그 대화를 열고 서버 인덱스(턴/메시지)의 행으로 이동한다.
-    // 다른 페이지(설정/할일/컴퓨터)가 열려 있어도 닫고 라우트를 채팅으로 바꾼다.
+    // 본문이 할 일/컴퓨터 페이지여도 닫고 라우트를 채팅으로 바꾼다. 옆 창들은 그대로 둔다.
     async function openMessageTarget(convId, t, m) {
         const target = `/a/${encodeURIComponent(convId)}`;
         try {
-            if (T.settingsUI.isOpen()) T.settingsUI.hide();
             if (T.todosUI?.isOpen?.()) T.todosUI.hide();
             if (T.computerUI?.isOpen?.()) T.computerUI.hide();
         } catch (err) {

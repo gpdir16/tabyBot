@@ -29,7 +29,7 @@
     // 할일(/t)은 같은 스크롤러를 할일 페이지가 쓴다. 그 사이 스크롤은 채팅 위치가 아니다.
     function chatVisible() {
         const b = document.body.classList;
-        return !b.contains("settings-route") && !b.contains("todos-route") && !b.contains("computer-route");
+        return !b.contains("todos-route") && !b.contains("computer-route");
     }
 
     // display가 none에서 block으로 바뀌어 다시 보인 직후 WebKit이 scrollTop을 0으로 리셋하며 쏘는

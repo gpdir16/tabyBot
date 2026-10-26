@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트: 설정 > 에이전트 편집. */
+/* tabyBot 웹 클라이언트: 설정 > 에이전트 편집 창("s.agent:<id>", 새 에이전트는 "s.agent:new"). */
 ((T) => {
     "use strict";
 
@@ -7,39 +7,42 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
 
-    function buildAgents(body) {
-        const key = C.editingAgent;
-        const agent = key === "__new__" ? null : C.agentList().find((a) => a.id === key);
-        if (key !== "__new__" && !agent) {
-            body.append(T.h("div", { class: "empty-note", text: "-" }));
-            return;
-        }
-        // 사진 화면에 다녀오는 동안 고친 편집 화면(입력과 고른 사진)을 그대로 둔다. 다른 에이전트면 버린다.
-        if (C.agentDraft && C.agentDraft.key !== key) C.agentDraft = null;
-        // 사진 행에서 한 단계 들어간 사진 화면. 고르거나 지우면 편집 화면에 담고 돌아간다(저장은 편집 화면에서).
-        if (C.avatarEditing && C.agentDraft) {
-            C.avatarScreen(
-                body,
-                () => C.agentDraft?.editor.photo,
-                () => {
-                    C.avatarEditing = null;
-                    C.build();
-                },
-            );
-            return;
-        }
-        C.avatarEditing = null;
-        // 고친 것이 있으면 그 편집 화면을 다시 붙이고, 없으면 지금 값으로 새로 그린다.
-        const kept = C.agentDraft?.editor;
-        if (kept?.changed()) {
-            kept.reattach();
-            body.append(kept);
-            return;
-        }
-        const editor = agentEditor(agent);
-        C.agentDraft = { key, editor };
-        body.append(editor);
+    function agentById(id) {
+        return C.agentList().find((a) => a.id === id) || null;
     }
+
+    // "new"는 새 에이전트다. 만들면 그 에이전트의 채팅으로 가고, 지우면 창을 닫는다.
+    T.windows.define("s.agent", (arg) => {
+        if (!arg) return null;
+        const id = arg === "new" ? null : arg;
+        return {
+            title: () => (id == null ? t("addAgent") : agentById(id)?.name || t("agents")),
+            on: ["bots", "settings"],
+            gone: () => id != null && !agentById(id),
+            build(body, win) {
+                const agent = id == null ? null : agentById(id);
+                if (id != null && !agent) return;
+                const editor = agentEditor(
+                    agent,
+                    {
+                        saveLabel: agent ? t("save") : t("create"),
+                        onSaved(saved) {
+                            if (!agent && saved?.uuid) {
+                                void win.close({ force: true, instant: true });
+                                T.util.pushUrl(`/a/${encodeURIComponent(saved.uuid)}`);
+                                T.app?.renderRoute();
+                                return;
+                            }
+                            win.rebuild();
+                        },
+                        onDeleted: () => void win.close({ force: true }),
+                    },
+                    win,
+                );
+                body.append(editor);
+            },
+        };
+    });
 
     // 저장 실패 사유 코드 → 사용자에게 보일 문구 키.
     const SAVE_ERROR_KEYS = {
@@ -141,8 +144,7 @@
         return key ? `${t("saveFailed")}: ${t(key)}` : T.api.errorText(err, t("saveFailed"));
     }
 
-    // 저장하고 화면을 맞춘다. 새 에이전트는 설정에 머물지 않고 그 에이전트의 채팅으로 바로 이동한다.
-    // host.onSaved가 있으면(설정 밖의 정보 창) 그쪽이 다음 화면을 정한다. photo: 프로필 사진 고르기(C.avatarPicker).
+    // 저장하고 받은 목록을 반영한 뒤 host.onSaved(저장된 에이전트)로 다음 화면을 정한다. photo: 프로필 사진 고르기(C.avatarPicker).
     async function saveAgent(agent, body, host, photo) {
         try {
             let r = agent ? await T.api.updateAgent(agent.id, body) : await T.api.createAgent(body);
@@ -155,8 +157,7 @@
             } catch (err) {
                 T.toast.show("error", T.api.errorText(err, t("avatarSaveFailed")));
             }
-            // 저장했으니 담아 둔 편집 화면은 버린다.
-            C.agentDraft = null;
+            // 저장한 상태로 다시 그린다.
             if (r && Array.isArray(r.agents)) {
                 state.mergeSettingsLocal({ agents: r.agents });
                 state.applyAgents(r);
@@ -165,18 +166,7 @@
                 if (settings) state.setSettings(settings);
                 await C.refreshBots();
             }
-            if (host?.onSaved) {
-                host.onSaved(r?.agent || agent);
-                return;
-            }
-            if (!agent && r?.agent?.uuid) {
-                T.util.pushUrl(`/a/${encodeURIComponent(r.agent.uuid)}`);
-                T.app?.renderRoute();
-                return;
-            }
-            C.editingAgent = agent?.id || C.firstAgentId();
-            C.syncPath();
-            C.build();
+            host.onSaved(r?.agent || agent);
         } catch (err) {
             T.toast.show("error", saveErrorMessage(err));
         }
@@ -194,23 +184,17 @@
                     if (next && T.chat) T.chat.open(next.uuid);
                     else if (T.chat) T.chat.open(null);
                 }
-                if (host?.onDeleted) {
-                    host.onDeleted();
-                    return;
-                }
-                C.agentDraft = null;
-                C.editingAgent = agents[0]?.id || "__new__";
-                C.syncPath();
-                C.build();
+                host.onDeleted();
             })
             .catch((err) => {
                 T.toast.show("error", err?.status === 400 ? t("lastBotTooltip") : T.api.errorText(err, t("saveFailed")));
             });
     }
 
-    // host: 설정 밖(대화 정보 창)에서 쓸 때 저장, 삭제 뒤의 동작과 사진 화면을 여는 방법. { onSaved(agent), onDeleted(), openPhoto(), saveLabel }
-    // 돌려주는 편집 화면에는 photo(사진 고르기), changed(고친 것이 있는지), reattach(다시 붙일 때 저장 버튼을 다시 건다)가 달려 있다.
-    function agentEditor(agent, host = null) {
+    // host: 저장, 삭제 뒤의 동작. { saveLabel, onSaved(agent), onDeleted() }
+    // win: 이 편집 화면을 담은 창. 사진 행을 누르면 그 오른쪽에 사진 창("photo:<win.id>")이 열린다.
+    // 돌려주는 편집 화면에는 photo(사진 고르기)와 changed(고친 것이 있는지)가 달려 있다.
+    function agentEditor(agent, host, win) {
         const isNew = !agent;
         const settings = state.state.settings || {};
         const editor = T.h("div", { class: "agent-editor" });
@@ -221,15 +205,9 @@
 
         const presetPicker = buildPresetPicker(agent);
         editor.append(...presetPicker.rows);
-        // 사진과 색상은 아바타를 정하는 한 묶음이다. 사진 행을 누르면 사진 화면으로 들어간다.
-        const photo = C.avatarPicker(agent, () => {
-            if (host?.openPhoto) {
-                host.openPhoto();
-                return;
-            }
-            C.avatarEditing = true;
-            C.build();
-        });
+        // 사진과 색상은 아바타를 정하는 한 묶음이다. 사진 행을 누르면 사진 창이 열린다.
+        const photo = C.avatarPicker(agent, () => win.open(`photo:${win.id}`));
+        win.photoPicker = photo;
         editor.append(photo.row);
         const colorPicker = buildColorPicker(agent, settings);
         editor.append(colorPicker.row);
@@ -237,7 +215,7 @@
         editor.append(...personaSection.nodes);
         const backgroundSwitch = buildBackgroundSwitch(agent);
         editor.append(...backgroundSwitch.nodes);
-        const label = host?.saveLabel || t("save");
+        const label = host.saveLabel || t("save");
         const save = async () => {
             const n = name.value.trim();
             if (!n) {
@@ -275,14 +253,8 @@
         const changed = C.trackForm(editor, () => `${colorPicker.value()}|${photo.value()}`);
         editor.photo = photo;
         editor.changed = changed;
-        editor.reattach = () => {
-            C.headAction(label, save);
-            // 다시 붙이는 중에는 아직 문서에 없으므로 isConnected를 보지 않는다(이 화면이 지금 화면이다).
-            C.viewSlot.dirty = changed;
-        };
         return editor;
     }
 
-    C.buildAgents = buildAgents;
     C.agentEditor = agentEditor;
 })(window.Taby);

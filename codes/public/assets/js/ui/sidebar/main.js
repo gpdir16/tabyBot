@@ -64,6 +64,7 @@
         state.on("turn_done", C.render);
         state.on("settings", C.render);
         state.on("conn", C.renderConn);
+        state.on("windows", C.syncSettingsBtn);
         state.on("todos", C.render);
         T.i18n.onChange(C.syncMobileNavigation);
 

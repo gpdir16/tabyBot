@@ -117,14 +117,13 @@
     }
 
     function rowEl(item, done) {
-        const editing = C.editId === item.id && C.draft;
         const job = C.isJob(item);
         const checked = done || (!job && !!item.periodDone);
-        // 편집 중인 행도 그대로 두고, 편집기는 상세 화면에 그린다(renderDetail).
+        // 세부사항 창(t:<id>)이 열린 할 일은 행을 표시해 둔다.
         const row = T.h(
             "div",
             {
-                class: `td-row${checked ? " is-done" : ""}${editing ? " is-open" : ""}`,
+                class: `td-row${checked ? " is-done" : ""}${T.windows.get(`t:${item.id}`) ? " is-open" : ""}`,
                 role: "listitem",
                 tabindex: "0",
                 dataset: { id: item.id },
@@ -142,15 +141,15 @@
             [
                 job && !done ? pauseBtn(item) : checkBtn(item, checked),
                 T.h("div", { class: "td-row-main" }, [T.h("div", { class: "td-row-title", text: item.title }), metaEl(item, done)]),
-                (!done && C.handoffEl(item, true)) || T.h("span", { class: "td-edit-cue", "aria-hidden": "true" }, [T.icon("chevron", "icon-sm")]),
+                (!done && C.handoffEl(item)) || T.h("span", { class: "td-edit-cue", "aria-hidden": "true" }, [T.icon("chevron", "icon-sm")]),
             ],
         );
-        row.addEventListener("click", () => C.openEdit(item.id));
+        row.addEventListener("click", () => C.openDetail(item.id));
         row.addEventListener("keydown", (e) => {
             if (e.target !== row) return;
             if ((e.key === "Enter" || e.key === " ") && !e.isComposing) {
                 e.preventDefault();
-                C.openEdit(item.id);
+                C.openDetail(item.id);
             }
         });
         return row;

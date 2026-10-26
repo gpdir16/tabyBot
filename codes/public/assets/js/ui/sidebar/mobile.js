@@ -61,12 +61,12 @@
     function showMobileList() {
         if (!isMobile()) return;
         setMobileChat(false);
-        if (/^(\/a\/|\/s(?:\/|$)|\/t(?:\/|$))/.test(location.pathname)) history.replaceState(null, "", `/${location.search}${location.hash}`);
+        if (/^(\/a\/|\/t(?:\/|$))/.test(location.pathname)) T.util.replaceUrl(`/${location.search}${location.hash}`);
         T.app?.renderRoute();
     }
 
     function setMobileChatFromRoute() {
-        if (isMobile()) setMobileChat(/^(\/a\/|\/s(?:\/|$)|\/c\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
+        if (isMobile()) setMobileChat(/^(\/a\/|\/c\/|\/t(?:\/|$))/.test(location.pathname), { animate: false });
     }
 
     function setMobileOpen(open) {
@@ -79,21 +79,9 @@
     }
 
     function openBot(bot) {
-        try {
-            if (T.settingsUI.isOpen()) T.settingsUI.hide();
-            if (T.todosUI?.isOpen?.()) T.todosUI.hide();
-            history.pushState(null, "", `/a/${encodeURIComponent(bot.uuid)}`);
-        } catch {
-            // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
-        }
+        if (T.todosUI?.isOpen?.()) T.todosUI.hide();
+        T.util.pushUrl(`/a/${encodeURIComponent(bot.uuid)}`);
         if (isMobile()) setMobileChat(true);
-        T.app?.renderRoute();
-    }
-
-    // 설정 페이지 내비게이션: 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다.
-    function settingsPush(agentId) {
-        const path = agentId == null ? "/s/general" : agentId === "__new__" ? "/s/agents/new" : `/s/agents/${agentId}`;
-        history.pushState(null, "", path);
         T.app?.renderRoute();
     }
 
@@ -181,7 +169,6 @@
     C.setMobileChatFromRoute = setMobileChatFromRoute;
     C.setMobileOpen = setMobileOpen;
     C.openBot = openBot;
-    C.settingsPush = settingsPush;
     C.initTouchDefer = initTouchDefer;
     C.initMobileSearch = initMobileSearch;
 })(window.Taby);

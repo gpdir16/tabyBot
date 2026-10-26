@@ -82,8 +82,6 @@
         next: "Next",
         add: "Add",
         agentSearchEmpty: "No matching agents.",
-        agentGone: "This agent was deleted.",
-        groupGone: "This group chat was deleted.",
         saved: "Saved.",
         groupThreadIntro: "A group chat with {names} has started. Mention @name to ask someone directly.",
         agentName: "Name",

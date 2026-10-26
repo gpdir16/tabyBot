@@ -20,7 +20,8 @@
     }
 
     // OAuth 디바이스 플로우 섹션: 상태 표시 + 로그인 버튼 + 대기 중 안내(코드/링크).
-    // rerender: 로그인 시작 후 화면을 다시 그릴 콜백(설정 시트는 build, 온보딩은 render).
+    // rerender: 로그인 시작 후 화면을 다시 그릴 콜백(온보딩은 render). 없으면 설정의 프로바이더 창들을 다시 그린다.
+    const refreshProfiles = () => T.windows.refresh((w) => w.kind === "s.profile", { force: true });
 
     // 대기 박스가 떠 있는 동안 서버 폴링 주기(최대 ~8초)에만 의존하지 않고
     // 클라이언트가 직접 로그인 완료를 확인한다. SSE oauth_done 유실에도 동작한다.
@@ -62,7 +63,7 @@
     }
 
     function oauthSection(kind, rerender) {
-        const refresh = rerender || C.build;
+        const refresh = rerender || refreshProfiles;
         // 설정에서는 로그인이 계정 행 아래의 동작 행이다. 온보딩(rerender를 넘긴다)은 제 배치대로 같은 줄의 버튼을 쓴다.
         const inSettings = !rerender;
         const box = T.h("div", { class: "set-section" });
@@ -165,9 +166,9 @@
     }
 
     // CLI 로그인 섹션: 로그인은 서버의 공식 CLI가 함. 여기서는 그 링크를 열게 하고 인증 코드를 받아 넘김.
-    // rerender: 화면을 다시 그릴 콜백(설정 시트는 build, 온보딩은 render).
+    // rerender: 화면을 다시 그릴 콜백(온보딩은 render). 없으면 설정의 프로바이더 창들을 다시 그린다.
     function cliLoginSection(rerender) {
-        const refresh = rerender || C.build;
+        const refresh = rerender || refreshProfiles;
         // oauthSection과 같은 배치: 설정에서는 로그인이 계정 행 아래의 동작 행, 온보딩은 같은 줄의 버튼.
         const inSettings = !rerender;
         const box = T.h("div", { class: "set-section" });

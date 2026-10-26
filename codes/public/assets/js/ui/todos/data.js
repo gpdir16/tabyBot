@@ -10,11 +10,10 @@
 
     C.loading = false;
 
-    C.intentSeq = 0;
-
     const dispatching = new Set();
 
     /* ── 라우트 / 데이터 접근 ──────────────────────────────── */
+    // /t는 할 일 목록이다. 예전 주소 /t/<id>는 목록과 그 할 일의 창(t:<id>)으로 연다(main.js의 open).
     function routeFromPath() {
         const m = /^\/t(?:\/(.*?))?\/?$/.exec(location.pathname || "");
         if (!m) return null;
@@ -27,6 +26,10 @@
 
     function items() {
         return state.state.todos || [];
+    }
+
+    function item(id) {
+        return items().find((row) => row.id === id) || null;
     }
 
     // 봇 소유 자동화 잡인가 (list !== "user")
@@ -95,14 +98,6 @@
             T.toast.show("error", humanErr(err));
         } finally {
             C.loading = false;
-            if (C.editId && C.editId !== C.pendingDeepId && !items().some((row) => row.id === C.editId)) {
-                const goneId = C.editId;
-                C.closeGoneEditor(goneId);
-                C.toastGone(goneId);
-            } else if (C.editId && !C.draft && C.editId !== C.pendingDeepId) {
-                C.beginEdit(C.editId);
-                C.focusEdit = true;
-            }
             if (isOpen()) C.build();
         }
         return ok;
@@ -125,25 +120,17 @@
     }
 
     async function toggle(item, on) {
-        if (C.saving) {
-            C.queuePending(() => {
-                if (!routeFromPath()) return;
-                const cur = items().find((row) => row.id === item.id);
-                if (!cur || !!(cur.status === "done" || cur.periodDone) === !!on) return;
-                toggle(cur, on);
-            });
+        // 이 할 일의 창에 고친 것이 있으면 먼저 저장한다.
+        const ed = C.eds.get(item.id);
+        if (ed?.draft && !(await C.commitDraft(ed))) {
+            C.redraw();
             return;
         }
-        if (C.editId === item.id && C.draft) {
-            const ok = await C.commitDraft();
-            if (!ok) {
-                C.build();
-                return;
-            }
-        }
-        if (C.editId === item.id) C.closeEditor();
-        C.saving = true;
+        await C.lock();
         try {
+            // 기다리는 사이 이미 바뀌었거나 사라졌으면 그대로 둔다.
+            const cur = C.item(item.id);
+            if (!cur || !!(cur.status === "done" || cur.periodDone) === !!on) return;
             if (on) await T.api.completeTodo(item.id);
             else await T.api.reopenTodo(item.id);
             if (on) {
@@ -160,10 +147,9 @@
             await refresh();
         } catch (err) {
             T.toast.show("error", humanErr(err));
-            C.build();
+            C.redraw();
         } finally {
-            C.saving = false;
-            C.runPending();
+            C.unlock();
         }
     }
 
@@ -171,6 +157,7 @@
     C.routeFromPath = routeFromPath;
     C.isOpen = isOpen;
     C.items = items;
+    C.item = item;
     C.isJob = isJob;
     C.suggestions = suggestions;
     C.humanErr = humanErr;

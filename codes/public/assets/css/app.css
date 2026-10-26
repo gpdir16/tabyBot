@@ -1589,18 +1589,7 @@ kbd {
     opacity: 0.35;
 }
 
-/* ── 11. 설정 페이지: 채팅 뷰와 같은 계층의 라우트 뷰(스왑 방식) ── */
-.settings-page {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    outline: none;
-}
-.settings-page[hidden] {
-    display: none;
-}
+/* ── 11. 할 일 목록 ── */
 .todos-page {
     outline: none;
 }
@@ -2250,11 +2239,6 @@ select.td-input {
 .td-spacer {
     flex: 1;
 }
-/* 모바일의 상세 화면 층. 데스크톱에서는 행이 그 자리에서 편집기로 펼쳐진다 */
-.td-detail-host {
-    display: none;
-}
-
 .td-sug {
     padding: var(--sp-3) 14px;
 }
@@ -2520,21 +2504,12 @@ select.td-input {
 .td-sug-actions .btn:active {
     transform: scale(0.97);
 }
-.td-view {
-    display: flex;
-    flex-direction: column;
-    background: var(--grouped-bg);
-}
-.td-view-body {
-    flex: 1;
-    min-height: 0;
+/* 할 일 창의 본문은 묶음들을 세로로 띄워 놓는다 */
+.td-view > .sp-body {
     display: flex;
     flex-direction: column;
     gap: var(--sp-5);
-    padding: calc(var(--hdr-h) + var(--sp-3)) var(--sp-4) calc(28px + env(safe-area-inset-bottom));
-    overflow-y: auto;
     overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
 }
 .td-offers-group {
     padding: 10px var(--sp-4);
@@ -2582,13 +2557,6 @@ select.td-input {
     transform: rotate(45deg);
 }
 
-/* 설정 라우트에서는 채팅 뷰를 숨긴다. 한 번에 한 페이지만 표시된다 */
-body.settings-route #header,
-body.settings-route #scroller,
-body.settings-route #composerWrap,
-body.settings-route #jumpLatest {
-    display: none;
-}
 body.todos-route #thread,
 body.todos-route #jumpLatest,
 body.todos-route #btnAttach {
@@ -2604,12 +2572,7 @@ body.todos-route #main {
     height: 36px;
 }
 
-/* 설정 화면: 묶음 목록. 화면 하나(.sp-view)가 페이지를 가득 채우고, 모바일에서 목록과 상세를 오갈 때는
-   두 화면이 잠깐 겹쳐 놓인 채 밀려 들어오고 나간다. */
-.settings-page {
-    position: relative;
-    background: var(--grouped-bg);
-}
+/* 창(ui/windows.js): 머리와 본문으로 이뤄진 묶음 목록 화면. 모바일은 화면을 가득 채우고, 데스크톱은 띠의 열 하나다. */
 .sp-view {
     position: absolute;
     inset: 0;
@@ -2617,9 +2580,7 @@ body.todos-route #main {
     flex-direction: column;
     background: var(--grouped-bg);
 }
-/* 설정(iOS): 목록 화면과 상세 화면 중 하나만 보인다. 상세는 목록 위로 오른쪽에서 밀려 들어온다 */
-.sp-view[data-view="root"] .sp-body,
-.sp-view[data-view="detail"] .sp-nav {
+.sp-view[hidden] {
     display: none;
 }
 /* 헤더는 채팅 헤더와 같은 재질이다: 내용 위에 떠 있고, 내용은 그 밑으로 점점 흐려지며 지나간다(.pblur). */
@@ -2663,17 +2624,8 @@ body.todos-route #main {
 .sp-action:disabled {
     opacity: 0.4;
 }
-.sp-back,
-.sp-expand {
-    display: none;
-}
 .sp-back {
     display: grid;
-}
-/* 데스크톱: 사이드바가 접힌 채로 설정을 열면 채팅 헤더의 메뉴 버튼이 숨겨져
-   다시 펼칠 수 없다. 설정 헤더에 펼치기 버튼을 대신 보인다(모바일은 sp-back 사용). */
-body.sb-collapsed .sp-expand {
-    display: inline-flex;
 }
 .sp-title {
     z-index: 1;
@@ -2687,32 +2639,11 @@ body.sb-collapsed .sp-expand {
     letter-spacing: -0.4px;
     text-align: center;
 }
-/* 데스크톱: 사이드바가 열려 있으면 제목이 경계선에 붙지 않게 띄운다.
-   접힌 상태는 펼치기 버튼 위치를 채팅 헤더의 메뉴 버튼과 같게 유지한다. */
-@media (min-width: 861px) {
-    body:not(.sb-collapsed) .sp-title {
-        margin-left: var(--sp-2);
-    }
-}
-.sp-main {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    flex-direction: column;
-}
-/* 목록: 색 타일이 붙은 항목들. 데스크톱은 왼쪽 열(선택된 항목은 강조색), 모바일은 화면 전체를 쓰는 묶음 목록 */
+/* 설정 목록 창: 색 타일이 붙은 항목들의 묶음 */
 .sp-nav {
-    flex: 1;
     display: flex;
     flex-direction: column;
     gap: var(--sp-5);
-    width: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    min-height: 0;
-    padding: calc(var(--hdr-h) + var(--sp-3)) var(--sp-4) calc(28px + env(safe-area-inset-bottom));
-    border-right: 0;
-    -webkit-overflow-scrolling: touch;
 }
 .sp-nav-group {
     display: flex;
@@ -2746,10 +2677,6 @@ body.sb-collapsed .sp-expand {
     letter-spacing: -0.2px;
     touch-action: manipulation;
     transition: background-color 320ms var(--ease);
-}
-.sp-item.active {
-    background: var(--accent);
-    color: #fff;
 }
 .sp-item-label {
     flex: 1;
@@ -2790,15 +2717,10 @@ body.sb-collapsed .sp-expand {
     background: none;
     color: var(--accent);
 }
-.sp-item.active .sp-tile.plain {
+.sp-item.accent {
     color: var(--accent);
 }
-.sp-item.accent,
-.sp-item.active.accent {
-    color: var(--accent);
-}
-.sp-item:active,
-.sp-item.active:active {
+.sp-item:active {
     background: var(--fill);
     transition: none;
 }
@@ -5430,10 +5352,7 @@ body.sb-collapsed .btn-menu {
 .td-sug-actions .btn {
     min-height: 40px;
 }
-.td-view {
-    pointer-events: auto;
-}
-.td-view-body > * {
+.td-view > .sp-body > * {
     flex: none;
 }
 .td-title-group .td-check {
@@ -5933,10 +5852,6 @@ body.group-chat #btnHdrComputer {
             transform: translateX(100%);
         }
     }
-    .sp-item.active {
-        background: none;
-        color: var(--text);
-    }
 
     /* 모바일에서는 hover 상태를 만들지 않고 탭/활성 상태만 사용한다. */
     ::-webkit-scrollbar-thumb:hover {
@@ -5995,10 +5910,8 @@ body.group-chat #btnHdrComputer {
         transition: none;
     }
 
-    /* 상세 화면(todos/detail.js의 renderDetail): 문서 맨 위 층에 놓이고, 설정 화면과 같은 머리·묶음·전환을 쓴다.
-       화면이 떠 있는 동안 밑의 할 일 목록은 왼쪽으로 30% 물러나 있다. */
-    .td-detail-host,
-    .ci-host {
+    /* 창(ui/windows.js): 문서 맨 위 층에 쌓이고, 맨 위 창만 보인다. 창이 떠 있는 동안 밑의 화면은 왼쪽으로 30% 물러나 있다. */
+    .win-host {
         --hdr-h: calc(52px + env(safe-area-inset-top));
         position: fixed;
         top: 0;
@@ -6010,37 +5923,19 @@ body.group-chat #btnHdrComputer {
         overflow: hidden;
         pointer-events: none;
     }
-    .td-detail-host[hidden],
-    .ci-host[hidden] {
+    /* 마지막 창이 닫히는 동안(sp-leaving)에는 층을 남겨 둬야 밀려 나가는 움직임이 보인다. */
+    body:not(.win-open) .win-host:not(:has(> .sp-leaving)) {
         display: none;
     }
-    body.mobile-chat.td-detail-open #main,
-    body.mobile-chat.ci-open #main,
-    body.ci-open:not(.mobile-chat) #sidebar {
+    body.mobile-chat.win-open #main,
+    body.win-open:not(.mobile-chat) #sidebar {
         transform: translateX(-30%);
     }
-    .ci-host > .sp-view:not(.sp-leaving) {
-        pointer-events: auto;
-    }
-    .td-view {
-        position: absolute;
-        inset: 0;
+    .win-host > .sp-view {
         box-shadow: -10px 0 30px rgba(0, 0, 0, 0.35);
     }
-    .td-view.sp-in-right {
-        animation: spInRight var(--nav-dur) var(--nav-ease) both;
-    }
-    .td-view.sp-out-left {
-        animation: spOutLeft var(--nav-dur) var(--nav-ease) both;
-    }
-    .td-view.sp-in-left {
-        animation: spInLeft var(--nav-dur) var(--nav-ease) both;
-    }
-    .td-view.sp-out-right {
-        animation: spOutRight var(--nav-dur) var(--nav-ease) both;
-    }
-    .td-view.sp-leaving {
-        pointer-events: none;
+    .win-host > .sp-view:not(.sp-leaving) {
+        pointer-events: auto;
     }
 }
 
@@ -6635,17 +6530,6 @@ body.viewer-open {
     }
 
     /* 1) 둥근 탐색 버튼(유리 재질 없음)과 회색 선택·호버 */
-    .sp-head .sp-expand {
-        place-items: center;
-        flex: none;
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        color: var(--text);
-    }
-    body.sb-collapsed .sp-view:not([data-view="root"]) .sp-expand {
-        display: none;
-    }
     /* 기본 규칙의 유리 재질을 걷어 낸다. 기본 규칙이 :hover 선택자까지 같이 쥐고 있으므로 여기서도 같이 적는다 */
     .sb-top .btn-icon,
     .sb-top .btn-icon:hover,
@@ -6750,14 +6634,11 @@ body.viewer-open {
         color: #fff;
         opacity: 0.4;
     }
-    #btnSettings.active,
-    .sp-item.active,
-    .sp-item.active:hover {
+    #btnSettings.active {
         background: var(--selected);
         color: var(--text);
     }
-    .sp-item.accent,
-    .sp-item.active.accent {
+    .sp-item.accent {
         color: var(--accent);
     }
 
@@ -6939,8 +6820,9 @@ body.viewer-open {
         font-size: 18px;
     }
 
-    /* 4) 열로 이어 붙는 화면. 앱 전체가 가로로 늘어선 띠이고, 넘치면 가로로 스크롤한다.
-       앞쪽 열이 뒤쪽 열보다 위에 놓인다(새 열이 앞 열 밑에서 미끄러져 나오도록). */
+    /* 4) 창이 이어 붙는 띠. 앱 전체가 가로로 늘어선 띠이고, 넘치면 가로로 스크롤한다.
+       사이드바, 본문, 창들 순서다. 앞쪽 창이 뒤쪽 창보다 위에 놓인다(새 창이 왼쪽 이웃 밑에서 미끄러져 나오도록).
+       창의 층 순서는 ui/windows.js가 정한다. */
     #app {
         overflow-x: auto;
         overflow-y: hidden;
@@ -6954,78 +6836,32 @@ body.viewer-open {
         z-index: 2;
         background: var(--bg);
     }
-    /* 설정: 목록 · 상세 · 편집 폼이 각각 열 하나다(settings/layout.js의 buildColumns) */
-    body.settings-route #main {
-        flex: 0 0 auto;
-    }
-    .settings-page {
-        flex-direction: row;
-    }
-    /* 열 폭은 flex-basis가 아니라 width로 준다. 설정 영역의 폭은 열 폭의 합으로 정해지는데,
-       WebKit은 그 합을 낼 때 flex-basis를 보지 않고 열 안 내용의 폭을 쓴다(영역이 좁아져 열이 잘린다). */
-    .sp-view {
-        --w: var(--col-w);
-        position: relative;
-        inset: auto;
-        z-index: 3;
-        flex: none;
-        width: var(--w);
-        border-right: var(--hairline) solid var(--separator);
-    }
-    .sp-view[data-level="1"],
-    .td-view[data-level="1"] {
-        z-index: 2;
-    }
-    .sp-view[data-level="2"],
-    .td-view[data-level="2"] {
-        z-index: 1;
-    }
-    .sp-view[data-level="2"] {
-        --w: 500px;
-    }
-    /* 폼 안에서 한 단계 더 들어간 화면(모델 고르기 등)은 폼 오른쪽에 열로 붙는다 */
-    .sp-view[data-level="3"] {
-        z-index: 0;
-    }
-    /* 목록 열에는 돌아갈 곳이 없다. 상세와 폼 열의 버튼은 그 열을 닫는다 */
-    .sp-view[data-view="root"] .sp-back {
-        display: none;
-    }
-    /* 할 일: 상세 · 일정/담당이 목록 오른쪽에 열로 붙는다(todos/detail.js의 renderDetailColumns) */
-    .td-detail-host,
-    .ci-host {
+    .win-host {
         position: relative;
         z-index: 1;
         display: flex;
         flex: none;
         height: 100%;
     }
-    .td-detail-host[hidden],
-    .ci-host[hidden] {
-        display: none;
-    }
-    /* 대화 정보 패널: 채팅과 맞닿는 왼쪽에 구분선을 긋는다 */
-    .ci-host {
-        border-left: var(--hairline) solid var(--separator);
-    }
-    .td-view {
+    /* 창 폭은 flex-basis가 아니라 width로 준다. 띠의 폭은 창 폭의 합으로 정해지는데,
+       WebKit은 그 합을 낼 때 flex-basis를 보지 않고 창 안 내용의 폭을 쓴다(띠가 좁아져 창이 잘린다). */
+    .win-host > .sp-view {
         --w: var(--col-w);
         position: relative;
+        inset: auto;
         flex: none;
         width: var(--w);
         height: 100%;
         border-left: var(--hairline) solid var(--separator);
     }
-    /* 열고 닫는 움직임: 열이 차지하는 자리를 0에서 제 폭까지 늘리고(열 때) 다시 0으로 줄인다(닫을 때).
-       열 자체는 제 폭 그대로 왼쪽 이웃 밑에 겹쳐 있다가 드러나므로 안의 내용은 다시 배치되지 않는다.
-       자리가 연속으로 바뀌므로, 남은 폭을 채우는 본문(할 일 목록 등)도 뚝 끊기지 않고 같이 늘고 줄어든다.
-       (transform으로 열만 움직이면 본문 폭은 처음이나 끝에 한 번에 바뀐다.) 곡선과 시간은 모바일의 화면 전환과 같다. */
-    .sp-view.col-in,
-    .td-view.col-in {
+    /* 열고 닫는 움직임: 창이 차지하는 자리를 0에서 제 폭까지 늘리고(열 때) 다시 0으로 줄인다(닫을 때).
+       창 자체는 제 폭 그대로 왼쪽 이웃 밑에 겹쳐 있다가 드러나므로 안의 내용은 다시 배치되지 않는다.
+       자리가 연속으로 바뀌므로, 남은 폭을 채우는 본문도 뚝 끊기지 않고 같이 늘고 줄어든다.
+       (transform으로 창만 움직이면 본문 폭은 처음이나 끝에 한 번에 바뀐다.) 곡선과 시간은 모바일의 화면 전환과 같다. */
+    .sp-view.col-in {
         animation: colIn var(--nav-dur) var(--nav-ease) backwards;
     }
-    .sp-view.col-out,
-    .td-view.col-out {
+    .sp-view.col-out {
         animation: colOut var(--nav-dur) var(--nav-ease) forwards;
         pointer-events: none;
     }
@@ -7042,15 +6878,12 @@ body.viewer-open {
 }
 @media (prefers-reduced-motion: reduce) {
     .sp-view.col-in,
-    .td-view.col-in,
-    .sp-view.col-out,
-    .td-view.col-out {
+    .sp-view.col-out {
         animation-duration: 1ms;
     }
 }
 
-/* 대화 정보 패널(ui/chatinfo.js): 화면은 설정과 같은 .sp-view다.
-   데스크톱은 채팅 오른쪽 열, 모바일은 할 일 상세처럼 문서 맨 위 층에서 밀려 들어온다(.td-detail-host와 같은 규칙). */
+/* 대화 정보 창(ui/chatinfo.js) */
 /* 멤버 행: 아바타, 이름과 쓰는 프리셋 */
 .ci-agent-row {
     gap: var(--sp-3);

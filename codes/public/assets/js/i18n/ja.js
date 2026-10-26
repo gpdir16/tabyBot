@@ -82,8 +82,6 @@
         next: "次へ",
         add: "追加",
         agentSearchEmpty: "該当するエージェントがいません。",
-        agentGone: "このエージェントは削除されました。",
-        groupGone: "このグループチャットは削除されました。",
         saved: "保存しました。",
         groupThreadIntro: "{names}とのグループチャットが始まりました。@名前でメンションするとそのエージェントが返信します。",
         agentName: "名前",

@@ -155,9 +155,8 @@
     }
 
     /* ── 편집 화면의 저장과 떠나기 ────────────────────────────
-       화면을 그리는 동안(layout.js의 buildView) 탭이 C.viewSlot에 채워 넣는다.
-       action: 탐색 바 오른쪽의 버튼, dirty: 입력이 처음과 달라졌는지 알려 주는 함수. */
-    C.viewSlot = {};
+       창을 그리는 동안(ui/windows.js) 화면이 T.windows.slot에 채워 넣는다.
+       action: 머리 오른쪽의 버튼, dirty: 입력이 처음과 달라졌는지 알려 주는 함수. */
 
     // 탐색 바 오른쪽의 동작 버튼(저장). run이 끝날 때까지 꺼져 있어 두 번 눌리지 않는다.
     // 저장에 성공하면 화면이 다시 그려지고, 실패하면 run이 알린 뒤 버튼이 다시 켜진다.
@@ -178,11 +177,11 @@
                 }
             },
         });
-        C.viewSlot.action = btn;
+        T.windows.slot.action = btn;
         return btn;
     }
 
-    // 폼의 입력값을 처음과 견준다. 달라지기 전에는 저장 버튼이 꺼져 있고, 달라진 채로 떠나려 하면 묻는다(layout.js의 confirmLeave).
+    // 폼의 입력값을 처음과 견준다. 달라지기 전에는 저장 버튼이 꺼져 있고, 달라진 채로 창을 닫으려 하면 묻는다.
     // 폼을 다 채운 뒤에 부른다. extra: 입력 요소가 아닌 값(색상 선택 등)을 문자열로 돌려주는 함수.
     // 화면에 붙어 있는지와 상관없이 달라졌는지만 보는 함수를 돌려준다(한 단계 들어간 화면에 가려진 폼을 지킬 때 쓴다).
     function trackForm(root, extra) {
@@ -193,7 +192,7 @@
             ]);
         const initial = read();
         const changed = () => read() !== initial;
-        C.viewSlot.dirty = () => root.isConnected && changed();
+        T.windows.slot.dirty = changed;
         return changed;
     }
 
@@ -417,6 +416,25 @@
             });
         return [label, desc, list];
     }
+
+    // 사진 창 "photo:<편집 창 id>". 편집 창이 그리는 동안 win.photoPicker에 avatarPicker를 걸어 둔다.
+    // 고르거나 지우면 편집 창의 picker에 담고 이 창을 닫는다(저장은 편집 창의 저장 버튼으로 한다).
+    // 편집 창이 닫히면 같이 닫힌다.
+    T.windows.define("photo", (parentId) => {
+        if (!parentId) return null;
+        const parent = () => T.windows.get(parentId);
+        return {
+            title: () => t("agentPhoto"),
+            gone: () => !parent(),
+            build(body, win) {
+                C.avatarScreen(
+                    body,
+                    () => parent()?.photoPicker,
+                    () => void win.close({ force: true }),
+                );
+            },
+        };
+    });
 
     C.confirmDelete = confirmDelete;
     C.switchEl = switchEl;

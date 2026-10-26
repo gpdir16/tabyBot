@@ -1,4 +1,4 @@
-/* tabyBot 웹 클라이언트: 설정 > 계정 탭. */
+/* tabyBot 웹 클라이언트: 설정 > 계정 탭("s.account")과 이름·비밀번호 편집 창("s.creds:username|password"). */
 ((T) => {
     "use strict";
 
@@ -7,18 +7,23 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
 
-    C.credsEditing = null; // 계정 편집 중인 항목: "username" | "password" | null (편집 화면은 한 단계 더 들어간 폼이다)
+    // 계정 정보는 상태 이벤트가 없다. 바꾼 뒤에는 계정 창들을 직접 다시 그린다.
+    const refreshAccount = () => T.windows.refresh((w) => w.kind === "s.account" || w.kind === "s.creds", { force: true });
 
-    function buildAccount(body) {
-        const acct = state.state.account || {};
-        const sec = T.h("div", { class: "set-section" });
+    function errorLine() {
         const err = T.h("p", { class: "onb-error hidden", role: "alert" });
         const setErr = (msg) => {
             err.textContent = msg || "";
             err.classList.toggle("hidden", !msg);
         };
-        body.append(sec);
+        return { err, setErr };
+    }
 
+    function buildAccount(body, win) {
+        const acct = state.state.account || {};
+        const sec = T.h("div", { class: "set-section" });
+        const { err, setErr } = errorLine();
+        body.append(sec);
         if (!acct.hasAccount) {
             // 아직 계정이 없다. 만들면 다음 접속부터 로그인이 필요해진다.
             const editor = T.h("div", { class: "agent-editor" });
@@ -48,7 +53,7 @@
                     T.notifications?.syncAuth?.();
                     state.state.account = { ...state.state.account, hasAccount: true, authed: true, username: r.username };
                     T.toast.show("info", t("authCreated"));
-                    C.build();
+                    refreshAccount();
                 } catch (e) {
                     setErr(T.onboarding.authErrorText(e));
                 }
@@ -58,17 +63,9 @@
             return;
         }
 
-        if (C.credsEditing) {
-            sec.append(credsForm(acct, err, setErr));
-            return;
-        }
-
-        // 저장된 계정 정보: 바꿀 수 있는 항목은 누르면 편집 화면으로 들어가는 행이다.
+        // 저장된 계정 정보: 바꿀 수 있는 항목은 누르면 편집 창이 열리는 행이다.
         const loc = { ko: "ko-KR", ja: "ja-JP" }[T.i18n.getLang()] || "en-US";
-        const edit = (which) => () =>
-            C.openForm(() => {
-                C.credsEditing = which;
-            });
+        const edit = (which) => () => win.open(`s.creds:${which}`);
         sec.append(C.navRow(t("authUsername"), acct.username, edit("username")));
         if (acct.createdAt) {
             const d = new Date(acct.createdAt);
@@ -120,12 +117,29 @@
         );
     }
 
-    // 이름·비밀번호 편집 화면. 둘 다 현재 비밀번호로 본인을 확인한다.
-    function credsForm(acct, err, setErr) {
+    // 이름·비밀번호 편집 창. 둘 다 현재 비밀번호로 본인을 확인한다. 저장하면 닫힌다.
+    T.windows.define("s.creds", (which) =>
+        which === "username" || which === "password"
+            ? {
+                  title: () => t(which === "password" ? "authPassword" : "authUsername"),
+                  // 계정이 없어졌으면(로그아웃 등) 닫는다.
+                  gone: () => !state.state.account?.hasAccount,
+                  build(body, win) {
+                      const sec = T.h("div", { class: "set-section" });
+                      sec.append(credsForm(which, win));
+                      body.append(sec);
+                  },
+              }
+            : null,
+    );
+
+    function credsForm(which, win) {
+        const acct = state.state.account || {};
+        const { err, setErr } = errorLine();
         const editor = T.h("div", { class: "agent-editor" });
         const cur = C.accountInput("password", t("authCurrentPassword"), "current-password");
         let validate, makePayload;
-        if (C.credsEditing === "username") {
+        if (which === "username") {
             const u = C.accountInput("text", t("authUsername"), "username");
             u.value = acct.username || "";
             editor.append(C.accountField(t("authUsername"), u), C.accountField(t("authCurrentPassword"), cur));
@@ -159,9 +173,9 @@
                     authed: true,
                     username: r.account?.username || acct.username,
                 };
-                C.credsEditing = null;
                 T.toast.show("info", t("authSaved"));
-                C.build();
+                void win.close({ force: true });
+                refreshAccount();
             } catch (e) {
                 setErr(T.onboarding.authErrorText(e));
             }
@@ -170,5 +184,5 @@
         return editor;
     }
 
-    C.buildAccount = buildAccount;
+    C.defineTab("account", { on: [], build: buildAccount });
 })(window.Taby);

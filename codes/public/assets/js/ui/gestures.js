@@ -2,11 +2,11 @@
    OS가 제공하는 "밀어서 뒤로/앞으로"(iOS 화면 가장자리 스와이프)는 막고, 앱이 같은 제스처를
    직접 처리한다. OS 것은 화면 전체를 스냅샷으로 밀어내지만, 앱이 처리하면 화면이 손가락을 따라 움직인다.
 
-   - 뒤로: 채팅·설정 등 메인 화면에서 오른쪽으로 민다(왼쪽 가장자리에서든, 화면 어디서든).
+   - 뒤로: 채팅·할 일 등 메인 화면에서 오른쪽으로 민다(왼쪽 가장자리에서든, 화면 어디서든).
      메인 화면이 손가락을 따라 밀려 나가고 그 밑에서 목록이 드러난다. 충분히 밀거나 튕기면
      목록으로 돌아가고, 아니면 제자리로 돌아온다.
-   - 설정의 상세 화면과 편집 폼도 한 겹씩 더 올라온 화면이다. 뒤로 밀면 맨 위 화면만 밀려 나가고 그 밑의 화면이 드러난다.
-   - 할 일의 상세 화면도 같다. 맨 앞 상세를 밀어내면 그 밑의 할 일 목록이 드러난다.
+   - 창(설정, 할 일 상세, 대화 정보: ui/windows.js)은 한 겹씩 더 올라온 화면이다. 뒤로 밀면 맨 위 창만 밀려 나가고
+     그 밑의 창(창이 하나면 채팅이나 대화 목록)이 드러난다.
    - 앞으로: 목록에서 오른쪽 가장자리를 잡고 왼쪽으로 밀면 방금 보던 화면이 따라 들어온다.
 
    데스크톱에는 화면을 밀어 넘기는 개념이 없어 아무것도 하지 않는다. */
@@ -74,9 +74,9 @@
 
     function pickMode(cur, dx) {
         if (!isMobile() || blocked()) return null;
-        // 할 일 상세 화면과 대화 정보 패널은 메인 화면 밖(맨 위 층)에 떠 있다. 그 위에서의 밀기는 그 화면을 밀어낸다.
-        for (const layer of [T.chatInfo?.gesture, T.todosUI?.gesture]) {
-            if (!layer?.canPop() || !layer.host()?.contains(cur.target)) continue;
+        // 창(ui/windows.js)은 메인 화면 밖(맨 위 층)에 떠 있다. 그 위에서의 밀기는 맨 위 창을 밀어낸다.
+        const layer = T.windows?.gesture;
+        if (layer?.canPop() && layer.host()?.contains(cur.target)) {
             if (dx <= 0) return null;
             if (cur.edge !== "left" && (cur.target.closest?.(OWN_DRAG) || scrollsX(cur.target, layer.host()))) return null;
             cur.api = layer;
@@ -84,11 +84,7 @@
         }
         if (chatOpen()) {
             if (dx <= 0) return null;
-            let back = "back";
-            if (T.settingsUI?.gesture?.canPop()) {
-                back = "panel";
-                cur.api = T.settingsUI.gesture;
-            }
+            const back = "back";
             if (cur.edge === "left") return back;
             // 화면 어디서든: 메인 화면 안이고, 가로 드래그를 스스로 쓰는 곳이 아닐 때만.
             if (!mainEl.contains(cur.target) || cur.target.closest?.(OWN_DRAG) || scrollsX(cur.target, mainEl)) return null;
@@ -255,8 +251,25 @@
         });
     }
 
+    // 미는 도중이나 자리 잡는 도중에 폭이 모바일과 데스크톱 사이를 오가면(폴더블을 펼치거나 접음) 제스처를 버린다.
+    // 손가락을 따라 걸어 둔 인라인 위치가 남으면 새 배치에서 화면이 엉뚱한 자리에 머문다.
+    function cancel() {
+        clearTimeout(settleTimer);
+        settleDone = null;
+        const views = g?.views;
+        g = null;
+        for (const el of [views?.top, views?.under, ...document.querySelectorAll(".sp-lifted")]) {
+            if (!el) continue;
+            el.style.transition = "";
+            el.style.transform = "";
+            el.classList.remove("sp-lifted");
+        }
+        clearPanels();
+    }
+
     function init() {
         initTouch();
+        mobileMq.addEventListener("change", cancel);
     }
 
     T.gestures = { init };

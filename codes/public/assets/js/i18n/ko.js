@@ -81,8 +81,6 @@
         next: "다음",
         add: "추가",
         agentSearchEmpty: "찾는 에이전트가 없어요.",
-        agentGone: "이 에이전트는 삭제되었어요.",
-        groupGone: "이 그룹 대화는 삭제되었어요.",
         saved: "저장했어요.",
         groupThreadIntro: "{names}와(과)의 그룹 대화가 시작되었어요. @이름으로 멘션하면 그 에이전트가 답해요.",
         agentName: "이름",

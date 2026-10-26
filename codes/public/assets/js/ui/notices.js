@@ -105,11 +105,7 @@
     function go(path) {
         snoozed = new Set(items.filter((n) => !n.read).map((n) => n.id));
         closeModal();
-        try {
-            if (location.pathname !== path) history.pushState(null, "", path);
-        } catch {
-            // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
-        }
+        if (location.pathname !== path) T.util.pushUrl(path);
         T.app?.renderRoute?.();
     }
 

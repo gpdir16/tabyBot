@@ -264,12 +264,9 @@
             }
             const url = ev.data?.type === "sw-navigate" ? String(ev.data.url || "") : "";
             if (!url?.startsWith("/") || url.startsWith("//")) return;
-            try {
-                if (location.pathname + location.search !== url) history.pushState(null, "", url);
-                T.app?.renderRoute?.();
-            } catch {
-                // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
-            }
+            // 창 목록(?w=)은 지금 열린 창들 그대로 둔다(util.pushUrl).
+            if (location.pathname + location.search !== T.windows.urlWith(url)) T.util.pushUrl(url);
+            T.app?.renderRoute?.();
         });
         window.addEventListener("beforeinstallprompt", (e) => {
             e.preventDefault();

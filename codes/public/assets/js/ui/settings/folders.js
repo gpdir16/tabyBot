@@ -1,4 +1,5 @@
-/* tabyBot 웹 클라이언트: 설정 > 폴더 탭. */
+/* tabyBot 웹 클라이언트: 설정 > 폴더 탭("s.folders")과 폴더 편집 창("s.folder:<id>", 새 폴더는 "s.folder:new",
+   대화 상대를 미리 고른 새 폴더는 "s.folder:new.<uuid>"). */
 ((T) => {
     "use strict";
 
@@ -6,8 +7,6 @@
     const C = T.settingsCtx;
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
-
-    C.folderEditing = null; // { mode:"new" } | { mode:"edit", id }
 
     /* ── 폴더 탭 ────────────────────────────────────────────
        폴더 만들기·이름 변경·순서·삭제·소속 에이전트 지정은 전부 여기서 한다.
@@ -30,14 +29,11 @@
         return chat.isGroup ? T.api.updateGroup(chat.uuid, { folder }) : T.api.updateAgent(chat.id, { folder });
     }
 
-    // 확인을 받고 지운다. 지운 폴더의 편집 화면이 열려 있었으면 같이 닫는다.
+    // 확인을 받고 지운다. 지운 폴더의 편집 창은 대상이 사라져 같이 닫힌다.
     async function deleteFolder(f) {
         if (!(await C.confirmDelete(f.name))) return;
         try {
-            const r = await T.api.deleteFolder(f.id);
-            if (C.folderEditing?.id === f.id) C.folderEditing = null;
-            applyFolderResult(r);
-            C.build();
+            applyFolderResult(await T.api.deleteFolder(f.id));
         } catch (err) {
             T.toast.show("error", T.api.errorText(err, t("saveFailed")));
         }
@@ -53,7 +49,7 @@
             .then(applyFolderResult)
             .catch((err) => {
                 T.toast.show("error", T.api.errorText(err, t("saveFailed")));
-                C.build();
+                T.windows.refresh((w) => w.kind === "s.folders", { force: true });
             });
     }
 
@@ -104,7 +100,7 @@
         handle.addEventListener("pointercancel", end);
     }
 
-    function folderRow(f, idx, total) {
+    function folderRow(f, idx, total, win) {
         const members = folderMembers(f.id);
         // 순서 손잡이: 폴더가 둘 이상일 때만 둔다. 키보드로는 행의 메뉴(위로·아래로 이동)로 옮긴다.
         const grip = total > 1 ? T.h("span", { class: "drag-handle", "aria-hidden": "true" }, [T.icon("grip")]) : null;
@@ -112,10 +108,7 @@
             name: f.name,
             sub: members.length ? members.map((a) => a.name).join(", ") : t("folderNoAgents"),
             trailing: grip,
-            onclick: () =>
-                C.openForm(() => {
-                    C.folderEditing = { mode: "edit", id: f.id };
-                }),
+            onclick: () => win.open(`s.folder:${f.id}`),
             menu: () =>
                 [
                     idx > 0 ? { label: t("folderMoveUp"), onSelect: () => reorder(idx, idx - 1) } : null,
@@ -132,15 +125,29 @@
         return row;
     }
 
-    function folderForm() {
-        const editing = C.folderEditing;
-        const isNew = editing.mode === "new";
-        const folder = isNew ? null : folderList().find((f) => f.id === editing.id);
-        if (!isNew && !folder) {
-            // 다른 기기에서 지워진 폴더면 목록으로 돌아간다.
-            C.folderEditing = null;
-            return T.h("div", { class: "set-desc", text: t("foldersEmpty") });
-        }
+    // 편집 창. arg: 폴더 id, "new", "new.<대화 상대 uuid>"(그 상대를 미리 고른 새 폴더).
+    T.windows.define("s.folder", (arg) => {
+        if (!arg) return null;
+        const isNew = arg === "new" || arg.startsWith("new.");
+        const chatUuid = arg.startsWith("new.") ? arg.slice(4) : null;
+        const find = () => folderList().find((f) => f.id === arg) || null;
+        return {
+            title: () => (isNew ? t("folderNew") : find()?.name || t("folders")),
+            on: ["folders", "bots"],
+            // 다른 기기에서 지워졌다.
+            gone: () => !isNew && !find(),
+            build(body, win) {
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                const folder = isNew ? null : find();
+                if (!isNew && !folder) return;
+                sec.append(folderForm(win, folder, chatUuid));
+            },
+        };
+    });
+
+    function folderForm(win, folder, chatUuid) {
+        const isNew = !folder;
         const form = T.h("div", { class: "agent-editor" });
 
         const nameInput = T.h("input", {
@@ -165,7 +172,7 @@
             const inThis = !isNew && (c.folder || "") === folder.id;
             const other = !inThis && c.folder && names.has(c.folder) ? names.get(c.folder) : "";
             const box = T.h("input", { type: "checkbox", "aria-label": c.name });
-            box.checked = inThis || (isNew && editing.chatUuid === c.uuid);
+            box.checked = inThis || (isNew && chatUuid === c.uuid);
             picks.set(c.uuid, { chat: c, box, was: inThis });
             list.append(
                 T.h("label", { class: "folder-agent" }, [
@@ -203,9 +210,8 @@
                         last = await setChatFolder(chat, box.checked ? id : "");
                     }
                 }
-                C.folderEditing = null;
                 if (last) applyFolderResult(last);
-                C.build();
+                void win.close({ force: true });
             } catch (err) {
                 // 일부만 저장됐을 수 있다. 거기까지의 상태를 반영하고 폼은 열어 둔다.
                 if (last) applyFolderResult(last);
@@ -214,44 +220,30 @@
         });
         if (!isNew) form.append(C.actionRow(t("delete"), () => deleteFolder(folder), { danger: true, own: true }));
         C.trackForm(form);
-        // 모바일에서는 자동 포커스를 하지 않는다. 설정 패널이 미끄러져 들어오는 중에 포커스하면
-        // iOS가 입력을 보이게 하려고 화면을 밀어 전환이 깨지고 패널이 반쯤 잘린다.
-        if (isNew && !window.matchMedia("(max-width: 860px)").matches) requestAnimationFrame(() => nameInput.focus());
+        // 모바일에서는 자동 포커스를 하지 않는다. 창이 미끄러져 들어오는 중에 포커스하면
+        // iOS가 입력을 보이게 하려고 화면을 밀어 전환이 깨지고 창이 반쯤 잘린다.
+        if (isNew && !T.windows.isMobile()) requestAnimationFrame(() => nameInput.focus());
         return form;
     }
 
-    function buildFolders(body) {
+    function buildFolders(body, win) {
         const s = state.state.settings || {};
         const sec = T.h("div", { class: "set-section" });
-        if (!C.folderEditing) sec.append(T.h("div", { class: "set-desc", text: t(s.foldersInList ? "foldersDescInList" : "foldersDesc") }));
-        if (C.folderEditing) {
-            sec.append(folderForm());
-            body.append(sec);
-            return;
-        }
+        sec.append(T.h("div", { class: "set-desc", text: t(s.foldersInList ? "foldersDescInList" : "foldersDesc") }));
         const folders = folderList();
         if (!folders.length) sec.append(T.h("div", { class: "set-desc", text: t("foldersEmpty") }));
         else {
             folders.forEach((f, i) => {
-                sec.append(folderRow(f, i, folders.length));
+                sec.append(folderRow(f, i, folders.length, win));
             });
         }
-        sec.append(
-            C.actionRow(
-                t("folderNew"),
-                () =>
-                    C.openForm(() => {
-                        C.folderEditing = { mode: "new" };
-                    }),
-                { icon: "plus" },
-            ),
-        );
+        sec.append(C.actionRow(t("folderNew"), () => win.open("s.folder:new"), { icon: "plus" }));
         sec.append(T.h("hr", { class: "divider" }));
         // 폴더를 탭 대신 목록 안의 묶음으로 보기
         sec.append(
             T.h("div", { class: "set-row" }, [
                 T.h("div", { class: "set-label", text: t("foldersInList") }),
-                C.switchEl(s.foldersInList, (v) => C.put({ foldersInList: v }).then(() => C.build()), t("foldersInList")),
+                C.switchEl(s.foldersInList, (v) => C.put({ foldersInList: v }), t("foldersInList")),
             ]),
             T.h("div", { class: "set-desc", text: t("foldersInListDesc") }),
         );
@@ -270,5 +262,5 @@
     }
 
     C.folderList = folderList;
-    C.buildFolders = buildFolders;
+    C.defineTab("folders", { on: ["settings", "folders", "bots"], build: buildFolders });
 })(window.Taby);
