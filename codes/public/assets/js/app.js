@@ -354,7 +354,7 @@
         if (location.protocol !== "file:") scheduleOfflineRetry();
     }
 
-    /* ── URL 라우팅: /a/<uuid>(채팅) · /s/<탭>(설정 페이지) ── */
+    /* ── URL 라우팅: /a/<uuid>(채팅) · /t(할 일) · /c/<uuid>(컴퓨터). 옆 창들은 ?w= ── */
     function botUuidFromPath() {
         const m = /^\/a\/([0-9a-f-]{36})$/.exec(location.pathname || "");
         return m ? m[1] : null;
@@ -378,15 +378,29 @@
         T.util.replaceUrl(location.pathname + (query ? `?${query}` : "") + location.hash);
     }
 
-    // 현재 경로가 설정 페이지(/s/...)인지 해석한다.
-    function settingsRoute() {
-        return T.settingsUI.routeFromPath();
+    // 예전 설정 주소(/s, /s/<탭>, /s/agents/<id>): 설정은 이제 창이다. 본문은 첫 화면(가장 최근 대화)으로 두고 그 창들을 연다.
+    // 창들을 복원하기 전(부팅)이면 주소의 창 목록에 더해 두고, 복원한 뒤(뒤로 가기로 예전 기록에 닿음)면 바로 연다.
+    function adoptLegacySettingsPath() {
+        const ids = T.settingsUI.legacyIds(location.pathname);
+        if (!ids) return;
+        const cur = state.state.currentId;
+        const path = cur && state.chatByUuid(cur) ? `/a/${encodeURIComponent(cur)}` : "/";
+        if (booted) {
+            T.util.replaceUrl(path);
+            let from = null;
+            for (const id of ids) from = T.windows.open(id, { from }) || from;
+            return;
+        }
+        // 창 목록을 직접 정하므로 util.replaceUrl(지금 창들로 덮어쓴다)을 거치지 않는다.
+        try {
+            history.replaceState(null, "", T.windows.urlWith(path, [...T.windows.idsFrom(location.search), ...ids]));
+        } catch {
+            // 주소 갱신이 막힌 환경에서는 그대로 둔다
+        }
     }
 
     function openSettings(tab) {
-        const returnPath = location.pathname + location.search + location.hash;
-        history.pushState(null, "", `/s/${tab || "model"}`);
-        T.settingsUI.open({ tab: tab || "model", fromUrl: true, returnPath });
+        T.settingsUI.open(tab || "model");
     }
 
     // ?token=을 로그인 토큰으로 받아 주소에서 지운다. 서버가 거절하면 이전 토큰으로 되돌린다.
@@ -477,6 +491,7 @@
         }
 
         const token = ++bootToken;
+        adoptLegacySettingsPath();
         // 경로가 가리키는 대화(없으면 가장 최근 대화)는 스냅샷 표시 전에 잡아 둔다.
         // chat.open이 주소를 /a/<uuid>로 바꾸므로 그 뒤에는 "경로 없이 열었다"를 알 수 없다.
         const pathBot = botUuidFromPath();
@@ -502,6 +517,8 @@
 
             await showRoute(pathBot, token);
             if (token !== bootToken) return;
+            // 주소에 담긴 창들을 연다. 창은 에이전트·설정·할 일을 보고 그리므로 서버 데이터를 받은 뒤에 연다.
+            T.windows.restore();
             consumeParams(urlParams());
 
             T.events.connect({ fresh: true });
@@ -509,8 +526,7 @@
             // 앱을 닫아 둔 사이에 쌓인 시스템 알림을 모달로 띄운다.
             T.notices?.refresh();
 
-            // 설정이 불완전하면 온보딩을 연다. 사용자가 /s/*로 직접 들어온 경우에는
-            // 위에서 복원한 설정 페이지를 유지한다.
+            // 설정이 불완전하면 온보딩을 연다. 주소로 설정 창을 열고 들어온 경우에는 그 창을 그대로 둔다.
             if (bs.configured === false && !T.settingsUI.isOpen() && !T.onboarding.isSkipped()) T.onboarding.wizard();
             // 모바일 브라우저로 처음 열었으면 홈 화면에 추가하는 방법을 한 번 안내한다(온보딩 중에는 다음 기회로 미룬다).
             else T.notifications?.offerInstallGuide?.();
@@ -527,7 +543,6 @@
     // 현재 경로에 맞는 화면을 띄운다. 스냅샷 표시와 서버 응답 반영 양쪽에서 호출된다.
     // 이미 맞는 화면이 떠 있으면 다시 열지 않는다.
     async function showRoute(pathBot, token) {
-        const sr = settingsRoute();
         const tr = T.todosUI?.routeFromPath?.();
         const cr = T.computerUI?.routeFromPath?.();
         // 경로가 가리키는 대화: 에이전트 스레드나 그룹 대화방. 컴퓨터 페이지는 에이전트만 가진다.
@@ -543,17 +558,16 @@
                 void T.chat.refreshCurrent?.();
             }
             if (token !== bootToken) return;
-            if (pathBot || sr || cr) T.sidebar.showChat?.();
+            if (pathBot || cr) T.sidebar.showChat?.();
             else if (!tr) T.sidebar.showList?.();
-        } else if (!sr && !tr && !cr) {
-            history.replaceState(null, "", "/");
+        } else if (!tr && !cr) {
+            T.util.replaceUrl("/");
         }
 
-        if (sr) {
-            if (!T.settingsUI.isOpen()) T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
-        } else if (tr) {
+        if (tr) {
             T.sidebar.showChat?.();
-            if (!T.todosUI.isOpen?.()) T.todosUI.open({ id: tr.id || null, fromUrl: true });
+            // /t/<id>는 목록이 이미 떠 있어도 그 할 일 창을 연다(서버 응답 뒤에 다시 불려 최신 목록으로 찾는다).
+            if (tr.id || !T.todosUI.isOpen?.()) T.todosUI.open({ id: tr.id || null, fromUrl: true });
         }
         if (cr && !T.computerUI.isOpen?.()) T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
     }
@@ -582,23 +596,12 @@
         idle(next);
     }
 
-    /* ── 공용 라우터: 현재 경로를 해석해 화면을 렌더링한다 ──
-       채팅(/a/<uuid>)과 설정(/s/<탭>)이 같은 로직으로 구동된다. */
+    /* ── 공용 라우터: 현재 경로를 해석해 본문을 그린다 ──
+       경로는 본문(대화, 할 일 목록, 컴퓨터)만 정한다. 옆 창들은 주소의 w로 T.windows가 맞추고, 본문을 바꿔도 그대로 둔다. */
     function renderRoute() {
-        const sr = T.settingsUI.routeFromPath();
-        if (sr) {
-            // 설정 라우트: 모바일에서도 /a/와 마찬가지로 메인 패널을 표시한다.
-            T.chatInfo?.close?.(true);
-            T.todosUI?.hide?.();
-            T.computerUI?.hide?.();
-            T.sidebar?.showChat?.();
-            T.settingsUI.open({ tab: sr.tab, agentId: sr.agentId, fromUrl: true });
-            return;
-        }
+        adoptLegacySettingsPath();
         const tr = T.todosUI?.routeFromPath?.();
         if (tr) {
-            T.settingsUI.hide();
-            T.chatInfo?.close?.(true);
             T.computerUI?.hide?.();
             T.sidebar?.showChat?.();
             T.todosUI.open({ id: tr.id || null, fromUrl: true });
@@ -608,15 +611,12 @@
         const cr = T.computerUI?.routeFromPath?.();
         if (cr) {
             // 봇 컴퓨터 라우트: 화면 스트림 + PTY 터미널 페이지.
-            T.settingsUI.hide();
-            T.chatInfo?.close?.(true);
             T.todosUI?.hide?.();
             T.sidebar?.showChat?.();
             T.computerUI.open({ uuid: cr.uuid, fromUrl: true });
             T.sidebar?.syncRoute?.();
             return;
         }
-        T.settingsUI.hide();
         T.todosUI?.hide?.();
         T.computerUI?.hide?.();
         const uuid = botUuidFromPath();
@@ -628,14 +628,9 @@
         T.sidebar?.syncRoute?.();
     }
 
-    // 뒤/앞 탐색: 경로로 화면 복원
-    window.addEventListener("popstate", (e) => {
+    // 뒤/앞 탐색: 경로로 본문 복원(창 목록이 바뀐 탐색은 T.windows가 먼저 받아 처리한다)
+    window.addEventListener("popstate", () => {
         if (!booted) return;
-        // 설정에 저장하지 않은 입력이 있으면 주소를 되돌려 놓고 버릴지 묻는다. 뒤따르는 popstate 처리(사이드바)도 멈춘다.
-        if (T.settingsUI.holdPop()) {
-            e.stopImmediatePropagation();
-            return;
-        }
         renderRoute();
     });
 
@@ -644,7 +639,7 @@
         const tag = document.activeElement?.tagName;
         const typing = tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable;
         if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
-            if (T.settingsUI.routeFromPath() || T.todosUI?.routeFromPath?.() || T.computerUI?.routeFromPath?.()) return;
+            if (T.todosUI?.routeFromPath?.() || T.computerUI?.routeFromPath?.()) return;
             const composer = document.getElementById("composerInput");
             if (!composer || composer.offsetParent === null) return;
             e.preventDefault();

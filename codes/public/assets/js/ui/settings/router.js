@@ -1,4 +1,6 @@
-/* tabyBot 웹 클라이언트: 설정 페이지의 라우팅(열기/닫기/경로 동기화)과 서버 저장. */
+/* tabyBot 웹 클라이언트: 설정 창 열기와 서버 저장.
+   설정의 목록·탭·편집 화면은 모두 창(ui/windows.js)이다. 창 id는 "s"(목록), "s.<탭>", "s.agent:<id>" 등이고,
+   종류마다 그 화면을 그리는 모듈(general.js, models.js, …)이 등록한다. */
 ((T) => {
     "use strict";
 
@@ -6,241 +8,54 @@
     const C = T.settingsCtx;
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
-    const page = document.getElementById("settingsPage");
-    const mobileMq = window.matchMedia("(max-width: 860px)");
-    const isMobile = () => mobileMq.matches;
-
-    C.openTab = null; // "root"(모바일 목록) 또는 탭 id
-
-    C.viewTimer = 0;
-
-    C.viewBusy = false; // 화면이 밀려 움직이는 중(전환 애니메이션·뒤로 제스처). 이 동안에는 다시 그리지 않고 미뤄 둔다
-
-    C.rebuildPending = false;
-
-    C.rootScroll = 0; // 목록을 떠날 때의 스크롤 위치(돌아오면 되살린다)
-
-    let returnPath = null; // 설정 진입 전 경로(닫을 때 돌아갈 페이지)
-
-    let pushed = false; // open()에서 히스토리 항목을 push했는지
-
-    let mobileFromList = false; // 모바일 목록 화면에서 열었는지
-
-    C.editingAgent = null; // 에이전트 페이지 id ('__new__' = 추가)
 
     let putChain = Promise.resolve();
 
-    /* ── 경로 라우팅(/s/<탭>, /s/agents/<id>) ───────────── */
-    const TABS = ["general", "folders", "notices", "model", "account", "efficiency", "selfimprovement", "skills", "mcp", "secrets", "agents"];
+    const TABS = ["general", "folders", "notices", "model", "account", "efficiency", "selfimprovement", "skills", "mcp", "secrets"];
 
-    // 현재 경로를 설정 라우트로 해석한다. /s나 /s/…가 아니면 null.
-    function routeFromPath() {
-        if (/^\/s\/?$/.test(location.pathname || "")) return { tab: "root", agentId: null };
-        const m =
-            /^\/s\/(general|folders|groups|notices|provider|model|account|efficiency|selfimprovement|skills|mcp|secrets|agents)(?:\/([^/]+))?$/.exec(
-                location.pathname || "",
-            );
-        if (!m) return null;
-        // 그룹 대화방은 이제 설정이 아니라 대화 정보 창에서 고친다. 예전 주소는 설정 첫 화면으로 연다.
-        if (m[1] === "groups") return { tab: "root", agentId: null };
-        // 프로바이더 탭은 모델과 프로바이더 탭으로 합쳐졌다. 예전 주소는 그 탭으로 연다.
-        const tab = m[1] === "provider" ? "model" : m[1];
-        let agentId = null;
-        if (tab === "agents") {
-            if (m[2] === "new") agentId = "__new__";
-            else if (m[2]) agentId = agentList().some((a) => a.id === m[2]) ? m[2] : firstAgentId() || "__new__";
-            else agentId = firstAgentId() || "__new__";
-        }
-        return { tab, agentId };
+    // 설정 창인지(목록 "s"와 "s."로 시작하는 종류).
+    function isSettingsWin(win) {
+        return win.kind === "s" || win.kind.startsWith("s.");
     }
 
-    // 탭/에이전트를 /s/ 경로로 만든다.
-    function pathFor(tab, agent) {
-        if (tab === "root") return "/s";
-        if (tab === "agents") return `/s/agents/${agent === "__new__" ? "new" : agent}`;
-        return `/s/${tab || "general"}`;
+    // 열 창의 id. o: { tab, agentId('__new__'면 새 에이전트), folderId, folderNew, folderChat }
+    function idFor(o) {
+        if (o.agentId) return `s.agent:${o.agentId === "__new__" ? "new" : o.agentId}`;
+        if (o.tab === "folders" && o.folderNew) return `s.folder:new${o.folderChat ? `.${o.folderChat}` : ""}`;
+        if (o.tab === "folders" && o.folderId) return `s.folder:${o.folderId}`;
+        if (TABS.includes(o.tab)) return `s.${o.tab}`;
+        return "s";
     }
 
-    // 탭/에이전트 전환: 현재 설정 페이지의 경로만 교체한다.
-    function syncPath() {
-        T.util.replaceUrl(pathFor(C.openTab, C.editingAgent) + location.search + location.hash, history.state);
-    }
-
-    /* ── 렌더링(뷰 레이어): 히스토리는 호출자/라우터가 담당한다 ──
-       채팅의 T.chat.open과 동일한 역할: 경로에 맞게 화면을 그린다. */
+    // 설정 창 하나를 연다. opt: 없음(목록), 탭 이름, 또는 { tab, agentId, folderId, folderNew, folderChat, from }.
+    // 이미 열려 있으면 그 창을 보인다. 연 창을 돌려준다.
     function open(opt) {
-        // open({tab, agentId}) 또는 open("model") 형태 모두 지원
         const o = typeof opt === "object" && opt ? opt : { tab: opt };
-        let tab, agent;
-        if (o.agentId != null && o.agentId !== "" && (!o.tab || o.tab === "agents")) {
-            tab = "agents";
-            agent = o.agentId;
-        } else if (TABS.includes(o.tab)) {
-            tab = o.tab;
-            agent = o.tab === "agents" ? o.agentId || firstAgentId() || "__new__" : null;
-        } else {
-            // 탭을 정하지 않고 열면 모바일은 목록, 데스크톱은 목록 옆에 첫 탭까지 연다.
-            // 목록만 여는 것(/s)은 어디서든 된다. 데스크톱에서는 상세 열을 닫은 상태다.
-            tab = o.tab === "root" || isMobile() ? "root" : "general";
-            agent = null;
-        }
-        // 설정이 닫혀 있다가 열리는 것이면 메인 패널째로 밀려 들어오므로 안에서는 전환하지 않는다.
-        if (page.hidden) page.replaceChildren();
-        C.openTab = tab;
-        C.editingAgent = agent;
-        C.skillEditing = null;
-        C.mcpEditing = null;
-        C.secretEditing = null;
-        // open({tab:"folders", folderId}). 사이드바 폴더 탭의 "폴더 편집"이 곧장 편집 폼을 연다.
-        // open({tab:"folders", folderNew, folderChat}). "폴더에 추가…" 안의 "새 폴더"가 그 대화 상대(uuid)를 미리 고른 만들기 폼을 연다.
-        C.folderEditing = null;
-        if (tab === "folders" && o.folderNew) C.folderEditing = { mode: "new", chatUuid: o.folderChat || null };
-        else if (tab === "folders" && o.folderId) C.folderEditing = { mode: "edit", id: o.folderId };
-        C.modelSub = null;
-        C.efficiencySub = null;
-        C.avatarEditing = null;
-        C.agentDraft = null;
-        C.keyEditing = null;
-        C.credsEditing = null;
-        returnPath = o.returnPath != null ? o.returnPath : /^\/s(?:\/|$)/.test(location.pathname) ? returnPath || "/" : location.pathname;
-        const wasChatOpen = document.body.classList.contains("mobile-chat");
-        T.todosUI?.hide?.();
-        T.sidebar?.showChat();
-        mobileFromList = !wasChatOpen && document.body.classList.contains("mobile-chat");
-        pushed = false;
-        if (!o.fromUrl) {
+        return T.windows.open(idFor(o), { from: o.from });
+    }
+
+    // 예전 설정 주소(/s, /s/<탭>, /s/agents/<id>)가 가리키던 창들. 설정 주소가 아니면 null.
+    function legacyIds(pathname) {
+        const path = pathname || "";
+        if (/^\/s\/?$/.test(path)) return ["s"];
+        const m = /^\/s\/([a-z]+)(?:\/([^/]+))?\/?$/.exec(path);
+        if (!m) return null;
+        // 그룹 대화방은 이제 대화 정보 창에서 고친다. 예전 주소는 설정 목록만 연다.
+        if (m[1] === "groups") return ["s"];
+        if (m[1] === "agents") {
+            if (!m[2]) return ["s"];
+            let id = m[2];
             try {
-                history.pushState(null, "", pathFor(C.openTab, C.editingAgent));
-                pushed = true;
+                id = decodeURIComponent(id);
             } catch {
-                // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
+                return ["s"];
             }
+            return ["s", `s.agent:${id}`];
         }
-        const wasHidden = page.hidden;
-        C.build();
-        page.hidden = false;
-        document.body.classList.add("settings-route");
-        // 숨겨진 채로 그린 열은 자리를 잴 수 없었다. 보이게 한 뒤 맨 오른쪽 열을 창 안으로 옮긴다(데스크톱).
-        if (wasHidden && !isMobile()) T.revealColumn([...page.querySelectorAll(".sp-view:not(.col-out)")].pop());
-        T.sidebar?.syncRoute?.();
-        page.setAttribute("aria-label", t("settings"));
-        page.focus({ preventScroll: true });
-    }
-
-    function close(options) {
-        const o = options || {};
-        if (o.updateUrl !== false) {
-            if (pushed) {
-                pushed = false;
-                history.back();
-                return;
-            }
-            T.util.replaceUrl((returnPath || "/") + location.hash);
-        }
-        pushed = false;
-        returnPath = null;
-        page.hidden = true;
-        document.body.classList.remove("settings-route");
-        // OAuth 대기 중 페이지를 닫아도 폴링이 백그라운드로 계속 도는 걸 막는다.
-        // oauthPending은 유지. 다시 열면 oauthSection이 폴링을 재개한다.
-        C.stopOauthPoll();
-        C.openTab = null;
-        C.forgetModelLists();
-        C.skillsCache = null;
-        C.skillsLoading = false;
-        C.skillsFailed = false;
-        C.mcpCache = null;
-        C.mcpLoading = false;
-        C.mcpFailed = false;
-        C.secretsCache = null;
-        C.secretsLoading = false;
-        C.secretsFailed = false;
-        C.skillEditing = null;
-        C.mcpEditing = null;
-        C.secretEditing = null;
-        C.folderEditing = null;
-        clearTimeout(C.viewTimer);
-        C.viewBusy = false;
-        C.rebuildPending = false;
-        C.rootScroll = 0;
-        page.replaceChildren();
-        if (mobileFromList) {
-            mobileFromList = false;
-            T.sidebar?.showList();
-        }
-        T.sidebar?.syncRoute?.();
-    }
-
-    /* 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링한다. */
-    async function navigate(tab, agentId) {
-        // 이미 열려 있는 항목을 다시 눌렀다(데스크톱은 목록 열이 늘 보인다). 다시 그리면 열어 둔 편집 폼이 닫힌다.
-        if (tab === C.openTab && (agentId || null) === (C.editingAgent || null)) return;
-        if (!(await C.confirmLeave())) return;
-        try {
-            if (C.openTab === "root") {
-                // 목록에서 상세로: 항목을 쌓아 두면 뒤로 가기가 목록으로 돌아온다.
-                // 바로 밑에 목록이 있다는 표시를 항목에 남긴다(앞으로 가기·새로 고침 뒤에도 맞게).
-                C.rootScroll = page.querySelector(".sp-nav")?.scrollTop || 0;
-                history.pushState({ spFromRoot: true }, "", pathFor(tab, agentId));
-            } else {
-                // 상세에서 다른 상세로: 기록을 쌓지 않는다. 쌓으면 뒤로 가기가 지나온 항목을 하나씩 다시 연다.
-                history.replaceState(history.state, "", pathFor(tab, agentId));
-            }
-        } catch {
-            // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
-        }
-        T.app?.renderRoute();
-    }
-
-    // 상세에서 목록으로(모바일). 목록에서 쌓은 항목이면 그 항목을 걷어 내고, 아니면 경로만 바꾼다.
-    function popToRoot() {
-        if (history.state?.spFromRoot) {
-            history.back();
-            return;
-        }
-        T.util.replaceUrl(`/s${location.search}${location.hash}`);
-        T.app?.renderRoute();
-    }
-
-    /* 페이지를 내린다. 히스토리/모바일 전환은 라우터가 담당한다. */
-    function hide() {
-        close({ updateUrl: false });
-    }
-
-    /* ── 저장하지 않은 입력을 둔 채 설정 밖으로 나가려 할 때 ──
-       설정 안에서 떠나는 길(뒤로 버튼·목록의 다른 항목·뒤로 제스처)은 각자 confirmLeave를 거친다.
-       여기서는 그 밖의 두 길, 브라우저의 뒤로 가기와 사이드바를 맡는다. */
-    let popRestoring = false; // 되돌려 놓으려고 스스로 일으킨 탐색(그 popstate는 흘려보낸다)
-
-    // 브라우저의 뒤로 가기(app.js의 popstate): 주소를 되돌려 놓고 버릴지 묻는다. 붙잡았으면 true.
-    function holdPop() {
-        if (popRestoring) {
-            popRestoring = false;
-            return true;
-        }
-        if (!C.openTab || page.hidden || !C.dirtyView()) return false;
-        popRestoring = true;
-        history.forward();
-        // 앞으로 갈 항목이 없으면 popstate가 오지 않는다. 다음 탐색까지 삼키지 않게 표시를 걷는다.
-        setTimeout(() => {
-            popRestoring = false;
-        }, 500);
-        void C.confirmLeave().then((ok) => {
-            if (ok) history.back();
-        });
-        return true;
-    }
-
-    // 사이드바의 행(에이전트·할 일·설정)을 눌러 다른 화면으로 가려 할 때: 먼저 묻고, 버리겠다고 하면 그 누름을 다시 보낸다.
-    function guardSidebar(e) {
-        if (!C.openTab || page.hidden || !C.dirtyView()) return;
-        const target = e.target.closest?.(".bot-row, .sb-row, #btnAddBot");
-        if (!target) return;
-        e.preventDefault();
-        e.stopPropagation();
-        void C.confirmLeave().then((ok) => {
-            if (ok) target.click();
-        });
+        // 프로바이더 탭은 모델과 프로바이더 탭으로 합쳐졌다.
+        const tab = m[1] === "provider" ? "model" : m[1];
+        if (!TABS.includes(tab)) return null;
+        return ["s", `s.${tab}`];
     }
 
     /* ── 낙관적 PUT ─────────────────────────────────────────── */
@@ -291,14 +106,7 @@
 
     /* ── 전역 바인딩 ────────────────────────────────────────── */
     function init() {
-        state.on("settings", C.rebuildIfIdle);
-        state.on("bots", C.rebuildIfIdle);
-        state.on("folders", C.rebuildIfIdle);
-        state.on("notices", () => {
-            if (C.openTab === "notices") C.rebuildIfIdle();
-        });
-        state.on("pwa", C.rebuildIfIdle);
-        // OAuth 결과는 시트가 닫혀 있어도 반영한다(설정 갱신 + 토스트).
+        // OAuth 결과는 설정 창이 닫혀 있어도 반영한다(설정 갱신 + 알림).
         state.on("oauth_done", (p) => {
             C.cliLoginPending = null;
             C.oauthPending = null;
@@ -314,32 +122,16 @@
             // 다른 창에서 로그인을 마치고 돌아온 결과: 그사이 화면을 보고 있지 않았을 수 있어 경고창으로 알린다.
             T.notices.alert({ text: p.ok ? t("oauthSuccess") : `${t("errorPrefix")}: ${p.detail || t("oauthFailed")}` });
             C.forgetModelLists();
-            if (C.openTab === "model") C.build();
+            T.windows.refresh((w) => w.kind === "s.model" || w.kind === "s.profile");
         });
-        T.i18n.onChange(() => {
-            if (C.openTab) C.build();
-        });
-        // 폭이 모바일과 데스크톱 사이를 오가면 화면 배치(한 화면씩 / 열로 나란히)가 달라지므로 다시 그린다.
-        mobileMq.addEventListener("change", () => {
-            if (!C.openTab || page.hidden) return;
-            page.replaceChildren();
-            C.build();
-        });
-        document.getElementById("sidebar").addEventListener("click", guardSidebar, true);
     }
 
     T.settingsUI = {
         init,
         open,
-        close,
-        hide,
-        isOpen: () => !!C.openTab && !page.hidden,
-        routeFromPath,
-        holdPop,
+        isOpen: () => T.windows.list().some(isSettingsWin),
+        legacyIds,
         // 아래 항목은 나중에 로드되는 모듈이 채우므로 쓰는 시점에 읽는다.
-        get gesture() {
-            return C.gesture;
-        },
         oauthSection: (...args) => C.oauthSection(...args),
         cliLoginSection: (...args) => C.cliLoginSection(...args),
         secretInput: (...args) => C.secretInput(...args),
@@ -349,10 +141,7 @@
         },
     };
 
-    C.pathFor = pathFor;
-    C.syncPath = syncPath;
-    C.navigate = navigate;
-    C.popToRoot = popToRoot;
+    C.isSettingsWin = isSettingsWin;
     C.refreshBots = refreshBots;
     C.put = put;
     C.agentList = agentList;

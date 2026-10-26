@@ -41,10 +41,11 @@ window.Taby = window.Taby ?? {};
     }
 
     // 주소만 바꾼다. 주소 갱신이 막힌 환경(샌드박스 iframe 등)에서는 화면만 바꾸고 주소는 그대로 둔다.
-    // 바꿨으면 true.
+    // 바꿨으면 true. 열린 창들(?w=, ui/windows.js)은 본문을 옮겨도 그대로 남으므로 새 주소에도 담는다.
     function pushUrl(url, state = null) {
         try {
-            history.pushState(state, "", url);
+            history.pushState(state, "", T.windows ? T.windows.urlWith(url) : url);
+            T.windows?.noteUrl?.();
             return true;
         } catch {
             return false;
@@ -53,7 +54,8 @@ window.Taby = window.Taby ?? {};
 
     function replaceUrl(url, state = null) {
         try {
-            history.replaceState(state, "", url);
+            history.replaceState(state, "", T.windows ? T.windows.urlWith(url) : url);
+            T.windows?.noteUrl?.();
             return true;
         } catch {
             return false;

@@ -1,5 +1,5 @@
-/* tabyBot 웹 클라이언트: 설정 > 효율적인 운영 탭. 요금과 사용량을 아끼는 기능을 모은다.
-   첫 화면에는 최근 7일 지표와 두 화면(사용 통계, 프롬프트 캐시 유지)으로 들어가는 행만 둔다. */
+/* tabyBot 웹 클라이언트: 설정 > 효율적인 운영 탭("s.efficiency"). 요금과 사용량을 아끼는 기능을 모은다.
+   탭 창에는 최근 7일 지표와 두 창으로 들어가는 행만 둔다: 사용 통계("s.stats"), 프롬프트 캐시 유지("s.cache:<프리셋 uid>"). */
 ((T) => {
     "use strict";
 
@@ -7,9 +7,6 @@
     const C = T.settingsCtx;
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
-
-    C.efficiencySub = null; // 한 단계 더 들어간 화면: "stats"(사용 통계) | "cache"(프롬프트 캐시 유지) | null
-    let range = 7; // 사용 통계에서 보는 기간(일)
 
     const locale = () => ({ ko: "ko-KR", ja: "ja-JP" })[T.i18n.getLang()] || "en-US";
 
@@ -50,7 +47,7 @@
         return { total, daily, models };
     }
 
-    function buildEfficiency(body) {
+    function buildEfficiency(body, win) {
         const s = state.state.settings;
         if (!s) {
             body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
@@ -58,37 +55,29 @@
         }
         const sec = T.h("div", { class: "set-section" });
         body.append(sec);
-        if (C.efficiencySub === "stats") {
-            statsView(sec, s);
-            return;
-        }
-        if (C.efficiencySub === "cache") {
-            cacheView(sec, s);
-            return;
-        }
         const week = usageOf(s.usage?.days, 7).total;
-        const open = (which, presetUid) => () =>
-            C.openForm(() => {
-                C.efficiencySub = which;
-                if (presetUid) C.cachePreset = presetUid;
-            });
         sec.append(
             C.fieldLabel(t("usageLastWeek")),
             T.h("div", { class: "set-group eff-metrics" }, [
                 metric(percent(week.cached, week.input), t("usageHitRate")),
                 metric(week.calls ? compact(week.input + week.output) : "-", t("usageTokens")),
             ]),
-            C.navRow(t("usageStatsMore"), "", open("stats")),
+            C.navRow(t("usageStatsMore"), "", () => win.open("s.stats")),
         );
-        // 캐시 유지는 프리셋마다 따로 정한다. 프리셋이 여럿이면 프리셋마다 한 행씩 두고, 누르면 그 프리셋의 설정으로 들어간다.
+        // 캐시 유지는 프리셋마다 따로 정한다. 프리셋이 여럿이면 프리셋마다 한 행씩 두고, 누르면 그 프리셋의 창이 열린다.
         const list = Array.isArray(s.modelPresets) ? s.modelPresets : [];
         if (list.length > 1) {
             sec.append(
                 C.fieldLabel(t("cacheKeepAlive")),
-                ...list.map((p) => C.navRow(C.modelPresetName(p), modeLabel(p.cacheKeepAlive), open("cache", p.uid))),
+                ...list.map((p) => C.navRow(C.modelPresetName(p), modeLabel(p.cacheKeepAlive), () => win.open(`s.cache:${p.uid}`))),
             );
         } else {
-            sec.append(C.navRow(t("cacheKeepAlive"), modeLabel(cachePresetOf(s)?.cacheKeepAlive ?? s.cacheKeepAlive), open("cache")));
+            const only = list[0];
+            sec.append(
+                C.navRow(t("cacheKeepAlive"), modeLabel(only ? only.cacheKeepAlive : s.cacheKeepAlive), () =>
+                    win.open(only ? `s.cache:${only.uid}` : "s.cache"),
+                ),
+            );
         }
     }
 
@@ -104,9 +93,31 @@
         ]);
     }
 
-    // ── 사용 통계 ──
+    // ── 사용 통계 창 ──
 
-    function statsView(sec, s) {
+    T.windows.define("s.stats", (arg) => {
+        if (arg != null) return null;
+        let range = 7; // 보는 기간(일)
+        return {
+            title: () => t("usageStats"),
+            on: ["settings"],
+            build(body, win) {
+                const s = state.state.settings;
+                if (!s) {
+                    body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+                    return;
+                }
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                statsView(sec, s, range, (n) => {
+                    range = n;
+                    win.rebuild();
+                });
+            },
+        };
+    });
+
+    function statsView(sec, s, range, setRange) {
         const { total, daily, models } = usageOf(s.usage?.days, range);
         sec.append(
             C.labeledRow(
@@ -114,10 +125,7 @@
                 C.settingSelect(
                     [7, 30, 90].map((n) => ({ value: String(n), label: t("usageDays", { n }) })),
                     String(range),
-                    (v) => {
-                        range = Number(v);
-                        C.build();
-                    },
+                    (v) => setRange(Number(v)),
                     t("usageRange"),
                 ),
             ),
@@ -194,30 +202,49 @@
         ]);
     }
 
-    // ── 프롬프트 캐시 유지 ──
+    // ── 프롬프트 캐시 유지 창 ──
 
-    // 캐시 유지는 모델 프리셋마다 따로 정한다. 여럿이면 효율 화면에서 누른 프리셋이다(처음에는 기본 프리셋).
-    function cachePresetOf(s) {
-        const list = Array.isArray(s.modelPresets) ? s.modelPresets : [];
-        return list.find((p) => p.uid === C.cachePreset) || list.find((p) => p.isDefault) || list[0] || null;
-    }
+    // 캐시 유지는 모델 프리셋마다 따로 정한다. "s.cache:<uid>"는 그 프리셋, 프리셋이 없으면(예전 설정) "s.cache"는 전체 설정이다.
+    T.windows.define("s.cache", (uid) => {
+        const presetOf = (s) => (uid ? (s.modelPresets || []).find((p) => p.uid === uid) || null : null);
+        return {
+            // 프리셋이 여럿이면 프리셋 이름을 제목으로 쓴다.
+            title() {
+                const s = state.state.settings;
+                const preset = s && s.modelPresets?.length > 1 ? presetOf(s) : null;
+                return preset ? C.modelPresetName(preset) : t("cacheKeepAlive");
+            },
+            on: ["settings"],
+            // 다른 기기에서 프리셋이 지워졌다.
+            gone: () => Boolean(uid && state.state.settings && !presetOf(state.state.settings)),
+            build(body, win) {
+                const s = state.state.settings;
+                if (!s) {
+                    body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+                    return;
+                }
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                cacheView(sec, s, presetOf(s), win);
+            },
+        };
+    });
 
-    function cacheView(sec, s) {
+    function cacheView(sec, s, preset, win) {
         sec.append(T.h("div", { class: "set-desc", text: t("cacheKeepAliveDesc") }));
-        const preset = cachePresetOf(s);
         const ka = preset ? preset.cacheKeepAlive : s.cacheKeepAlive;
         // 요청 수로 과금되거나 로컬에서 도는 프로바이더는 캐시를 살려 둬도 아끼는 것이 없다.
         if (!ka) {
             sec.append(T.h("div", { class: "set-desc", text: t("cacheKeepAliveUnsupported") }));
             return;
         }
-        cacheKeepAliveRows(sec, ka, preset?.uid || "");
+        cacheKeepAliveRows(sec, ka, preset?.uid || "", win);
         if (ka.mode === "auto" && ka.pattern) patternRows(sec, ka.pattern);
     }
 
     // 캐시 유지 설정: 모드(자동, 사용자 지정, 끔), 사용자 지정 값, 자동일 때의 예상.
-    function cacheKeepAliveRows(sec, ka, presetUid) {
-        const save = (value) => C.put({ cacheKeepAlive: value, ...(presetUid ? { cacheKeepAlivePreset: presetUid } : {}) }).then(() => C.build());
+    function cacheKeepAliveRows(sec, ka, presetUid, win) {
+        const save = (value) => C.put({ cacheKeepAlive: value, ...(presetUid ? { cacheKeepAlivePreset: presetUid } : {}) }).then(() => win.rebuild());
         const custom = (patch) => save({ mode: "custom", ttlMinutes: ka.ttlMinutes || 60, keepHours: ka.keepHours || 3, ...patch });
         sec.append(
             C.labeledRow(
@@ -304,14 +331,5 @@
         }
     }
 
-    // 한 단계 더 들어간 화면의 제목. 프리셋이 여럿일 때 캐시 유지 화면은 누른 행의 이름(프리셋)을 쓴다.
-    function efficiencyTitle() {
-        if (C.efficiencySub === "stats") return t("usageStats");
-        const s = state.state.settings;
-        const preset = s && s.modelPresets?.length > 1 ? cachePresetOf(s) : null;
-        return preset ? C.modelPresetName(preset) : t("cacheKeepAlive");
-    }
-
-    C.buildEfficiency = buildEfficiency;
-    C.efficiencyTitle = efficiencyTitle;
+    C.defineTab("efficiency", { build: buildEfficiency });
 })(window.Taby);

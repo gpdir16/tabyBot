@@ -17,21 +17,13 @@
         C.openBot = bot;
         // 다른 라우트의 hide()가 컴포저(syncMode)를 건드리므로 computer-route를
         // 켜서 컴포저를 가리기 전에 먼저 정리한다.
-        T.settingsUI?.hide?.();
         T.todosUI?.hide?.();
         C.page.hidden = false;
         document.body.classList.add("computer-route");
         T.sidebar?.showChat?.();
         T.sidebar?.syncRoute?.();
         C.pushed = false;
-        if (!o.fromUrl) {
-            try {
-                history.pushState(null, "", C.pathFor(uuid));
-                C.pushed = true;
-            } catch {
-                // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
-            }
-        }
+        if (!o.fromUrl) C.pushed = T.util.pushUrl(C.pathFor(uuid));
 
         const header = document.getElementById("header");
         const hdrMenu = document.getElementById("btnMenu");
@@ -151,7 +143,7 @@
         if (hdr) {
             hdr.addEventListener("click", () => {
                 const uuid = state.state.currentId;
-                if (!uuid || T.todosUI?.isOpen?.() || T.settingsUI?.isOpen?.()) return;
+                if (!uuid || T.todosUI?.isOpen?.()) return;
                 C.navigate(uuid);
             });
         }

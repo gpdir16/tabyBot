@@ -8,7 +8,7 @@
     const t = (k, v) => T.i18n.t(k, v);
 
     /* ── 일반 탭 ────────────────────────────────────────────── */
-    function buildGeneral(body) {
+    function buildGeneral(body, win) {
         const s = state.state.settings || {};
         const sec = T.h("div", { class: "set-section" });
 
@@ -102,7 +102,7 @@
         if (T.notifications?.canInstall() || T.notifications?.canGuideInstall()) {
             sec.append(
                 C.actionRow(t("installApp"), () => {
-                    if (T.notifications.canInstall()) T.notifications.promptInstall().then(() => C.build());
+                    if (T.notifications.canInstall()) T.notifications.promptInstall().then(() => win.rebuild());
                     else T.notifications.showInstallGuide();
                 }),
             );
@@ -147,7 +147,7 @@
        서버가 보낸 시스템 알림의 기록. 새 알림은 모달로 뜨고(ui/notices.js), 여기서 지난 것을 다시 본다. */
     // 이 기기의 알림(OS 알림 + 웹 푸시) 스위치. 켤 수 없는 기기에서도 행은 보여 주고 이유를 적는다
     // (iOS는 홈 화면에 추가한 앱에서만, 그 밖에는 HTTPS에서만 알림을 쓸 수 있다).
-    function appendNotifyToggle(sec) {
+    function appendNotifyToggle(sec, win) {
         const support = T.notifications.support();
         const usable = support === "ok" || support === "denied";
         const toggle = C.switchEl(
@@ -155,7 +155,7 @@
             (v) => {
                 T.notifications.setOn(v).then((ok) => {
                     if (v && !ok) T.toast.show("error", t("notificationsDenied"));
-                    C.build();
+                    win.rebuild();
                 });
             },
             t("notifications"),
@@ -172,9 +172,9 @@
         sec.append(T.h("div", { class: "set-desc", text: t(reason) }));
     }
 
-    function buildNotices(body) {
+    function buildNotices(body, win) {
         const sec = T.h("div", { class: "set-section" });
-        appendNotifyToggle(sec);
+        appendNotifyToggle(sec, win);
         sec.append(T.h("hr", { class: "divider" }));
 
         const tasks = T.notices.tasks();
@@ -218,6 +218,6 @@
         body.append(sec);
     }
 
-    C.buildGeneral = buildGeneral;
-    C.buildNotices = buildNotices;
+    C.defineTab("general", { on: ["settings", "pwa"], build: buildGeneral });
+    C.defineTab("notices", { on: ["notices"], build: buildNotices });
 })(window.Taby);

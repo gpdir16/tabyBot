@@ -1,4 +1,6 @@
-/* tabyBot 웹 클라이언트: 설정 > 스킬 / MCP 탭. */
+/* tabyBot 웹 클라이언트: 설정 > 스킬 / MCP 탭.
+   창: "s.skills"(목록), "s.skill:new", "s.skill:<source>/<name>"(편집, 시스템 스킬은 읽기 전용),
+       "s.mcp"(목록), "s.mcp:new", "s.mcp:<name>"(편집). */
 ((T) => {
     "use strict";
 
@@ -6,111 +8,179 @@
     const C = T.settingsCtx;
     const t = (k, v) => T.i18n.t(k, v);
 
-    C.skillsCache = null; // GET /api/skills 응답의 skills 배열
+    const SKILL_SOURCES = ["system", "user", "shared"];
 
-    C.skillsLoading = false;
+    let skillsCache = null; // GET /api/skills 응답의 skills 배열
+    let skillsLoading = false;
+    let skillsFailed = false;
+    let mcpCache = null; // GET /api/mcp 응답의 servers 배열
+    let mcpLoading = false;
+    let mcpFailed = false;
 
-    C.skillsFailed = false;
+    const isSkillWin = (w) => w.kind === "s.skills" || w.kind === "s.skill";
+    const isMcpWin = (w) => w.kind === "s.mcp";
 
-    C.mcpCache = null; // GET /api/mcp 응답의 servers 배열
+    // 그 무리의 창이 모두 닫히면 받아 둔 목록을 버린다(다시 열면 새로 받는다).
+    function leaveSkills() {
+        if (!C.noneOpen(isSkillWin)) return;
+        skillsCache = null;
+        skillsLoading = false;
+        skillsFailed = false;
+    }
 
-    C.mcpLoading = false;
+    function leaveMcp() {
+        if (!C.noneOpen(isMcpWin)) return;
+        mcpCache = null;
+        mcpLoading = false;
+        mcpFailed = false;
+    }
 
-    C.mcpFailed = false;
-
-    C.skillEditing = null; // { mode:"new" } | { mode:"edit"|"view", name, source, builtin, content }
-
-    C.mcpEditing = null; // { mode:"new" } | { mode:"edit", name }
-
-    /* ── 스킬 / MCP 탭 ────────────────────────────────────── */
+    /* ── 목록 받기 ──────────────────────────────────────────── */
     async function loadSkillsList() {
-        if (C.skillsLoading) return;
-        C.skillsLoading = true;
+        if (skillsLoading) return;
+        skillsLoading = true;
         try {
             const r = await T.api.skills();
-            C.skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
-            C.skillsFailed = false;
+            skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
+            skillsFailed = false;
         } catch (err) {
-            C.skillsCache = [];
-            C.skillsFailed = true;
+            skillsCache = [];
+            skillsFailed = true;
             T.toast.show("error", T.api.errorText(err, t("loadFailed")));
         } finally {
-            C.skillsLoading = false;
-            if (C.openTab === "skills") C.rebuildIfIdle();
+            skillsLoading = false;
+            T.windows.refresh((w) => w.kind === "s.skills");
         }
     }
 
     async function loadMcpList() {
-        if (C.mcpLoading) return;
-        C.mcpLoading = true;
+        if (mcpLoading) return;
+        mcpLoading = true;
         try {
             const r = await T.api.mcpServers();
-            C.mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
-            C.mcpFailed = false;
+            mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
+            mcpFailed = false;
         } catch (err) {
-            C.mcpCache = [];
-            C.mcpFailed = true;
+            mcpCache = [];
+            mcpFailed = true;
             T.toast.show("error", T.api.errorText(err, t("loadFailed")));
         } finally {
-            C.mcpLoading = false;
-            if (C.openTab === "mcp") C.rebuildIfIdle();
+            mcpLoading = false;
+            T.windows.refresh(isMcpWin);
         }
     }
 
+    // 저장·삭제 응답의 새 목록을 반영하고 목록 창을 다시 그린다.
+    function setSkills(r) {
+        skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
+        T.windows.refresh((w) => w.kind === "s.skills");
+    }
+
+    function setMcp(r) {
+        mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
+        T.windows.refresh((w) => w.id === "s.mcp");
+    }
+
+    /* ── 스킬 ───────────────────────────────────────────────── */
     function skillSourceLabel(source) {
         if (source === "system") return t("skillBuiltin");
         if (source === "shared") return t("skillShared");
         return t("skillUser");
     }
 
-    // 확인을 받고 지운다. 지운 스킬의 편집 화면이 열려 있었으면 같이 닫는다.
+    const skillWinId = (sk) => `s.skill:${sk.source}/${sk.name}`;
+
+    // 확인을 받고 지운다. 지운 스킬의 편집 창이 열려 있었으면 같이 닫는다.
     async function deleteSkill(sk) {
         if (!(await C.confirmDelete(sk.name))) return;
         try {
-            const r = await T.api.deleteSkill(sk.name, sk.source);
-            C.skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
-            if (C.skillEditing?.name === sk.name && C.skillEditing.source === sk.source) C.skillEditing = null;
-            C.build();
+            setSkills(await T.api.deleteSkill(sk.name, sk.source));
+            void T.windows.close(skillWinId(sk), { force: true });
         } catch (err) {
             T.toast.show("error", T.api.errorText(err, t("saveFailed")));
         }
     }
 
-    function skillRow(sk) {
+    function skillRow(sk, win) {
         return C.itemRow({
             name: sk.name,
             badge: skillSourceLabel(sk.source),
             sub: sk.summary,
-            // 행을 누르면 내용을 받아 온 뒤 연다. 시스템 스킬은 읽기 전용으로만 열린다.
-            onclick: () =>
-                C.openForm(async () => {
-                    try {
-                        const r = await T.api.skill(sk.name, sk.source);
-                        C.skillEditing = {
-                            mode: r.builtin ? "view" : "edit",
-                            name: r.name,
-                            source: r.source,
-                            builtin: !!r.builtin,
-                            content: r.content || "",
-                        };
-                    } catch (err) {
-                        T.toast.show("error", T.api.errorText(err, t("loadFailed")));
-                    }
-                }),
+            onclick: () => win.open(skillWinId(sk)),
             menu: sk.builtin ? null : () => [{ label: t("delete"), danger: true, defer: true, onSelect: () => deleteSkill(sk) }],
         });
     }
 
-    function skillForm() {
-        const editing = C.skillEditing;
-        const isNew = editing.mode === "new";
-        const readonly = editing.mode === "view" || editing.builtin === true;
+    C.defineTab("skills", {
+        on: [],
+        onClose: leaveSkills,
+        build(body, win) {
+            if (skillsCache === null && !skillsLoading && !skillsFailed) void loadSkillsList();
+            const sec = T.h("div", { class: "set-section" });
+            sec.append(T.h("div", { class: "set-desc", text: t("skillsDesc") }));
+            if (skillsCache === null) sec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+            else if (!skillsCache.length) sec.append(T.h("div", { class: "set-desc", text: t("skillsEmpty") }));
+            else for (const sk of skillsCache) sec.append(skillRow(sk, win));
+            sec.append(C.actionRow(t("addSkill"), () => win.open("s.skill:new"), { icon: "plus" }));
+            body.append(sec);
+        },
+    });
+
+    // 스킬 편집 창. 있는 스킬은 열 때 내용을 받아 온다. 시스템 스킬은 읽기 전용으로만 열린다.
+    T.windows.define("s.skill", (arg) => {
+        if (!arg) return null;
+        const isNew = arg === "new";
+        let source = null;
+        let name = null;
+        if (!isNew) {
+            const i = arg.indexOf("/");
+            source = arg.slice(0, i);
+            name = arg.slice(i + 1);
+            if (i < 0 || !SKILL_SOURCES.includes(source) || !name) return null;
+        }
+        // 받아 온 스킬 { name, source, builtin, content } | 받는 중(null) | 못 받음(false)
+        let skill = isNew ? { name: "", source: "user", builtin: false, content: "" } : null;
+        let loading = false;
+        const load = async (win) => {
+            loading = true;
+            try {
+                const r = await T.api.skill(name, source);
+                skill = { name: r.name, source: r.source, builtin: !!r.builtin, content: r.content || "" };
+            } catch (err) {
+                skill = false;
+                T.toast.show("error", T.api.errorText(err, t("loadFailed")));
+            }
+            loading = false;
+            win.rebuild();
+        };
+        return {
+            title: () => (isNew ? t("addSkill") : name),
+            onClose: leaveSkills,
+            build(body, win) {
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                if (skill === null) {
+                    if (!loading) void load(win);
+                    sec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+                    return;
+                }
+                if (skill === false) {
+                    sec.append(T.h("div", { class: "empty-note", text: "-" }));
+                    return;
+                }
+                sec.append(skillForm(win, isNew, skill));
+            },
+        };
+    });
+
+    function skillForm(win, isNew, skill) {
+        const readonly = skill.builtin === true;
         const form = T.h("div", { class: "agent-editor" });
 
         const nameInput = T.h("input", {
             class: "input",
             type: "text",
-            value: isNew ? "" : editing.name,
+            value: skill.name,
             placeholder: "my-skill",
             "aria-label": t("skillName"),
         });
@@ -124,12 +194,12 @@
             "aria-label": t("skillContent"),
             spellcheck: "false",
         });
-        content.value = isNew ? "" : editing.content || "";
+        content.value = skill.content;
         if (readonly) content.readOnly = true;
         content.addEventListener("keydown", (e) => e.stopPropagation());
         form.append(C.fieldOf("SKILL.md", content, readonly ? t("skillReadOnly") : null));
 
-        // 읽기 전용 스킬에는 저장할 것이 없다. 뒤로 버튼으로 닫는다.
+        // 읽기 전용 스킬에는 저장할 것이 없다. 닫기 버튼으로 닫는다.
         if (readonly) return form;
         C.headAction(t("save"), async () => {
             const n = nameInput.value.trim();
@@ -140,21 +210,22 @@
                 return;
             }
             try {
-                const r = isNew
-                    ? await T.api.createSkill({ name: n, content: c })
-                    : await T.api.updateSkill(editing.name, { source: editing.source, content: c });
-                C.skillsCache = r && Array.isArray(r.skills) ? r.skills : [];
-                C.skillEditing = null;
-                C.build();
+                setSkills(
+                    isNew
+                        ? await T.api.createSkill({ name: n, content: c })
+                        : await T.api.updateSkill(skill.name, { source: skill.source, content: c }),
+                );
+                void win.close({ force: true });
             } catch (err) {
                 T.toast.show("error", T.api.errorText(err, t("saveFailed")));
             }
         });
-        if (!isNew) form.append(C.actionRow(t("delete"), () => deleteSkill(editing), { danger: true, own: true }));
+        if (!isNew) form.append(C.actionRow(t("delete"), () => deleteSkill(skill), { danger: true, own: true }));
         C.trackForm(form);
         return form;
     }
 
+    /* ── MCP ────────────────────────────────────────────────── */
     function mcpStatusLabel(srv) {
         const st = srv.status || {};
         if (st.connected) return t("mcpConnected", { n: st.tools ?? 0 });
@@ -162,20 +233,18 @@
         return t("mcpPending");
     }
 
-    // 확인을 받고 지운다. 지운 서버의 편집 화면이 열려 있었으면 같이 닫는다.
+    // 확인을 받고 지운다. 지운 서버의 편집 창이 열려 있었으면 같이 닫는다.
     async function deleteMcp(srv) {
         if (!(await C.confirmDelete(srv.name))) return;
         try {
-            const r = await T.api.deleteMcpServer(srv.name);
-            C.mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
-            if (C.mcpEditing?.name === srv.name) C.mcpEditing = null;
-            C.build();
+            setMcp(await T.api.deleteMcpServer(srv.name));
+            void T.windows.close(`s.mcp:${srv.name}`, { force: true });
         } catch (err) {
             T.toast.show("error", T.api.errorText(err, t("saveFailed")));
         }
     }
 
-    function mcpRow(srv) {
+    function mcpRow(srv, win) {
         const st = srv.status || {};
         return C.itemRow({
             name: srv.name,
@@ -183,18 +252,50 @@
             badgeClass: st.connected ? "ok" : st.failed ? "bad" : "",
             sub: [srv.command, ...(srv.args || [])].filter(Boolean).join(" "),
             subMono: true,
-            onclick: () =>
-                C.openForm(() => {
-                    C.mcpEditing = { mode: "edit", name: srv.name };
-                }),
+            onclick: () => win.open(`s.mcp:${srv.name}`),
             menu: () => [{ label: t("delete"), danger: true, defer: true, onSelect: () => deleteMcp(srv) }],
         });
     }
 
-    function mcpForm() {
-        const editing = C.mcpEditing;
-        const isNew = editing.mode === "new";
-        const srv = isNew ? null : (C.mcpCache || []).find((x) => x.name === editing.name) || { name: editing.name };
+    C.defineTab("mcp", {
+        on: [],
+        onClose: leaveMcp,
+        build(body, win) {
+            if (mcpCache === null && !mcpLoading && !mcpFailed) void loadMcpList();
+            const sec = T.h("div", { class: "set-section" });
+            sec.append(T.h("div", { class: "set-desc", text: t("mcpDesc") }));
+            if (mcpCache === null) sec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+            else if (!mcpCache.length) sec.append(T.h("div", { class: "set-desc", text: t("mcpEmpty") }));
+            else for (const srv of mcpCache) sec.append(mcpRow(srv, win));
+            sec.append(C.actionRow(t("addMcpServer"), () => win.open("s.mcp:new"), { icon: "plus" }));
+            body.append(sec);
+        },
+        // MCP 서버 편집 창("s.mcp:new", "s.mcp:<name>"). 설정 값은 받아 둔 목록에서 읽는다(주소로 되살리면 목록을 먼저 받는다).
+        item(arg) {
+            if (!arg) return null;
+            const isNew = arg === "new";
+            return {
+                title: () => (isNew ? t("addMcpServer") : arg),
+                onClose: leaveMcp,
+                // 목록에서 사라졌다(다른 기기에서 지움).
+                gone: () => !isNew && Array.isArray(mcpCache) && !mcpFailed && !mcpCache.some((x) => x.name === arg),
+                build(body, win) {
+                    const sec = T.h("div", { class: "set-section" });
+                    body.append(sec);
+                    if (!isNew && mcpCache === null) {
+                        if (!mcpLoading && !mcpFailed) void loadMcpList();
+                        sec.append(T.h("div", { class: "set-desc", text: t("loading") }));
+                        return;
+                    }
+                    const srv = isNew ? null : (mcpCache || []).find((x) => x.name === arg) || { name: arg };
+                    sec.append(mcpForm(win, srv));
+                },
+            };
+        },
+    });
+
+    function mcpForm(win, srv) {
+        const isNew = !srv;
         const form = T.h("div", { class: "agent-editor" });
 
         const nameInput = T.h("input", {
@@ -309,12 +410,12 @@
                 } else env[key] = val;
             }
             try {
-                const r = isNew
-                    ? await T.api.createMcpServer({ name: n, command, args, env })
-                    : await T.api.updateMcpServer(editing.name, { command, args, env });
-                C.mcpCache = r && Array.isArray(r.servers) ? r.servers : [];
-                C.mcpEditing = null;
-                C.build();
+                setMcp(
+                    isNew
+                        ? await T.api.createMcpServer({ name: n, command, args, env })
+                        : await T.api.updateMcpServer(srv.name, { command, args, env }),
+                );
+                void win.close({ force: true });
             } catch (err) {
                 T.toast.show("error", T.api.errorText(err, t("saveFailed")));
             }
@@ -324,55 +425,4 @@
         C.trackForm(form);
         return form;
     }
-
-    function buildSkills(body) {
-        if (C.skillsCache === null && !C.skillsLoading && !C.skillsFailed) void loadSkillsList();
-        const ssec = T.h("div", { class: "set-section" });
-        if (!C.skillEditing) ssec.append(T.h("div", { class: "set-desc", text: t("skillsDesc") }));
-        if (C.skillEditing) {
-            ssec.append(skillForm());
-        } else {
-            if (C.skillsCache === null) ssec.append(T.h("div", { class: "set-desc", text: t("loading") }));
-            else if (!C.skillsCache.length) ssec.append(T.h("div", { class: "set-desc", text: t("skillsEmpty") }));
-            else for (const sk of C.skillsCache) ssec.append(skillRow(sk));
-            ssec.append(
-                C.actionRow(
-                    t("addSkill"),
-                    () =>
-                        C.openForm(() => {
-                            C.skillEditing = { mode: "new" };
-                        }),
-                    { icon: "plus" },
-                ),
-            );
-        }
-        body.append(ssec);
-    }
-
-    function buildMcp(body) {
-        if (C.mcpCache === null && !C.mcpLoading && !C.mcpFailed) void loadMcpList();
-        const msec = T.h("div", { class: "set-section" });
-        if (!C.mcpEditing) msec.append(T.h("div", { class: "set-desc", text: t("mcpDesc") }));
-        if (C.mcpEditing) {
-            msec.append(mcpForm());
-        } else {
-            if (C.mcpCache === null) msec.append(T.h("div", { class: "set-desc", text: t("loading") }));
-            else if (!C.mcpCache.length) msec.append(T.h("div", { class: "set-desc", text: t("mcpEmpty") }));
-            else for (const srv of C.mcpCache) msec.append(mcpRow(srv));
-            msec.append(
-                C.actionRow(
-                    t("addMcpServer"),
-                    () =>
-                        C.openForm(() => {
-                            C.mcpEditing = { mode: "new" };
-                        }),
-                    { icon: "plus" },
-                ),
-            );
-        }
-        body.append(msec);
-    }
-
-    C.buildSkills = buildSkills;
-    C.buildMcp = buildMcp;
 })(window.Taby);

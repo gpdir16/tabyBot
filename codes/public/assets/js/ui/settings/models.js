@@ -9,16 +9,22 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
 
-    // 탭에서 한 단계 더 들어간 화면.
-    //  { kind: "preset", uid, draft, orig }  프리셋 편집(새 프리셋은 uid가 null). 저장 버튼을 눌러야 저장한다.
-    //  { kind: "pick", what: "model" | "pin", parent }  프리셋 편집 안의 모델, 고정 고르기. 고르면 parent로 돌아간다.
-    //  { kind: "profile", uid }  프로바이더(로그인, 키) 편집. 고치는 즉시 저장한다.
-    //  { kind: "addProfile" }  프로바이더 추가
-    //  "adv"  고급 설정
-    C.modelSub = null;
-    C.keyEditing = null; // 저장된 API 키를 다시 입력하는 프로필 uid
+    /* 창 종류:
+       s.model          탭 첫 화면(프리셋과 프로바이더 목록)
+       s.preset:<uid>   프리셋 편집("new"면 새 프리셋). 초안은 창이 들고 있다(win.draft). 저장 버튼을 눌러야 저장한다.
+       s.pick:<what>:<프리셋 창 id>  프리셋 편집 안의 고르기(profile, model, pin, thinking, ctx). 고르면 그 창의 초안에 담고 닫힌다.
+       s.profile:<uid>  프로바이더(로그인, 키) 편집
+       s.profile-add    프로바이더 추가
+       s.adv            고급 설정 */
+    const MODEL_KINDS = ["s.model", "s.preset", "s.pick", "s.profile", "s.profile-add"];
 
-    let pickFilter = "";
+    // 모델에 관한 창이 모두 닫히면 로그인 확인을 멈추고 받아 둔 모델 목록을 버린다(다시 열면 새로 받는다).
+    // OAuth 대기 상태(oauthPending)는 남겨 둔다. 다시 열면 oauthSection이 확인을 다시 시작한다.
+    function leaveModels() {
+        if (!C.noneOpen((w) => MODEL_KINDS.includes(w.kind))) return;
+        C.stopOauthPoll();
+        forgetModelLists();
+    }
 
     function settings() {
         return state.state.settings || {};
@@ -97,14 +103,12 @@
         refreshView();
     }
 
-    // 목록이 도착하면 다시 그린다. 프리셋 편집과 고르기 화면은 입력을 초안에 모아 두므로 고친 것이 있어도 다시 그린다
-    // (rebuildIfIdle은 고친 것이 있으면 건너뛰어, 고르기 화면이 "받는 중"에 머문다). 입력 중이면 건드리지 않는다.
+    // 목록이 도착하면 그 목록을 보이는 창들을 다시 그린다. 프리셋 편집과 고르기 창은 입력을 초안(창이 들고 있다)에
+    // 모아 두므로 고친 것이 있어도 다시 그린다(그냥 refresh는 고친 창을 건너뛰어 고르기 창이 "받는 중"에 머문다).
+    // 입력 중이면 건드리지 않는다.
     function refreshView() {
-        const kind = C.modelSub?.kind;
-        const ae = document.activeElement;
-        const typing = ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && ae.closest(".settings-page");
-        if (C.openTab === "model" && (kind === "preset" || kind === "pick") && !typing) C.build();
-        else C.rebuildIfIdle();
+        T.windows.refresh((w) => (w.kind === "s.preset" || w.kind === "s.pick") && !C.typingIn(w), { force: true });
+        T.windows.refresh((w) => w.kind === "s.model" || w.kind === "s.efficiency" || w.kind === "s.agent");
     }
 
     // 프로필의 모델 목록 상태. 아직 받지 않았으면 받기 시작한다. { models, routingModels, loading, failed, error }
@@ -125,9 +129,9 @@
         return run ? run.then(() => modelsOf(profile)) : Promise.resolve(now);
     }
 
-    function retryModels(profile) {
+    function retryModels(profile, win) {
         modelLists.delete(listKey(profile));
-        C.build();
+        win.rebuild();
     }
 
     function forgetModelLists() {
@@ -216,15 +220,16 @@
     }
 
     /* ── 검색할 수 있는 고르기 목록 ──────────────────────────
-       모델과 업스트림 프로바이더는 수백 개일 수 있다. 검색창 아래에 걸러 낸 항목만 그린다. */
-    function searchList({ items, current, placeholder, onPick, emptyText, search: withSearch = true }) {
+       모델과 업스트림 프로바이더는 수백 개일 수 있다. 검색창 아래에 걸러 낸 항목만 그린다.
+       filter: 검색어를 담아 두는 칸({ q }). 고르기 창이 들고 있어 다시 그려도 검색어가 남는다. */
+    function searchList({ items, current, placeholder, onPick, emptyText, filter = { q: "" }, search: withSearch = true }) {
         const panel = T.h("div", { class: "models-panel" });
         const search = T.h("input", {
             class: "input",
             type: "search",
             placeholder,
             "aria-label": placeholder,
-            value: pickFilter,
+            value: filter.q,
             spellcheck: "false",
         });
         const list = T.h("div", { class: "models-list", role: "radiogroup", "aria-label": placeholder });
@@ -262,7 +267,7 @@
             }
         };
         search.addEventListener("input", () => {
-            pickFilter = search.value;
+            filter.q = search.value;
             render();
         });
         search.addEventListener("keydown", (e) => e.stopPropagation());
@@ -328,37 +333,41 @@
         };
     }
 
-    function openPreset(preset) {
-        pickFilter = "";
-        const draft = draftOf(preset);
-        C.openForm(() => {
-            C.modelSub = { kind: "preset", uid: preset?.uid || null, draft, orig: JSON.stringify(draft) };
-        });
-    }
-
-    // 고르기 화면으로 들어간다. 초안은 그대로 들고 간다(묻지 않는다).
-    function openPick(sub, what) {
-        pickFilter = "";
-        C.modelSub = { kind: "pick", what, parent: sub };
-        C.build();
-    }
-
-    function backTo(parent) {
-        pickFilter = "";
-        C.modelSub = parent;
-        C.build();
-    }
-
-    function buildPresetEditor(sec, sub) {
-        const { draft } = sub;
-        const preset = sub.uid ? presetByUid(sub.uid) : null;
-        if (sub.uid && !preset) {
+    // 프리셋 편집 창 "s.preset:<uid>"("new"면 새 프리셋). 초안은 이 창이 들고 있어 다시 그려도 남는다.
+    // 고르기 창이 그 초안을 읽고 고칠 수 있게 win.draft에 걸어 둔다.
+    T.windows.define("s.preset", (arg) => {
+        if (!arg) return null;
+        const uid = arg === "new" ? null : arg;
+        let draft = null;
+        let orig = "";
+        return {
+            title: () => (uid ? presetName(presetByUid(uid)) || t("modelsTab") : t("addPreset")),
+            on: ["settings"],
             // 다른 기기에서 지워졌다.
-            C.modelSub = null;
-            sec.append(T.h("div", { class: "empty-note", text: "-" }));
-            return;
-        }
+            gone: () => Boolean(uid && state.state.settings && !presetByUid(uid)),
+            onClose: leaveModels,
+            build(body, win) {
+                const preset = uid ? presetByUid(uid) : null;
+                if (!state.state.settings || (uid && !preset)) {
+                    body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+                    return;
+                }
+                if (!draft) {
+                    draft = draftOf(preset);
+                    orig = JSON.stringify(draft);
+                }
+                win.draft = draft;
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                buildPresetEditor(sec, win, preset, draft, orig);
+            },
+        };
+    });
+
+    function buildPresetEditor(sec, win, preset, draft, orig) {
         const profile = profileByUid(draft.profile);
+        // 고르기 창은 이 창 오른쪽에 열린다. 초안은 그대로 두고 간다(묻지 않는다).
+        const pick = (what) => () => win.open(`s.pick:${what}:${win.id}`);
 
         const name = T.h("input", {
             class: "input",
@@ -374,12 +383,12 @@
         name.addEventListener("keydown", (e) => e.stopPropagation());
         sec.append(C.labeledRow(t("presetName"), name));
 
-        // 프로바이더, 모델, 고정, 추론 깊이는 모두 행을 눌러 다음 화면에서 고른다.
-        sec.append(C.navRow(t("provider"), profile?.name || "", () => openPick(sub, "profile")));
+        // 프로바이더, 모델, 고정, 추론 깊이는 모두 행을 눌러 다음 창에서 고른다.
+        sec.append(C.navRow(t("provider"), profile?.name || "", pick("profile")));
         if (profile && !profileReady(profile)) sec.append(T.h("div", { class: "set-desc", text: t("presetProviderNotReady") }));
-        sec.append(C.navRow(t("model"), modelLabel(profile, draft.model) || t("modelNotChosen"), () => openPick(sub, "model")));
+        sec.append(C.navRow(t("model"), modelLabel(profile, draft.model) || t("modelNotChosen"), pick("model")));
         if (profile?.id === "openrouter" && draft.model) {
-            sec.append(C.navRow(t("openRouterPin"), pinLabel(profile, draft.model, draft.openRouterPin), () => openPick(sub, "pin")));
+            sec.append(C.navRow(t("openRouterPin"), pinLabel(profile, draft.model, draft.openRouterPin), pick("pin")));
         }
         const levels = thinkingLevelsFor(profile?.id);
         if (levels.length) {
@@ -387,22 +396,22 @@
             if (!levels.some((l) => l.value === draft.thinkingLevel)) {
                 draft.thinkingLevel = levels.find((l) => l.value === "medium")?.value || levels[0].value;
             }
-            sec.append(C.navRow(t("thinkingLevel"), thinkingLabel(profile?.id, draft.thinkingLevel), () => openPick(sub, "thinking")));
+            sec.append(C.navRow(t("thinkingLevel"), thinkingLabel(profile?.id, draft.thinkingLevel), pick("thinking")));
         }
-        sec.append(C.navRow(t("ctxFillLimit"), ctxLabel(draft.contextTriggerPercent), () => openPick(sub, "ctx")));
+        sec.append(C.navRow(t("ctxFillLimit"), ctxLabel(draft.contextTriggerPercent), pick("ctx")));
 
         if (profile?.id === "github-copilot" && draft.model === "auto") autoCandidateRows(sec, profile, draft);
 
         if (preset) {
             sec.append(T.h("hr", { class: "divider" }));
             if (preset.isDefault) sec.append(T.h("div", { class: "set-desc", text: t("presetIsDefault") }));
-            else sec.append(C.actionRow(t("presetMakeDefault"), () => makeDefault(preset), { own: true }));
-            if (presets().length > 1) sec.append(C.actionRow(t("delete"), () => deletePreset(preset), { danger: true, own: true }));
+            else sec.append(C.actionRow(t("presetMakeDefault"), () => makeDefault(win, preset), { own: true }));
+            if (presets().length > 1) sec.append(C.actionRow(t("delete"), () => deletePreset(win, preset), { danger: true, own: true }));
         }
 
-        C.headAction(preset ? t("save") : t("create"), () => savePreset(sub));
+        C.headAction(preset ? t("save") : t("create"), () => savePreset(win, preset?.uid || null, draft));
         // 모델을 골라야 저장할 수 있다. 고친 프리셋은 바뀐 것도 있어야 한다.
-        C.viewSlot.dirty = () => Boolean(draft.model) && (!preset || JSON.stringify(draft) !== sub.orig);
+        T.windows.slot.dirty = () => Boolean(draft.model) && (!preset || JSON.stringify(draft) !== orig);
     }
 
     // GitHub Copilot 자동 모델: 자동으로 고를 후보 모델.
@@ -433,48 +442,78 @@
         }
     }
 
-    async function savePreset(sub) {
-        const { draft } = sub;
+    // 저장하면 편집 창을 닫는다. 탭 창은 설정 이벤트로 다시 그려진다.
+    async function savePreset(win, uid, draft) {
         if (!draft.model) {
             T.toast.show("error", t("modelNotChosen"));
             return;
         }
         const body = { ...draft, name: draft.name.trim() };
-        const s = await request(() => (sub.uid ? T.api.updateModelPreset(sub.uid, body) : T.api.createModelPreset(body)));
+        const s = await request(() => (uid ? T.api.updateModelPreset(uid, body) : T.api.createModelPreset(body)));
         if (!s) return;
-        C.modelSub = null;
-        C.build();
+        void win.close({ force: true });
     }
 
-    async function makeDefault(preset) {
-        if (await request(() => T.api.defaultModelPreset(preset.uid))) C.build();
+    async function makeDefault(win, preset) {
+        if (await request(() => T.api.defaultModelPreset(preset.uid))) win.rebuild();
     }
 
-    async function deletePreset(preset) {
+    async function deletePreset(win, preset) {
         if (!(await C.confirmDelete(presetName(preset)))) return;
         if (!(await request(() => T.api.deleteModelPreset(preset.uid)))) return;
-        C.modelSub = null;
-        C.build();
+        void win.close({ force: true });
     }
 
-    // 모델 고르기와 고정 고르기 화면.
-    function buildPick(sec, sub) {
-        const parent = sub.parent;
-        const draft = parent.draft;
-        if (sub.what === "profile") {
-            buildProfilePick(sec, parent);
+    /* ── 고르기 창 "s.pick:<what>:<프리셋 창 id>" ─────────────
+       프리셋 편집 창의 초안(win.draft)에서 하나를 고른다. 고르면 그 초안에 담고, 편집 창을 다시 그린 뒤 이 창을 닫는다.
+       편집 창이 닫히면 같이 닫힌다. */
+    const PICK_TITLES = { model: "model", pin: "openRouterPin", profile: "provider", thinking: "thinkingLevel", ctx: "ctxFillLimit" };
+
+    T.windows.define("s.pick", (arg) => {
+        const i = (arg || "").indexOf(":");
+        if (i < 0) return null;
+        const what = arg.slice(0, i);
+        const parentId = arg.slice(i + 1);
+        if (!PICK_TITLES[what]) return null;
+        const parent = () => T.windows.get(parentId);
+        // 주소로 되살릴 때 편집 창이 없으면 열지 않는다.
+        if (!parent()) return null;
+        const filter = { q: "" };
+        return {
+            title: () => t(PICK_TITLES[what]),
+            on: ["settings"],
+            gone: () => !parent()?.draft,
+            build(body, win) {
+                const host = parent();
+                if (!host?.draft) return;
+                const done = () => {
+                    host.rebuild();
+                    void win.close({ force: true });
+                };
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                buildPick(sec, { what, draft: host.draft, filter, done, win });
+            },
+        };
+    });
+
+    // 모델, 고정, 추론 깊이, 압축 시점, 프로바이더 고르기. p: { what, draft, filter, done, win }
+    function buildPick(sec, p) {
+        const { draft, filter, done } = p;
+        if (p.what === "profile") {
+            buildProfilePick(sec, draft, done);
             return;
         }
         const profile = profileByUid(draft.profile);
         if (!profile) {
-            backTo(parent);
+            sec.append(T.h("div", { class: "empty-note", text: "-" }));
             return;
         }
-        if (sub.what === "pin") {
-            buildPinPick(sec, parent, profile);
+        if (p.what === "pin") {
+            buildPinPick(sec, p, profile);
             return;
         }
-        if (sub.what === "thinking") {
+        if (p.what === "thinking") {
             const levels = thinkingLevelsFor(profile.id);
             sec.append(
                 searchList({
@@ -485,13 +524,13 @@
                     emptyText: "-",
                     onPick(v) {
                         draft.thinkingLevel = v;
-                        backTo(parent);
+                        done();
                     },
                 }),
             );
             return;
         }
-        if (sub.what === "ctx") {
+        if (p.what === "ctx") {
             const items = [
                 { value: "0", label: ctxLabel(0), sub: ctxTokens(profile, draft.model, globalCtxPercent()) },
                 ...ctxOptions().map((n) => ({ value: String(n), label: `${n}%`, sub: ctxTokens(profile, draft.model, n) })),
@@ -505,7 +544,7 @@
                     emptyText: "-",
                     onPick(v) {
                         draft.contextTriggerPercent = Number(v) || 0;
-                        backTo(parent);
+                        done();
                     },
                 }),
                 T.h("div", { class: "set-desc", text: t("presetCtxDesc") }),
@@ -517,7 +556,7 @@
                 draft.model = id;
                 draft.openRouterPin = "";
             }
-            backTo(parent);
+            done();
         };
         const list = modelsOf(profile);
         if (list.loading) {
@@ -528,7 +567,7 @@
             sec.append(
                 T.h("div", { class: "set-desc", text: list.error }),
                 ...manualModelInput(draft.model, pick),
-                C.actionRow(t("retry"), () => retryModels(profile)),
+                C.actionRow(t("retry"), () => retryModels(profile, p.win)),
             );
             return;
         }
@@ -538,6 +577,7 @@
                 current: draft.model,
                 placeholder: t("searchModels"),
                 emptyText: t("noModels"),
+                filter,
                 onPick: pick,
             }),
         );
@@ -545,8 +585,7 @@
     }
 
     // 프리셋의 프로바이더 고르기. 바꾸면 그 프로바이더에서 쓸 수 없는 모델, 고정, 추론 깊이는 비운다.
-    function buildProfilePick(sec, parent) {
-        const draft = parent.draft;
+    function buildProfilePick(sec, draft, done) {
         sec.append(
             searchList({
                 items: profiles().map((p) => ({ value: p.uid, label: p.name, sub: profileStatus(p) })),
@@ -563,15 +602,14 @@
                         draft.autoModelCandidates = [];
                         if (!thinkingLevelsFor(next?.id).some((l) => l.value === draft.thinkingLevel)) draft.thinkingLevel = "";
                     }
-                    backTo(parent);
+                    done();
                 },
             }),
         );
     }
 
     // 업스트림 프로바이더 고정. 별칭 모델(~…-latest)은 실제로 넘겨 받은 모델의 목록을 보여 준다.
-    function buildPinPick(sec, parent, profile) {
-        const draft = parent.draft;
+    function buildPinPick(sec, { draft, filter, done, win }, profile) {
         sec.append(T.h("div", { class: "set-desc", text: t("openRouterPinDesc") }));
         const pins = pinsOf(profile, draft.model);
         if (pins.loading) {
@@ -584,7 +622,7 @@
                 pins.error ? T.h("div", { class: "set-desc", text: pins.error }) : null,
                 C.actionRow(t("openRouterPinRetry"), () => {
                     pinLists.delete(`${profile.uid}\n${draft.model}`);
-                    C.build();
+                    win.rebuild();
                 }),
             );
             return;
@@ -608,9 +646,10 @@
                 current: draft.openRouterPin,
                 placeholder: t("openRouterPinSearch"),
                 emptyText: t("openRouterPinEmpty"),
+                filter,
                 onPick(tag) {
                     draft.openRouterPin = tag;
-                    backTo(parent);
+                    done();
                 },
             }),
         );
@@ -643,18 +682,13 @@
         return input;
     }
 
-    // API 키 행. 저장된 키가 있으면 값은 보여 주지 않고, 행을 눌렀을 때만 입력칸을 연다.
-    // 입력칸이 있으면 그 input을 같이 돌려준다(저장 버튼이 읽는다).
-    function apiKeyRows(profile, meta, onEnter) {
+    // API 키 행. 저장된 키가 있으면 값은 보여 주지 않고, 행을 눌렀을 때만 입력칸을 연다(editKey).
+    // keyOpen: 저장된 키를 다시 입력하는 중인지(창이 들고 있다). 입력칸이 있으면 그 input을 같이 돌려준다(저장 버튼이 읽는다).
+    function apiKeyRows(profile, meta, { keyOpen, editKey, onEnter }) {
         const rows = [];
         let input = null;
-        if (profile.apiKeySet && C.keyEditing !== profile.uid) {
-            rows.push(
-                C.navRow(t("apiKey"), t("apiKeySaved"), () => {
-                    C.keyEditing = profile.uid;
-                    C.build();
-                }),
-            );
+        if (profile.apiKeySet && !keyOpen) {
+            rows.push(C.navRow(t("apiKey"), t("apiKeySaved"), editKey));
         } else {
             const keyRow = C.secretInput({
                 placeholder: profile.apiKeySet ? "••••••••" : meta?.apiKeyOptional ? "" : "sk-…",
@@ -670,15 +704,37 @@
         return { rows, input };
     }
 
-    // 프로바이더 편집. 프리셋 편집과 같이 고친 것을 모았다가 위쪽 저장 버튼으로 한 번에 저장한다.
+    // 프로바이더 편집 창 "s.profile:<uid>". 프리셋 편집과 같이 고친 것을 모았다가 위쪽 저장 버튼으로 한 번에 저장한다.
     // 로그인(OAuth, CLI)은 저장할 값이 아니라 바로 하는 동작이라 그 자리에서 진행한다.
-    function buildProfileEditor(sec, sub) {
-        const profile = profileByUid(sub.uid);
-        if (!profile) {
-            C.modelSub = null;
-            sec.append(T.h("div", { class: "empty-note", text: "-" }));
-            return;
-        }
+    T.windows.define("s.profile", (uid) => {
+        if (!uid) return null;
+        let keyOpen = false; // 저장된 API 키를 다시 입력하는 중
+        return {
+            title: () => profileByUid(uid)?.name || t("provider"),
+            on: ["settings"],
+            // 다른 기기에서 지워졌다.
+            gone: () => Boolean(state.state.settings && !profileByUid(uid)),
+            onClose: leaveModels,
+            build(body, win) {
+                const profile = profileByUid(uid);
+                if (!profile) {
+                    body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+                    return;
+                }
+                const sec = T.h("div", { class: "set-section" });
+                body.append(sec);
+                buildProfileEditor(sec, win, profile, {
+                    keyOpen,
+                    editKey() {
+                        keyOpen = true;
+                        win.rebuild();
+                    },
+                });
+            },
+        };
+    });
+
+    function buildProfileEditor(sec, win, profile, key) {
         const meta = providerMeta(profile);
         const form = T.h("div", { class: "agent-editor" });
         const name = textInput(profile.name, t("profileName"));
@@ -691,11 +747,11 @@
         if (url) form.append(C.labeledRow(t("baseURL"), url));
 
         let keyRows = null;
-        const save = () => saveProfile(profile, { name, url, key: keyRows?.input });
+        const save = () => saveProfile(win, profile, { name, url, key: keyRows?.input });
         if (isOauthProfile(profile)) form.append(T.h("hr", { class: "divider" }), C.oauthSection(profile.id));
         else if (isCliProfile(profile)) form.append(T.h("hr", { class: "divider" }), C.cliLoginSection());
         else {
-            keyRows = apiKeyRows(profile, meta, save);
+            keyRows = apiKeyRows(profile, meta, { ...key, onEnter: save });
             form.append(...keyRows.rows);
         }
         for (const el of [name, url]) {
@@ -707,7 +763,7 @@
 
         sec.append(T.h("hr", { class: "divider" }));
         if (profile.presets) sec.append(T.h("div", { class: "set-desc", text: t("profileUsedBy", { n: profile.presets }) }));
-        const del = C.actionRow(t("delete"), () => deleteProfile(profile), { danger: true, own: true });
+        const del = C.actionRow(t("delete"), () => deleteProfile(win, profile), { danger: true, own: true });
         // 이 프로바이더를 쓰는 프리셋이 있으면 지울 수 없다.
         del.row.disabled = profile.presets > 0 || profiles().length <= 1;
         sec.append(del);
@@ -716,7 +772,7 @@
         C.trackForm(form);
     }
 
-    async function saveProfile(profile, { name, url, key }) {
+    async function saveProfile(win, profile, { name, url, key }) {
         const body = {};
         const n = name.value.trim();
         // 비우면 서버가 프로바이더 이름으로 되돌린다.
@@ -728,42 +784,67 @@
         if (Object.keys(provider).length) body.provider = provider;
         if (!Object.keys(body).length) return;
         if (!(await request(() => T.api.updateProviderProfile(profile.uid, body)))) return;
-        // 프리셋 편집과 같이 저장하면 목록으로 돌아간다.
-        C.keyEditing = null;
-        C.modelSub = null;
+        // 프리셋 편집과 같이 저장하면 창을 닫는다.
         if (apiKey) T.toast.show("info", t("apiKeySavedToast"));
-        C.build();
+        void win.close({ force: true });
     }
 
-    async function deleteProfile(profile) {
+    async function deleteProfile(win, profile) {
         if (!(await C.confirmDelete(profile.name))) return;
         if (!(await request(() => T.api.deleteProviderProfile(profile.uid)))) return;
-        C.modelSub = null;
-        C.build();
+        void win.close({ force: true });
     }
 
-    // 프로바이더 추가: 고르면 그 프로바이더를 만들고 바로 로그인이나 키 화면으로 간다.
-    function buildProfileAdd(sec) {
-        sec.append(T.h("div", { class: "set-desc", text: t("addProviderDesc") }));
-        let busy = false;
-        for (const p of settings().providers || []) {
-            sec.append(
-                C.navRow(p.label || p.id, "", async () => {
-                    if (busy) return;
-                    busy = true;
-                    const s = await request(() => T.api.addProviderProfile(p.id));
-                    busy = false;
-                    if (!s?.createdProfile) return;
-                    C.modelSub = { kind: "profile", uid: s.createdProfile };
-                    C.nextPush = true;
-                    C.build();
-                }),
-            );
-        }
-    }
+    // 프로바이더 추가 창: 고르면 그 프로바이더를 만들고 이 창 자리에 그 편집 창(로그인이나 키)을 연다.
+    T.windows.define("s.profile-add", (arg) =>
+        arg == null
+            ? {
+                  title: () => t("addProvider"),
+                  on: ["settings"],
+                  onClose: leaveModels,
+                  build(body, win) {
+                      const sec = T.h("div", { class: "set-section" });
+                      body.append(sec);
+                      sec.append(T.h("div", { class: "set-desc", text: t("addProviderDesc") }));
+                      let busy = false;
+                      for (const p of settings().providers || []) {
+                          sec.append(
+                              C.navRow(p.label || p.id, "", async () => {
+                                  if (busy) return;
+                                  busy = true;
+                                  const s = await request(() => T.api.addProviderProfile(p.id));
+                                  busy = false;
+                                  if (s?.createdProfile) win.replace(`s.profile:${s.createdProfile}`);
+                              }),
+                          );
+                      }
+                  },
+              }
+            : null,
+    );
+
+    // 고급 설정 창.
+    T.windows.define("s.adv", (arg) =>
+        arg == null
+            ? {
+                  title: () => t("advanced"),
+                  on: ["settings"],
+                  build(body) {
+                      const s = state.state.settings;
+                      if (!s) {
+                          body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+                          return;
+                      }
+                      const sec = T.h("div", { class: "set-section" });
+                      body.append(sec);
+                      C.buildModelAdvanced(sec, s);
+                  },
+              }
+            : null,
+    );
 
     /* ── 탭 첫 화면 ───────────────────────────────────────── */
-    function presetRows(sec) {
+    function presetRows(sec, win) {
         sec.append(C.fieldLabel(t("modelPresets")), T.h("div", { class: "set-desc", text: t("modelPresetsDesc") }));
         for (const p of presets()) {
             sec.append(
@@ -771,99 +852,46 @@
                     name: presetName(p),
                     badge: p.isDefault ? t("presetDefaultBadge") : "",
                     sub: presetSummary(p),
-                    onclick: () => openPreset(p),
+                    onclick: () => win.open(`s.preset:${p.uid}`),
                 }),
             );
         }
-        sec.append(C.actionRow(t("addPreset"), () => openPreset(null), { icon: "plus" }));
+        sec.append(C.actionRow(t("addPreset"), () => win.open("s.preset:new"), { icon: "plus" }));
     }
 
-    function profileRows(sec) {
+    function profileRows(sec, win) {
         sec.append(C.fieldLabel(t("providers")), T.h("div", { class: "set-desc", text: t("providersDesc") }));
         for (const p of profiles()) {
             sec.append(
                 C.itemRow({
                     name: p.name,
                     sub: profileStatus(p),
-                    onclick: () =>
-                        C.openForm(() => {
-                            C.keyEditing = null;
-                            C.modelSub = { kind: "profile", uid: p.uid };
-                        }),
+                    onclick: () => win.open(`s.profile:${p.uid}`),
                 }),
             );
         }
-        sec.append(
-            C.actionRow(
-                t("addProvider"),
-                () =>
-                    C.openForm(() => {
-                        C.modelSub = { kind: "addProfile" };
-                    }),
-                { icon: "plus" },
-            ),
-        );
+        sec.append(C.actionRow(t("addProvider"), () => win.open("s.profile-add"), { icon: "plus" }));
     }
 
-    function buildModel(body) {
-        const s = state.state.settings;
-        if (!s || !(s.providers || []).length) {
-            body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
-            return;
-        }
-        const sec = T.h("div", { class: "set-section" });
-        body.append(sec);
-        const sub = C.modelSub;
-        if (sub === "adv") {
-            C.buildModelAdvanced(sec, s);
-            return;
-        }
-        if (sub?.kind === "preset") {
-            buildPresetEditor(sec, sub);
-            return;
-        }
-        if (sub?.kind === "pick") {
-            buildPick(sec, sub);
-            return;
-        }
-        if (sub?.kind === "profile") {
-            buildProfileEditor(sec, sub);
-            return;
-        }
-        if (sub?.kind === "addProfile") {
-            buildProfileAdd(sec);
-            return;
-        }
-        presetRows(sec);
-        sec.append(T.h("hr", { class: "divider" }));
-        profileRows(sec);
-        sec.append(
-            T.h("hr", { class: "divider" }),
-            C.navRow(t("advanced"), "", () =>
-                C.openForm(() => {
-                    C.modelSub = "adv";
-                }),
-            ),
-        );
-    }
-
-    // 편집 화면의 제목.
-    function modelSubTitle(sub) {
-        if (sub === "adv") return t("advanced");
-        if (sub?.kind === "preset") return sub.uid ? presetName(presetByUid(sub.uid)) : t("addPreset");
-        if (sub?.kind === "pick")
-            return t({ pin: "openRouterPin", profile: "provider", thinking: "thinkingLevel", ctx: "ctxFillLimit" }[sub.what] || "model");
-        if (sub?.kind === "profile") return profileByUid(sub.uid)?.name || t("provider");
-        if (sub?.kind === "addProfile") return t("addProvider");
-        return t("modelsTab");
-    }
-
-    // 뒤로: 고르기 화면은 프리셋 편집으로, 나머지는 탭 첫 화면으로 돌아간다. 처리했으면 true.
-    function modelSubBack() {
-        if (C.modelSub?.kind !== "pick") return false;
-        backTo(C.modelSub.parent);
-        return true;
-    }
+    C.defineTab("model", {
+        onClose: leaveModels,
+        build(body, win) {
+            const s = state.state.settings;
+            if (!s || !(s.providers || []).length) {
+                body.append(T.h("div", { class: "empty-note", text: t("offlineNote") }));
+                return;
+            }
+            const sec = T.h("div", { class: "set-section" });
+            body.append(sec);
+            presetRows(sec, win);
+            sec.append(T.h("hr", { class: "divider" }));
+            profileRows(sec, win);
+            sec.append(
+                T.h("hr", { class: "divider" }),
+                C.navRow(t("advanced"), "", () => win.open("s.adv")),
+            );
+        },
+    });
 
     C.modelPresets = presets;
     C.modelPresetByUid = presetByUid;
@@ -873,8 +901,4 @@
     C.modelsOf = modelsOf;
     C.modelsReady = modelsReady;
     C.forgetModelLists = forgetModelLists;
-    C.modelSubTitle = modelSubTitle;
-    C.modelSubBack = modelSubBack;
-    C.modelSubParent = () => (C.modelSub?.kind === "pick" ? C.modelSub.parent : null);
-    C.buildModel = buildModel;
 })(window.Taby);

@@ -218,8 +218,8 @@
         const row = T.h(
             "div",
             {
-                class: `bot-row${inGroup ? " in-group" : ""}${state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? " active" : ""}`,
-                "aria-current": state.state.currentId === bot.uuid && !T.settingsUI.isOpen() && !T.todosUI?.isOpen?.() ? "true" : null,
+                class: `bot-row${inGroup ? " in-group" : ""}${state.state.currentId === bot.uuid && !T.todosUI?.isOpen?.() ? " active" : ""}`,
+                "aria-current": state.state.currentId === bot.uuid && !T.todosUI?.isOpen?.() ? "true" : null,
                 role: "button",
                 "aria-label": `${bot.name}. ${T.md.previewPlain(previewText)}`.trim(),
                 tabindex: "0",
@@ -263,8 +263,8 @@
        우클릭과 길게 누르기가 같은 항목을 쓴다. 각 엘리먼트에 T.ctxmenu.attach로 붙인다. */
     function botMenuItems(bot) {
         return [
-            // 채팅의 openBot과 동일한 패턴: pushState 후 공용 라우터가 렌더링된다.
-            { label: t("botSettings"), icon: "settings", defer: true, onSelect: () => C.settingsPush(bot.id) },
+            // 이 에이전트의 설정 창을 연다(본문 바로 옆).
+            { label: t("botSettings"), icon: "settings", defer: true, onSelect: () => T.settingsUI.open({ agentId: bot.id }) },
             folderMenuItem(bot),
         ];
     }
@@ -326,12 +326,7 @@
     }
 
     function openTodos() {
-        try {
-            if (T.settingsUI.isOpen()) T.settingsUI.hide();
-            if (!/^\/t\/?$/.test(location.pathname)) history.pushState(null, "", "/t");
-        } catch {
-            // 주소 갱신이 막힌 환경에서는 화면만 바꾸고 주소는 그대로 둔다
-        }
+        if (!/^\/t\/?$/.test(location.pathname)) T.util.pushUrl("/t");
         if (C.isMobile()) C.setMobileChat(true);
         T.app?.renderRoute();
     }
@@ -393,12 +388,17 @@
         settingsBtn.setAttribute("aria-label", lost ? `${t("settings")}, ${label}` : t("settings"));
     }
 
-    // 라우트에 맞춰 선택 표시를 동기화한다: /s/면 설정 행이, /a/면 해당 봇 행이 '선택'된다.
+    // 라우트에 맞춰 선택 표시를 동기화한다: 설정 창이 열려 있으면 설정 버튼이, /a/면 해당 봇 행이 '선택'된다.
     function syncRoute() {
+        syncSettingsBtn();
+        render();
+    }
+
+    // 설정 창이 하나라도 열려 있으면 설정 버튼을 눌린 모양으로 둔다. 창이 열리고 닫힐 때마다(ui/windows.js의 "windows") 맞춘다.
+    function syncSettingsBtn() {
         const on = T.settingsUI.isOpen();
         settingsBtn.classList.toggle("active", on);
         settingsBtn.setAttribute("aria-current", on ? "page" : null);
-        render();
     }
 
     // 에이전트 행들. 폴더를 목록 안에 보이는 설정이면 폴더 묶음을 위에, 폴더에 없는 에이전트를 그 아래에 둔다.
@@ -460,6 +460,7 @@
     C.tabMenuItems = tabMenuItems;
     C.renderConn = renderConn;
     C.syncRoute = syncRoute;
+    C.syncSettingsBtn = syncSettingsBtn;
     C.listRows = listRows;
     C.render = render;
 })(window.Taby);

@@ -7,8 +7,6 @@
     const { state } = T;
     const t = (k, v) => T.i18n.t(k, v);
     const page = document.getElementById("todosPage");
-    const touchMq = window.matchMedia?.("(max-width: 860px)");
-    const isTouch = () => !!touchMq?.matches;
 
     let recoveredDismissed = false;
 
@@ -17,14 +15,6 @@
     C.scrollToRow = null;
 
     C.lastScrollTop = 0;
-
-    C.composing = 0;
-
-    C.buildQueued = false;
-
-    C.composingEl = null;
-
-    C.composingTimer = 0;
 
     function doneToggleEl(doneItems, doneKey) {
         const frag = document.createDocumentFragment();
@@ -123,40 +113,22 @@
         return sec;
     }
 
-    // 편집 중인 항목이 사라졌거나 초안이 없는 상태를 현재 목록에 맞춘다.
-    function reconcileEditor() {
-        if (C.handPopFor && !C.items().some((row) => row.id === C.handPopFor)) C.handPopFor = null;
-        if (C.editId && C.editId !== C.pendingDeepId && !C.items().some((row) => row.id === C.editId)) {
-            const goneId = C.editId;
-            if (C.draft) C.toastGone(goneId);
-            C.closeGoneEditor(goneId);
-        } else if (C.editId && !C.draft && C.editId !== C.pendingDeepId) {
-            C.beginEdit(C.editId);
-            C.focusEdit = true;
-        }
-    }
-
-    // 다시 그린 뒤 포커스를 되돌릴 수 있게, 지금 포커스가 어디 있는지 기억해 둔다.
-    const FOCUSABLE_SELECTOR =
-        ".td-edit-title,.td-edit-prompt,.td-time,.td-date,.td-num,.td-sel,.td-cron,.td-chip,.td-check,.td-done-btn,.td-handoff,.td-hand-item,.btn";
+    // 다시 그린 뒤 포커스를 되돌릴 수 있게, 목록 안의 어디에 포커스가 있는지 기억해 둔다.
+    const FOCUSABLE_SELECTOR = ".td-check,.td-done-btn,.td-handoff,.td-hand-item,.td-chip,.btn";
 
     function captureFocus() {
         const active = document.activeElement;
         let focus = null;
-        if (C.inUi(active)) {
-            const host = active.closest?.(".td-row,.td-sug,.td-view");
+        if (active && page.contains(active)) {
+            const host = active.closest?.(".td-row,.td-sug");
             const cls = [...(active.classList || [])].find((c) => FOCUSABLE_SELECTOR.includes(`.${c}`));
             if (cls && host?.dataset?.id) {
                 const peers = [...host.querySelectorAll(`.${cls}`)];
                 focus = {
                     rid: host.dataset.id,
-                    sel: host.classList.contains("td-sug") ? ".td-sug" : host.classList.contains("td-view") ? ".td-view" : ".td-row",
-                    // 상세 화면은 열이 여럿일 수 있다(세부사항 + 일정/담당). 어느 열이었는지도 기억한다.
-                    view: host.classList.contains("td-view") ? host.dataset.view : null,
+                    sel: host.classList.contains("td-sug") ? ".td-sug" : ".td-row",
                     cls,
                     i: Math.max(0, peers.indexOf(active)),
-                    s: active.selectionStart,
-                    e: active.selectionEnd,
                 };
             }
         }
@@ -219,32 +191,14 @@
     }
 
     function restoreFieldFocus(focus) {
-        // 편집기가 상세 화면에 있으면 같은 id의 행이 목록에도 있다. 상세 화면 쪽을 먼저 찾는다.
-        const hostSel = `${focus.sel || ".td-row"}[data-id="${focus.rid}"]${focus.view ? `[data-view="${focus.view}"]:not(.col-out)` : ""}`;
-        const host = focus.rid ? C.sheetHost?.querySelector(hostSel) || page.querySelector(hostSel) : null;
-        const el = host ? host.querySelectorAll(`.${focus.cls}`)[focus.i] : null;
-        if (!el) return;
-        el.focus({ preventScroll: true });
-        try {
-            el.setSelectionRange?.(focus.s ?? el.value?.length ?? 0, focus.e ?? el.value?.length ?? 0);
-        } catch {
-            // 선택 범위를 지정할 수 없는 입력 종류면 무시한다
-        }
-    }
-
-    // 방금 연 편집기의 제목에 포커스를 준다(데스크톱만). 줬으면 true.
-    function focusNewEditorTitle() {
-        const input = C.find(".td-edit-title");
-        if (!input || isTouch()) return false;
-        input.focus({ preventScroll: true });
-        input.selectionStart = input.selectionEnd = input.value.length;
-        return true;
+        const host = page.querySelector(`${focus.sel}[data-id="${focus.rid}"]`);
+        host?.querySelectorAll(`.${focus.cls}`)[focus.i]?.focus({ preventScroll: true });
     }
 
     function focusRow(id) {
         const el = page.querySelector(`.td-row[data-id="${id}"]`);
         if (!el) return;
-        // 행을 보이게 하되 앱의 가로 스크롤(데스크톱의 열 위치)은 건드리지 않는다.
+        // 행을 보이게 하되 앱의 가로 스크롤(데스크톱의 창 위치)은 건드리지 않는다.
         const app = document.getElementById("app");
         const left = app.scrollLeft;
         el.scrollIntoView({ block: "nearest" });
@@ -253,17 +207,8 @@
     }
 
     function restoreFocus({ focus, rowFocus, doneBtnFocus }) {
-        let titleFocused = false;
-        if (focus) {
-            restoreFieldFocus(focus);
-        } else if (C.focusEdit) {
-            C.focusEdit = false;
-            titleFocused = focusNewEditorTitle();
-        } else {
-            C.focusEdit = false;
-        }
-        // 방금 연 상세의 제목에 포커스를 줬으면, 누른 행으로 포커스를 되돌리지 않는다.
-        const targetRow = C.focusRowId || (titleFocused ? null : rowFocus);
+        if (focus) restoreFieldFocus(focus);
+        const targetRow = C.focusRowId || rowFocus;
         C.focusRowId = null;
         if (targetRow) focusRow(targetRow);
         else if (doneBtnFocus >= 0) page.querySelectorAll(".td-done-btn")[doneBtnFocus]?.focus({ preventScroll: true });
@@ -283,12 +228,7 @@
 
     function build() {
         if (!page) return;
-        if (C.composing) {
-            C.buildQueued = true;
-            return;
-        }
-        C.buildQueued = false;
-        reconcileEditor();
+        if (C.handPopFor && !C.item(C.handPopFor)) C.handPopFor = null;
 
         const focusSnapshot = captureFocus();
         page.replaceChildren();
@@ -298,7 +238,6 @@
         const rec = state.state.todosRecovered;
         if (rec && !recoveredDismissed) wrapChildren.unshift(recoveredBannerEl(rec));
         page.append(T.h("div", { class: "td-wrap" }, wrapChildren));
-        C.renderDetail(all);
 
         restoreFocus(focusSnapshot);
         applyScrollToRow();
