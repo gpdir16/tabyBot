@@ -8,7 +8,7 @@ import { startDreamingScheduler } from "./lib/dreaming/scheduler.js";
 import { startProactiveScheduler } from "./lib/proactive.js";
 import { isDockerRuntime } from "./lib/runtime.js";
 import { ensureSession, DISPLAY } from "./lib/computer/display.js";
-import { shutdownComputer, upgradeAllProfilesCompat } from "./lib/web/computer.js";
+import { prepareAllProfiles, shutdownComputer } from "./lib/web/computer.js";
 import { deleteOnceSecrets } from "./lib/secrets/store.js";
 import { flushUsageLog } from "./lib/llm/usage-log.js";
 
@@ -35,8 +35,8 @@ function startSharedDisplay() {
 
 async function main() {
     ensureUserDir();
-    // Camoufox가 업데이트된 뒤 첫 부팅이면 기존 브라우저 프로필을 새 버전으로 열 수 있게 맞춘다.
-    upgradeAllProfilesCompat();
+    // 브라우저 프로필을 맞춘다. 실행을 멈추게 하는 예전 세션 복원 설정을 끄고, Camoufox가 업데이트된 뒤면 새 버전으로 열 수 있게 한다.
+    prepareAllProfiles();
     // 지난 실행이 턴 도중에 끝나 남은 일회용 시크릿(인증 코드 등)을 지운다.
     deleteOnceSecrets();
     await initTools();

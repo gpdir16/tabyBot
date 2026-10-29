@@ -2,4 +2,4 @@
 export { purgeAgentComputer } from "./computer/browser.js";
 export { initComputerWs, handleComputerUpgrade, dropRevokedComputerConns, shutdownComputer } from "./computer/stream.js";
 export { registerComputerRoutes } from "./computer/stream.js";
-export { upgradeAllProfilesCompat } from "./computer/camofox.js";
+export { prepareAllProfiles } from "./computer/camofox.js";

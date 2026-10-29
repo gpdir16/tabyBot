@@ -5,7 +5,9 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { writeFileAtomic } from "../../atomic-file.js";
 import * as display from "../../computer/display.js";
+import { camofoxEnv } from "../../computer/camofox-user.js";
 import { USER_DIR } from "../../paths.js";
+import { isDockerRuntime } from "../../runtime.js";
 
 let camofoxBin; // "yes" | null | undefined(미확인)
 
@@ -40,7 +42,7 @@ export function normalizeUrl(url) {
 // camofox는 http(s)만 허용한다. 빈 창(about:blank)은 차단되므로 기본 페이지를 둔다.
 export const DEFAULT_URL = "https://start.duckduckgo.com/";
 
-function camofoxBase() {
+export function camofoxBase() {
     return `http://${process.env.CAMOFOX_HOST || "127.0.0.1"}:${process.env.CAMOFOX_PORT || "9377"}`;
 }
 
@@ -48,19 +50,40 @@ export function camofoxProfilesDir() {
     return process.env.CAMOFOX_PROFILES_DIR || path.join(USER_DIR, "camofox", "profiles");
 }
 
-// Firefox 세션 복원을 켠다. 브라우저가 재시작돼도 이전 탭/창을 그대로 되살린다.
-// user.js는 실행 때마다 prefs.js에 병합되므로 프로필 생성 전에 미리 써둬도 된다.
+// 브라우저를 띄우기 전에 프로필을 맞춘다.
 export function ensureProfilePrefs(user) {
-    try {
-        const dir = path.join(camofoxProfilesDir(), user);
-        fs.mkdirSync(dir, { recursive: true });
-        const file = path.join(dir, "user.js");
-        const body = ['user_pref("browser.startup.page", 3);', 'user_pref("browser.sessionstore.resume_from_crash", true);', ""].join("\n");
-        if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== body) writeFileAtomic(file, body);
-    } catch {
-        // 프로필 설정을 쓰지 못해도 기본 설정으로 계속 진행한다
-    }
+    resetSessionRestorePrefs(user);
     upgradeProfileCompat(user);
+}
+
+/* ── Firefox 세션 복원 끄기: 예전에는 user.js로 browser.startup.page=3과 resume_from_crash를 켰다.
+   camofox(Playwright)는 브라우저를 띄울 때 첫 페이지의 load를 기다리는데, 세션 복원이 켜져 있으면
+   그 load가 오지 않아 새 프로필도, 크래시 뒤 다시 띄울 때도 3분 동안 멈춘 뒤 실패한다(2026-10-29 재현).
+   그 값은 prefs.js에도 남아 user.js만 지워서는 안 꺼지므로, 한 번 켰던 프로필은 user.js로 Camoufox
+   기본값을 다시 덮는다. 다시 띄울 때 탭은 탭 스냅샷(아래)으로 연다. ── */
+const RESTORE_PREF_RE = /"browser\.(startup\.page|sessionstore\.resume_from_crash)"/;
+const RESET_RESTORE_PREFS = ['user_pref("browser.startup.page", 0);', 'user_pref("browser.sessionstore.resume_from_crash", false);', ""].join("\n");
+
+function readText(file) {
+    try {
+        return fs.readFileSync(file, "utf8");
+    } catch {
+        return "";
+    }
+}
+
+function resetSessionRestorePrefs(user) {
+    const dir = path.join(camofoxProfilesDir(), user);
+    const file = path.join(dir, "user.js");
+    const current = readText(file);
+    if (current === RESET_RESTORE_PREFS) return;
+    if (!RESTORE_PREF_RE.test(current) && !RESTORE_PREF_RE.test(readText(path.join(dir, "prefs.js")))) return;
+    try {
+        writeFileAtomic(file, RESET_RESTORE_PREFS);
+        blog("profile restore prefs reset", { user });
+    } catch {
+        // 덮지 못하면 이 프로필은 예전처럼 띄울 때 멈출 수 있지만 다른 프로필은 계속 맞춘다
+    }
 }
 
 /* ── 프로필 버전 표시: camofox-browser는 프로필 폴더의 compatibility.json에 만든 Camoufox 버전을
@@ -115,9 +138,8 @@ function upgradeProfileCompat(user, current = installedCamoufoxVersion()) {
 }
 
 // 부팅 때 모든 프로필을 맞춘다. 에이전트의 terminal_run은 이 모듈을 거치지 않고 camofox CLI를 바로 부른다.
-export function upgradeAllProfilesCompat() {
+export function prepareAllProfiles() {
     const current = installedCamoufoxVersion();
-    if (!current) return;
     let users = [];
     try {
         users = fs
@@ -127,20 +149,13 @@ export function upgradeAllProfilesCompat() {
     } catch {
         // 프로필 폴더가 아직 없으면 맞출 것도 없다
     }
-    for (const user of users) upgradeProfileCompat(user, current);
+    for (const user of users) {
+        resetSessionRestorePrefs(user);
+        upgradeProfileCompat(user, current);
+    }
 }
 
-// 이전 실행에서 남긴 세션 저장 파일이 있는가: 있으면 재기동 시 탭이 복원된다.
-export function hasStoredSession(user) {
-    const dir = path.join(camofoxProfilesDir(), user);
-    return (
-        fs.existsSync(path.join(dir, "sessionstore.jsonlz4")) ||
-        fs.existsSync(path.join(dir, "sessionstore-backups", "recovery.jsonlz4")) ||
-        fs.existsSync(path.join(dir, "sessionstore-backups", "previous.jsonlz4"))
-    );
-}
-
-/* ── 탭 스냅샷: 정상 종료 시엔 Firefox가 세션 복원을 건너뛰므로
+/* ── 탭 스냅샷: Firefox 세션 복원은 쓸 수 없으므로(위)
    마지막으로 열려 있던 URL을 직접 저장해 재기동 때 다시 연다 ── */
 export function tabSnapshotFile(user) {
     return path.join(USER_DIR, "camofox", "last-tabs", `${user}.json`);
@@ -183,6 +198,20 @@ export function blog(msg, extra) {
 export async function camofoxServerUp() {
     const h = await camofoxApi("/health", { timeoutMs: 4_000 }).catch(() => null);
     return h?.ok ? h.json || null : null;
+}
+
+// 서버가 죽어 있으면 띄우고 health를 돌려준다. 이 경로로 뜬 서버는 무기한 타임아웃 env를 물려받는다.
+// displayNum이 없으면(로컬 설치의 headless 브라우저) 화면 없이 띄운다.
+export async function ensureCamofoxServer(displayNum) {
+    // 일시 타임아웃을 서버 다운으로 오인해 재기동하면 살아있는 세션이 날아간다. 한 번 더 확인한다.
+    const health = (await camofoxServerUp()) || (await camofoxServerUp());
+    if (health) return health;
+    // terminal_run의 camofox CLI와 같은 HOME을 써야 같은 서버 설정과 로그 위치를 본다
+    const env = camofoxEnv({ ...process.env, HOME: isDockerRuntime() ? USER_DIR : process.env.HOME || USER_DIR });
+    if (displayNum != null) env.DISPLAY = `:${displayNum}`;
+    const started = await runFile("camofox", ["server", "start", "--background"], env, 20_000);
+    blog("camofox server start", { ok: started.ok, err: (started.stderr || "").slice(0, 200) });
+    return await camofoxServerUp();
 }
 
 export async function camofoxUserTabs(user) {

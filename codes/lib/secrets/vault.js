@@ -6,7 +6,7 @@ import { getSecretValues, listSecrets } from "./store.js";
 const PLACEHOLDER_RE = /\{\{secret:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}\}/g;
 
 // 값을 직접 치환해 넣는 도구. terminal_run은 셸 인용 문제 때문에 환경 변수로 넘긴다.
-const INJECT_TOOLS = (name) => name === "xvfb_gui" || name === "file_patch" || name.startsWith("mcp__");
+const INJECT_TOOLS = (name) => name === "xvfb_gui" || name === "file_patch" || name === "browser_type" || name.startsWith("mcp__");
 
 export const placeholderFor = (id) => `{{secret:${id}}}`;
 

@@ -12,11 +12,10 @@ import {
     blog,
     camofoxApi,
     camofoxProfilesDir,
-    camofoxServerUp,
     camofoxUserTabs,
+    ensureCamofoxServer,
     ensureProfilePrefs,
     hasCamofox,
-    hasStoredSession,
     normalizeUrl,
     readTabSnapshot,
     runFile,
@@ -35,7 +34,7 @@ export async function openBrowser(agentId, url) {
     process.env.DISPLAY = `:${sess.display}`;
     const env = camofoxEnv({ ...process.env, DISPLAY: `:${sess.display}`, HOME: USER_DIR });
     const user = camofoxUser(getAgent(agentId) || getAgentByUuid(agentId));
-    ensureProfilePrefs(user); // 창이 새로 뜨기 전에 세션 복원 pref를 심는다
+    ensureProfilePrefs(user); // 창이 새로 뜨기 전에 프로필을 맞춘다
     const target = normalizeUrl(url);
     if (target && /^-/.test(target)) return { error: "bad_url" };
 
@@ -107,17 +106,7 @@ export async function ensureBrowserWindow(agentId) {
         if (!sess) return;
         if ((await windowVisible(sess.display)) === true) return;
         // 판정은 전부 직접 HTTP로 한다. camofox health CLI 출력은 파싱 실패 여지가 있다.
-        let health = await camofoxServerUp();
-        // 일시 타임아웃을 서버 다운으로 오인해 재기동하면 살아있는 세션이 날아간다.
-        // 한 번 더 확인한다.
-        if (!health) health = await camofoxServerUp();
-        if (!health) {
-            // 서버가 죽어 있으면 먼저 띄운다. 이 경로로 뜬 서버는 7일 타임아웃 env를 물려받는다.
-            const env = camofoxEnv({ ...process.env, HOME: USER_DIR, DISPLAY: `:${sess.display}` });
-            const started = await runFile("camofox", ["server", "start", "--background"], env, 20_000);
-            blog("camofox server start", { user, ok: started.ok, err: (started.stderr || "").slice(0, 200) });
-            health = await camofoxServerUp();
-        }
+        const health = await ensureCamofoxServer(sess.display);
         // 세션은 살아있는데 화면에 창이 없다. 창만 닫혔거나 세션이 다른
         // 디스플레이에 묶인 경우다. 같은 컨텍스트에 탭을 하나 열어 창을 되살린다.
         if ((health?.activeUserIds || []).includes(user) || (await camofoxUserTabs(user))?.length) {
@@ -130,19 +119,18 @@ export async function ensureBrowserWindow(agentId) {
             blog("ensureBrowserWindow: reopen window", { user, ok: !!made?.ok });
             return;
         }
-        blog("ensureBrowserWindow: launch", { user, serverUp: !!health, stored: hasStoredSession(user), snap: readTabSnapshot(user).length });
+        blog("ensureBrowserWindow: launch", { user, serverUp: !!health, snap: readTabSnapshot(user).length });
         ensureProfilePrefs(user);
-        // 이전 세션/스냅샷이 있으면 빈 탭 트리거로 브라우저만 띄워 복원한다.
+        // 탭 스냅샷이 있으면 빈 탭 트리거로 브라우저만 띄워 그 URL을 다시 연다.
         // 새로 만든 빈 탭은 안에서 바로 닫는다.
-        if ((hasStoredSession(user) || readTabSnapshot(user).length) && (await restoreBrowserSession(user))) return;
+        if (readTabSnapshot(user).length && (await restoreBrowserSession(user))) return;
         await openBrowser(agent.id, "");
     } finally {
         browserInflight.delete(user);
     }
 }
 
-// URL 없는 탭 생성으로 브라우저만 띄운다. 크래시 후면 Firefox가 이전 탭을 복원하고,
-// 정상 종료로 복원이 비어 있으면 저장해 둔 스냅샷 URL을 다시 연다.
+// URL 없는 탭 생성으로 브라우저만 띄우고 저장해 둔 스냅샷 URL을 다시 연다.
 // 마지막에 트리거용 빈 탭은 닫아 복원된 탭만 남긴다.
 async function restoreBrowserSession(user) {
     try {
@@ -157,7 +145,6 @@ async function restoreBrowserSession(user) {
             return false;
         }
         const triggerId = created.json.tabId;
-        await new Promise((res) => setTimeout(res, 1200)); // 복원 탭이 인덱스에 잡힐 때까지
         const cur = await camofoxApi(`/tabs?userId=${encodeURIComponent(user)}`, { timeoutMs: 10_000 });
         const curUrls = new Set((cur.json?.tabs || []).map((t) => t.url));
         const reopened = [];
