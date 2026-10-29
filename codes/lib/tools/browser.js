@@ -5,6 +5,8 @@
 import path from "node:path";
 import { isDockerRuntime } from "../runtime.js";
 import { USER_DIR } from "../paths.js";
+import { loadUserConfig } from "../config-loader.js";
+import { defaultTimeZone, isValidTimeZone } from "../scheduling/time.js";
 import * as display from "../computer/display.js";
 import { camofoxUser } from "../computer/camofox-user.js";
 import { camofoxApi, camofoxUserTabs, ensureCamofoxServer, ensureProfilePrefs, normalizeUrl } from "../web/computer/camofox.js";
@@ -121,7 +123,7 @@ export const browserToolDefinitions = [
     ),
     fn(
         "browser_tabs",
-        "List your open tabs (tab_id, url, title, which one you used last). Pass close with tab ids to close tabs you no longer need.",
+        "List your open tabs (tab_id, url, title, used_at: when a browser tool last used it, current: the tab used when tab_id is omitted). A tab without used_at has not been used by these tools since the app started; it may have been opened by the user or before a restart. Pass close with tab ids to close tabs you no longer need.",
         { close: { type: "array", items: { type: "string" }, description: "Tab ids to close." } },
     ),
 ];
@@ -130,6 +132,37 @@ export const BROWSER_TOOL_NAMES = new Set(browserToolDefinitions.map((d) => d.fu
 
 /* ── 탭 고르기: tab_id를 안 주면 그 에이전트가 마지막으로 쓴 탭을 쓴다 ── */
 const lastTabByUser = new Map();
+// 유저별 탭 id -> 도구로 마지막에 쓴 시각(ms). 체크인이 아직 쓰는 탭을 닫지 않게 browser_tabs에 보여 준다.
+// 메모리에만 두므로 앱을 다시 띄우기 전에 쓴 탭이나 도구 밖에서 연 탭은 시각이 없다.
+const tabUsedAt = new Map();
+
+function markUsed(user, tabId) {
+    lastTabByUser.set(user, tabId);
+    if (!tabUsedAt.has(user)) tabUsedAt.set(user, new Map());
+    tabUsedAt.get(user).set(tabId, Date.now());
+}
+
+// 설정한 시간대의 "2026-10-29 17:50 (12 min ago)"
+function formatUsedAt(ms, now = Date.now()) {
+    const tz = loadUserConfig().timezone;
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat("en-CA", {
+            timeZone: tz && isValidTimeZone(tz) ? tz : defaultTimeZone(),
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+        })
+            .formatToParts(new Date(ms))
+            .map((p) => [p.type, p.value]),
+    );
+    const min = Math.floor((now - ms) / 60_000);
+    const ago =
+        min < 1 ? "just now" : min < 120 ? `${min} min ago` : min < 2880 ? `${Math.floor(min / 60)} h ago` : `${Math.floor(min / 1440)} days ago`;
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} (${ago})`;
+}
 
 async function openTabs(user) {
     const list = await camofoxUserTabs(user);
@@ -144,12 +177,12 @@ async function resolveTab(user, requested) {
     if (requested) {
         const hit = tabs.find((t) => t.tabId === requested);
         if (!hit) return { error: `Tab ${requested} is not open.`, tabs: tabSummary(tabs) };
-        lastTabByUser.set(user, hit.tabId);
+        markUsed(user, hit.tabId);
         return { tab: hit, tabs };
     }
     // 마지막으로 쓴 탭이 닫혔으면 목록의 마지막 탭을 쓴다
     const tab = tabs.find((t) => t.tabId === lastTabByUser.get(user)) || tabs[tabs.length - 1];
-    lastTabByUser.set(user, tab.tabId);
+    markUsed(user, tab.tabId);
     return { tab, tabs };
 }
 
@@ -223,7 +256,7 @@ async function openTab(user, args) {
     const r = await post("/tabs", { userId: user, sessionKey: "default", url }, 60_000).catch(() => null);
     const tabId = r?.json?.tabId;
     if (!r?.ok || !tabId) return failure(r, "open");
-    lastTabByUser.set(user, tabId);
+    markUsed(user, tabId);
     await settle(user, tabId);
     return pageState(user, tabId);
 }
@@ -249,7 +282,7 @@ async function click(user, resolved, args) {
         // turnstile은 지정한 탭이 없으면 확인 화면이 떠 있는 탭을 찾아 누른다(마지막으로 쓴 탭부터)
         const candidates = args.tab_id || args.target !== "turnstile" ? [tab] : [tab, ...tabs.filter((t) => t.tabId !== tab.tabId).reverse()];
         const result = await clickAtPoint(user, candidates, args);
-        if (result.tab_id) lastTabByUser.set(user, result.tab_id);
+        if (result.tab_id) markUsed(user, result.tab_id);
         return result;
     }
     const r = await post(tabPath(tab.tabId, "click"), { userId: user, ref: args.ref, selector: args.selector }, 40_000).catch(() => null);
@@ -366,9 +399,18 @@ async function listOrClose(user, args) {
     }
     const tabs = closed.length ? (await openTabs(user)) || [] : before;
     const last = lastTabByUser.get(user);
+    const usedAt = tabUsedAt.get(user) || new Map();
+    // 닫힌 탭의 시각은 버린다
+    for (const tabId of usedAt.keys()) if (!tabs.some((t) => t.tabId === tabId)) usedAt.delete(tabId);
     const result = {
         ok: true,
-        tabs: tabs.map((t) => ({ tab_id: t.tabId, url: t.url, title: t.title, ...(t.tabId === last ? { last_used: true } : {}) })),
+        tabs: tabs.map((t) => ({
+            tab_id: t.tabId,
+            url: t.url,
+            title: t.title,
+            ...(usedAt.has(t.tabId) ? { used_at: formatUsedAt(usedAt.get(t.tabId)) } : {}),
+            ...(t.tabId === last ? { current: true } : {}),
+        })),
     };
     if (closed.length) result.closed = closed;
     if (notFound.length) result.not_closed = notFound;
