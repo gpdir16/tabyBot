@@ -60,6 +60,12 @@ You have your own browser profile. Cookies and logins persist across sessions, a
 
 A click that starts a download lists it under `downloads` in the result, with `download_folder`. The file appears in that folder when the download finishes.
 
+## Closing tabs
+
+- Every open tab keeps using memory and CPU, even in the background. When a task is done, close the tabs it opened with `browser_tabs` and `close` before your final reply.
+- Keep a tab only when unfinished work will come back to it (a half-filled form, a login waiting for a code) or the user asked to keep it open.
+- Closing a tab does not log you out. Cookies and logins stay in the profile.
+
 ## Errors
 
 - "Tab ... is not open": the tab was closed. The error lists the open tabs; pick one or `browser_open` again.
