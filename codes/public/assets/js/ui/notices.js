@@ -96,7 +96,7 @@
         const lang = T.i18n.getLang();
         const loc = lang === "ko" ? "ko-KR" : lang === "ja" ? "ja-JP" : "en-US";
         try {
-            return new Intl.DateTimeFormat(loc, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+            return T.time.format(new Date(ms), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }, loc);
         } catch (_) {
             return "";
         }

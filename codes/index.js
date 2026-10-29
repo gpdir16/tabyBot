@@ -1,3 +1,5 @@
+// 다른 모듈보다 먼저 설정한 시간대를 TZ로 맞춘다.
+import "./lib/process-timezone.js";
 import { ensureUserDir } from "./lib/bootstrap.js";
 import { initTools, shutdownTools } from "./lib/agent/tool-registry.js";
 import { startWebServer } from "./lib/web/server.js";

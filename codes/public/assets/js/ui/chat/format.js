@@ -22,7 +22,7 @@
         const ms = Date.parse(at || "");
         if (!Number.isFinite(ms)) return "";
         try {
-            return new Intl.DateTimeFormat(i18nLocale(), { hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+            return T.time.format(new Date(ms), { hour: "numeric", minute: "2-digit" }, i18nLocale());
         } catch (_) {
             return "";
         }
@@ -32,7 +32,7 @@
         const ms = Date.parse(at || "");
         if (!Number.isFinite(ms)) return "";
         try {
-            return new Intl.DateTimeFormat(i18nLocale(), { dateStyle: "medium", timeStyle: "medium" }).format(new Date(ms));
+            return T.time.format(new Date(ms), { dateStyle: "medium", timeStyle: "medium" }, i18nLocale());
         } catch (_) {
             return "";
         }
@@ -43,8 +43,8 @@
     function dayKeyOf(at) {
         const ms = Date.parse(at || "");
         if (!Number.isFinite(ms)) return "";
-        const d = new Date(ms);
-        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        const p = T.time.parts(new Date(ms));
+        return `${p.y}-${p.m}-${p.d}`;
     }
 
     function fmtMsgDate(at) {
@@ -54,8 +54,10 @@
             // 메신저의 날짜 칩처럼 "10월 6일"만 쓴다. 올해가 아니면 연도를 붙인다.
             const d = new Date(ms);
             const opts =
-                d.getFullYear() === new Date().getFullYear() ? { month: "long", day: "numeric" } : { year: "numeric", month: "long", day: "numeric" };
-            return new Intl.DateTimeFormat(i18nLocale(), opts).format(d);
+                T.time.parts(d).y === T.time.parts(new Date()).y
+                    ? { month: "long", day: "numeric" }
+                    : { year: "numeric", month: "long", day: "numeric" };
+            return T.time.format(d, opts, i18nLocale());
         } catch (_) {
             return "";
         }

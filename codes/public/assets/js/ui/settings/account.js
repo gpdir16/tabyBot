@@ -70,7 +70,7 @@
         if (acct.createdAt) {
             const d = new Date(acct.createdAt);
             if (!Number.isNaN(d))
-                sec.append(C.valueRow(t("authCreatedAt"), d.toLocaleDateString(loc, { year: "numeric", month: "long", day: "numeric" })));
+                sec.append(C.valueRow(t("authCreatedAt"), T.time.format(d, { year: "numeric", month: "long", day: "numeric" }, loc)));
         }
         if (typeof acct.sessionCount === "number") sec.append(C.valueRow(t("authSessions"), t("authSessionCount", { n: acct.sessionCount })));
         sec.append(C.navRow(t("authPassword"), "••••••••", edit("password")));

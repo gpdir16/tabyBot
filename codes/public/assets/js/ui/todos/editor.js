@@ -228,7 +228,7 @@
                 }
             });
             wrap.append(date);
-            if (d.atTz && d.atTz !== C.browserTz()) wrap.append(T.h("span", { class: "td-tz-note", text: `(${d.atTz})` }));
+            if (d.atTz && d.atTz !== C.serverTz()) wrap.append(T.h("span", { class: "td-tz-note", text: `(${d.atTz})` }));
         }
         return wrap;
     }

@@ -104,16 +104,16 @@
         if (!Number.isFinite(ms)) return "";
         const d = new Date(ms);
         const now = new Date();
-        const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-        const days = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+        const days = T.time.dayDiff(now, d);
         try {
-            if (days <= 0) return new Intl.DateTimeFormat(locale(), { hour: "numeric", minute: "2-digit" }).format(d);
-            if (weekday && days < 7) return new Intl.DateTimeFormat(locale(), { weekday: "short" }).format(d);
-            const sameYear = d.getFullYear() === now.getFullYear();
-            return new Intl.DateTimeFormat(
-                locale(),
+            if (days <= 0) return T.time.format(d, { hour: "numeric", minute: "2-digit" }, locale());
+            if (weekday && days < 7) return T.time.format(d, { weekday: "short" }, locale());
+            const sameYear = T.time.parts(d).y === T.time.parts(now).y;
+            return T.time.format(
+                d,
                 sameYear ? { month: "numeric", day: "numeric" } : { year: "2-digit", month: "numeric", day: "numeric" },
-            ).format(d);
+                locale(),
+            );
         } catch {
             return "";
         }
