@@ -107,7 +107,7 @@
         const text = String(title || "").trim();
         if (!text) return false;
         try {
-            const r = await T.api.createTodo({ title: text, timezone: C.browserTz(), assigneeId: assigneeId || undefined });
+            const r = await T.api.createTodo({ title: text, timezone: C.serverTz(), assigneeId: assigneeId || undefined });
             C.scrollToRow = { id: r?.item?.id || "", until: Date.now() + 900 };
             await refresh();
             const bot = assigneeId ? (state.state.bots || []).find((b) => b.id === assigneeId) : null;

@@ -250,6 +250,8 @@
         T.i18n.onChange(() => {
             C.renderConversation();
         });
+        // 설정에서 시간대를 바꾸면 메시지 시각과 날짜 구분선을 다시 그린다.
+        T.time.onChange(() => C.renderConversation());
         window.addEventListener("resize", () => C.fitBubblesIn(thread));
         // 다른 라우트가 채팅을 가렸다가 놓는 순간을 감지한다. display:none으로
         // 숨겨진 스크롤러는 위치가 리셋되고 할일 페이지는 같은 스크롤러를 쓰므로,

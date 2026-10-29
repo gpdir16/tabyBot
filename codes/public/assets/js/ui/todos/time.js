@@ -94,6 +94,21 @@
         return str;
     }
 
+    // 서버 시간대. 시간대가 없는 일정은 이 시간대로 읽고 쓴다.
+    function serverTz() {
+        return T.time.zone();
+    }
+
+    function toZonedInput(d, tz) {
+        if (!d || Number.isNaN(d.getTime?.())) return "";
+        try {
+            const p = T.time.parts(d, tz || serverTz());
+            return `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(p.hh)}:${pad(p.mm)}`;
+        } catch {
+            return "";
+        }
+    }
+
     function toLocalInput(isoOrAt) {
         if (!isoOrAt) return "";
         const d = new Date(isoOrAt);
@@ -101,34 +116,7 @@
             const m = String(isoOrAt).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
             return m ? `${m[1]}T${m[2]}` : "";
         }
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-
-    function zonedPartsOf(d, tz) {
-        const p = Object.fromEntries(
-            new Intl.DateTimeFormat("en-US", {
-                timeZone: tz,
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-            })
-                .formatToParts(d)
-                .map((x) => [x.type, x.value]),
-        );
-        return { y: +p.year, m: +p.month, d: +p.day, hh: Number(p.hour) % 24, mm: +p.minute };
-    }
-
-    function toZonedInput(d, tz) {
-        if (!d || Number.isNaN(d.getTime?.())) return "";
-        try {
-            const p = zonedPartsOf(d, tz);
-            return `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(p.hh)}:${pad(p.mm)}`;
-        } catch {
-            return toLocalInput(d);
-        }
+        return toZonedInput(d, serverTz());
     }
 
     function wallClockDate(str, tz) {
@@ -175,101 +163,67 @@
     }
 
     function localAt(days, hour, minute, tz) {
-        if (tz && tz !== browserTz()) {
-            const p = zonedPartsOf(new Date(), tz);
-            const base = new Date(Date.UTC(p.y, p.m - 1, p.d + days, hour, minute));
-            return `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}T${pad(base.getUTCHours())}:${pad(base.getUTCMinutes())}`;
-        }
-        const d = new Date();
-        d.setDate(d.getDate() + days);
-        d.setHours(hour, minute, 0, 0);
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const p = T.time.parts(new Date(), tz || serverTz());
+        const base = new Date(Date.UTC(p.y, p.m - 1, p.d + days, hour, minute));
+        return `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}T${pad(base.getUTCHours())}:${pad(base.getUTCMinutes())}`;
     }
 
     function atSeedInput(item) {
         const d = atDate(item);
-        if (d) return toZonedInput(d, validTz(item.timezone) || browserTz());
+        if (d) return toZonedInput(d, validTz(item.timezone) || serverTz());
         return toLocalInput(item.at);
     }
 
+    // tz의 오늘 기본 시각: 18시, 이미 지났으면 한 시간 뒤(자정을 넘기면 23:59).
     function todayDefault(tz) {
-        if (tz && tz !== browserTz()) {
-            const now = new Date();
-            const p = zonedPartsOf(now, tz);
-            if (p.hh >= 18) {
-                const plus = zonedPartsOf(new Date(now.getTime() + 3600000), tz);
-                const sameDay = plus.y === p.y && plus.m === p.m && plus.d === p.d;
-                return sameDay ? `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(plus.hh)}:${pad(plus.mm)}` : `${p.y}-${pad(p.m)}-${pad(p.d)}T23:59`;
-            }
-            return `${p.y}-${pad(p.m)}-${pad(p.d)}T18:00`;
+        const zone = tz || serverTz();
+        const now = new Date();
+        const p = T.time.parts(now, zone);
+        if (p.hh >= 18) {
+            const plus = T.time.parts(new Date(now.getTime() + 3600000), zone);
+            const sameDay = plus.y === p.y && plus.m === p.m && plus.d === p.d;
+            return sameDay ? `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(plus.hh)}:${pad(plus.mm)}` : `${p.y}-${pad(p.m)}-${pad(p.d)}T23:59`;
         }
-        const d = new Date();
-        d.setHours(18, 0, 0, 0);
-        if (d.getTime() <= Date.now()) {
-            d.setTime(Date.now() + 3600000);
-            const end = new Date();
-            end.setHours(23, 59, 0, 0);
-            if (d.getTime() > end.getTime()) d.setTime(end.getTime());
-            d.setSeconds(0, 0);
-        }
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        return `${p.y}-${pad(p.m)}-${pad(p.d)}T18:00`;
     }
 
     function nowLocalInput(tz) {
-        if (tz && tz !== browserTz()) return toZonedInput(new Date(), tz);
-        const d = new Date();
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        return toZonedInput(new Date(), tz || serverTz());
     }
 
     function dayDiff(iso, tz) {
         const d = iso instanceof Date ? iso : new Date(iso);
         if (Number.isNaN(d.getTime())) return null;
-        const now = new Date();
-        if (tz && tz !== browserTz()) {
-            const a = zonedPartsOf(d, tz);
-            const b = zonedPartsOf(now, tz);
-            return Math.round((Date.UTC(a.y, a.m - 1, a.d) - Date.UTC(b.y, b.m - 1, b.d)) / 86400000);
-        }
-        const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-        return Math.round((start(d) - start(now)) / 86400000);
+        return T.time.dayDiff(d, new Date(), tz || serverTz());
     }
 
+    // tz: 서버 시간대와 다른 시간대를 가진 일정. 없으면 서버 시간대로 쓰고 오늘, 내일, 어제를 붙인다.
     function formatDay(iso, tz) {
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return "";
-        const loc = lang() === "ko" ? "ko-KR" : lang() === "ja" ? "ja-JP" : "en-US";
-        const tzOpt = tz ? { timeZone: tz } : {};
-        const time = d.toLocaleString(loc, { hour: "numeric", minute: "2-digit", ...tzOpt });
+        const loc = T.time.locale();
+        const zone = tz || serverTz();
+        const time = T.time.format(d, { hour: "numeric", minute: "2-digit", timeZone: zone }, loc);
         if (!tz) {
-            const diff = dayDiff(iso);
+            const diff = dayDiff(d);
             if (diff === 0) return `${t("todosToday")} ${time}`;
             if (diff === 1) return `${t("todosTomorrow")} ${time}`;
             if (diff === -1) return `${t("todosYesterday")} ${time}`;
         }
         const opts =
-            d.getFullYear() !== new Date().getFullYear()
+            T.time.parts(d, zone).y !== T.time.parts(new Date(), zone).y
                 ? { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
                 : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
-        return d.toLocaleString(loc, { ...opts, ...tzOpt });
-    }
-
-    function browserTz() {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+        return T.time.format(d, { ...opts, timeZone: zone }, loc);
     }
 
     function validTz(tz) {
-        if (!tz) return "";
-        try {
-            new Intl.DateTimeFormat("en-US", { timeZone: tz });
-            return tz;
-        } catch {
-            return "";
-        }
+        return T.time.validZone(tz);
     }
 
     function tzSuffix(item) {
         const tz = validTz(item?.timezone);
-        return tz && tz !== browserTz() ? ` (${tz})` : "";
+        return tz && tz !== serverTz() ? ` (${tz})` : "";
     }
 
     function whenLabel(item) {
@@ -280,7 +234,7 @@
         }
         if (item.kind === "at" && item.at) {
             const d = atDate(item);
-            const foreign = validTz(item.timezone) && item.timezone !== browserTz() ? item.timezone : null;
+            const foreign = validTz(item.timezone) && item.timezone !== serverTz() ? item.timezone : null;
             return (d ? formatDay(d, foreign) : String(item.at)) + tzSuffix(item);
         }
         if (item.kind === "every" && item.every) return everyLabel(item.every);
@@ -356,7 +310,7 @@
     C.todayDefault = todayDefault;
     C.nowLocalInput = nowLocalInput;
     C.formatDay = formatDay;
-    C.browserTz = browserTz;
+    C.serverTz = serverTz;
     C.validTz = validTz;
     C.whenLabel = whenLabel;
     C.cronWeekly = cronWeekly;

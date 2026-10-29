@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { CODES_DIR } from "../../paths.js";
 import { getMergedProvider, getProfileProvider, loadProviderConfig, loadUserConfig, saveUserConfig } from "../../config-loader.js";
+import { applyConfiguredTimeZone } from "../../process-timezone.js";
 import {
     addPreset,
     applyPresetPatch,
@@ -36,7 +37,7 @@ import { trackTask } from "../tasks.js";
 import { applySelfImprovementPatch, getDreamingConfig, getProactiveConfig, getReviewConfig } from "../../self-improvement.js";
 import { emit } from "../bus.js";
 import { t as i18nT } from "../../i18n.js";
-import { isValidTimeZone } from "../../scheduling/time.js";
+import { defaultTimeZone, isValidTimeZone } from "../../scheduling/time.js";
 import { fetchOpenRouterProviders, fetchProviderModelsDetailed } from "../../llm/models.js";
 import { cacheKeepAliveSummary, normalizeCacheKeepAlive } from "../../llm/cache-keepalive.js";
 import { usageSummary } from "../../llm/usage-log.js";
@@ -339,6 +340,8 @@ function buildSettingsPayload() {
         language: config.language || "en",
         languages: ["en", "ko", "ja"],
         timezone: config.timezone || "",
+        // 서버가 실제로 쓰는 시간대(설정값, 비면 서버 기본값). 화면도 이 시간대로 시각을 보여 준다.
+        serverTimezone: defaultTimeZone(),
         // 기본 모델 프리셋의 추론 깊이(온보딩과 예전 화면이 쓴다).
         thinkingLevel: normalizeThinkingLevel(merged?.thinkingLevel, pid),
         thinkingLevels: thinkingLevelsOf(pid, config.language),
@@ -791,6 +794,7 @@ export function registerSettingsRoutes(router) {
         if (applied.error) return ctx.json400(applied.error);
 
         saveUserConfig(config);
+        if (patch.timezone !== undefined) applyConfiguredTimeZone(config.timezone);
         if (patch.updateCheckEnabled !== undefined) restartUpdateScheduler();
         // proactive는 매 틱 설정을 다시 읽으므로 재시작 불필요. dreaming 크론은 재등록이 필요하다(시간대 포함).
         if (applied.selfImprovementChanged || patch.timezone !== undefined) startDreamingScheduler();

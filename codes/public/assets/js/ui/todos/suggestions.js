@@ -20,10 +20,10 @@
 
     function suggestionWhen(row) {
         const rowTz = C.validTz(row.timezone);
-        const tz = rowTz && rowTz !== C.browserTz() ? ` (${rowTz})` : "";
+        const tz = rowTz && rowTz !== C.serverTz() ? ` (${rowTz})` : "";
         if (row.at) {
             const d = suggestionAtDate(row);
-            const foreign = rowTz && rowTz !== C.browserTz() ? rowTz : null;
+            const foreign = rowTz && rowTz !== C.serverTz() ? rowTz : null;
             return (d ? C.formatDay(d, foreign) : C.formatDay(row.at) || String(row.at)) + (foreign ? tz : "");
         }
         if (row.cron) return (C.cronLabel(row.cron) || row.cron) + tz;
@@ -156,7 +156,7 @@
                 return !(ed?.draft && kind !== "delete" && !(await C.commitDraft(ed)));
             },
             async send() {
-                const res = await T.api.approveTodo(row.id, { timezone: C.browserTz() });
+                const res = await T.api.approveTodo(row.id, { timezone: C.serverTz() });
                 // 지우는 제안이면 고친 것을 버린다(창들은 대상이 없어 닫힌다).
                 const ed = C.eds.get(row.targetId);
                 if (kind === "delete" && ed) ed.draft = null;

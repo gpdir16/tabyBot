@@ -169,6 +169,10 @@
             T.chat?.refreshHeader?.();
             T.composer?.syncMode?.();
         });
+        // 설정에서 시간대를 바꾸면 일정 시각과 오늘, 내일 구분을 다시 그린다.
+        T.time.onChange(() => {
+            if (C.isOpen()) C.build();
+        });
     }
 
     function describeDue(msg) {

@@ -238,7 +238,7 @@
         return `${Number(parts[1]) || 0} ${Number(parts[0]) || 0}`;
     }
 
-    // 일정 시간대: 원래 항목의 시간대를 이어 쓸 수 있는 모드면 그것을, 아니면 브라우저 시간대를 쓴다.
+    // 일정 시간대: 원래 항목의 시간대를 이어 쓸 수 있는 모드면 그것을, 아니면 서버 시간대를 쓴다.
     function scheduleTimezone(d) {
         const atModes = d.mode === "today" || d.mode === "tomorrow" || d.mode === "custom";
         const keepItemTz =
@@ -249,7 +249,7 @@
             (d.mode === "monthly" && d.monthlyFromCron) ||
             (d.mode === "cron" && d.cronFromItem) ||
             (atModes && !!d.atTz);
-        return keepItemTz ? d.tz || d.atTz || C.browserTz() : C.browserTz();
+        return keepItemTz ? d.tz || d.atTz || C.serverTz() : C.serverTz();
     }
 
     // 하루 중 시각을 정한 반복(매일·매주·매달)을 크론 일정으로 만든다.
@@ -276,7 +276,7 @@
     function atFields(d, tz) {
         if (!String(d.at || "").trim()) return SCHEDULE_ERROR;
         let at = d.at;
-        const atFrame = d.atTz || C.browserTz();
+        const atFrame = d.atTz || C.serverTz();
         if (d.mode === "today") {
             const shown = (C.wallClockDate(d.at, atFrame) || new Date(Number.NaN)).getTime();
             // 오늘로 고른 시각이 이미 지났으면 오늘의 기본 시각으로 바꾼다.
