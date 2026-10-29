@@ -1,5 +1,6 @@
-// 공유 화면에 뜬 camofox 브라우저 창. 프로필(camofox 유저)마다, 탭마다 창이 따로 뜨고 창 관리자가 없어
-// 모두 (0,0)에 겹친다. 탭과 X 창을 찾아 잇고 맨 앞으로 올리는 일을 browser_click과 컴퓨터 화면이 같이 쓴다.
+// 공유 화면에 뜬 camofox 브라우저 창. 프로필(camofox 유저)마다 창이 하나 뜨고 탭은 그 안에 열린다
+// (scripts/camoufox-tabs.cfg). 창 관리자가 없어 프로필 창은 모두 (0,0)에 겹친다.
+// 탭을 앞으로 가져와 X 창과 잇고 맨 앞으로 올리는 일을 browser_click과 컴퓨터 화면이 같이 쓴다.
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import * as display from "../../computer/display.js";
@@ -44,12 +45,13 @@ export async function listOpenTabs(ownUser = "") {
 }
 
 // 탭과 X 창을 잇는 고리가 없어 제목에 잠깐 표식을 달아 창을 찾고, 그사이 화면 위 뷰포트 위치를 함께 읽는다.
+// 창 제목은 앞에 있는 탭의 것만 보이므로 먼저 window.focus()로 그 탭을 앞으로 가져온다(dom.disable_window_flip을 꺼 둠).
 export async function locateTabWindow(user, tabId, displayNum) {
     const marker = `tabybot-click-${crypto.randomBytes(6).toString("hex")}`;
     const info = await evaluate(
         user,
         tabId,
-        `(() => { const title = document.title; document.title = ${JSON.stringify(marker)}; return { title, left: window.mozInnerScreenX, top: window.mozInnerScreenY, scale: window.devicePixelRatio || 1 }; })()`,
+        `(() => { window.focus(); const title = document.title; document.title = ${JSON.stringify(marker)}; return { title, left: window.mozInnerScreenX, top: window.mozInnerScreenY, scale: window.devicePixelRatio || 1 }; })()`,
     );
     let windowId = "";
     try {

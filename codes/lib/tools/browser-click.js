@@ -1,8 +1,8 @@
 // 브라우저 탭의 화면 좌표를 진짜 마우스로 누른다.
 // camofox click은 접근성 트리의 ref나 CSS 선택자로만 누르므로 다른 도메인 iframe(Cloudflare Turnstile, reCAPTCHA,
 // 결제와 로그인 위젯), 닫힌 shadow root, 캔버스 안에는 닿지 않는다. 브라우저 창은 공유 Xvfb 화면에 떠 있으므로
-// 그 탭의 창을 맨 앞으로 올리고 xdotool로 OS 수준 클릭을 보내면, 브라우저가 포인터 아래 요소(iframe 안이어도)에
-// 진짜 클릭(isTrusted)을 넘긴다.
+// 그 탭을 앞으로 가져와 창을 맨 앞으로 올리고 xdotool로 OS 수준 클릭을 보내면, 브라우저가 포인터 아래 요소
+// (iframe 안이어도)에 진짜 클릭(isTrusted)을 넘긴다.
 import fs from "node:fs";
 import path from "node:path";
 import { isDockerRuntime } from "../runtime.js";
