@@ -56,7 +56,6 @@ function buildSkillContentVars() {
         MEMORY_PATH: memoryFilePath(),
         MCP_CONFIG_PATH: mcpConfigPath(),
         SCHEDULING_PATH: todosConfigPath(),
-        CAMOFOX_DIR: path.join(CODES_DIR, "skills", "camofox"),
         CAMOFOX_DATA_DIR: path.join(USER_DIR, "camofox"),
     };
 }

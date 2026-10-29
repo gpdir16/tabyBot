@@ -86,7 +86,7 @@ When the API can't help (need the rendered page, media embed, or API down), rewr
 
 - Replace `x.com` with `fixupx.com` (or `xfixup.com`)
 - Replace `twitter.com` with `twittpr.com`
-- Further fallbacks: `fixvx.com`, `yt-dlp`, or `camofox` on a mirror page. Try the next when one 404s/blocks.
+- Further fallbacks: `fixvx.com`, `yt-dlp`, or the browser tools on a mirror page. Try the next when one 404s/blocks.
 
 ## Don'ts
 

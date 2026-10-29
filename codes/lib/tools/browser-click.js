@@ -1,62 +1,26 @@
-// 브라우저 탭의 화면 좌표를 진짜 마우스로 누른다.
-// camofox click은 접근성 트리의 ref나 CSS 선택자로만 누르므로 다른 도메인 iframe(Cloudflare Turnstile, reCAPTCHA,
+// 브라우저 탭의 화면 좌표를 진짜 마우스로 누른다. browser_click이 좌표나 target을 받았을 때 쓴다.
+// ref와 CSS 선택자 클릭은 접근성 트리와 DOM으로만 누르므로 다른 도메인 iframe(Cloudflare Turnstile, reCAPTCHA,
 // 결제와 로그인 위젯), 닫힌 shadow root, 캔버스 안에는 닿지 않는다. 브라우저 창은 공유 Xvfb 화면에 떠 있으므로
 // 그 탭을 앞으로 가져와 창을 맨 앞으로 올리고 xdotool로 OS 수준 클릭을 보내면, 브라우저가 포인터 아래 요소
 // (iframe 안이어도)에 진짜 클릭(isTrusted)을 넘긴다.
-import fs from "node:fs";
-import path from "node:path";
-import { isDockerRuntime } from "../runtime.js";
-import { USER_DIR } from "../paths.js";
 import * as display from "../computer/display.js";
-import { camofoxUser } from "../computer/camofox-user.js";
-import { evaluate, listOpenTabs, locateTabWindow, xdo } from "../web/computer/windows.js";
-
-const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
-const ACTIVE_TAB_FILE = path.join(USER_DIR, ".camofox", "active-tab");
-
-export const browserClickToolDefinitions = [
-    {
-        type: "function",
-        function: {
-            name: "browser_click",
-            description:
-                'Click a point in a camofox browser tab with a real OS mouse (xdotool on the shared display). Use it when `camofox click` cannot reach the target: checkboxes and buttons inside cross-origin iframes (Cloudflare Turnstile, reCAPTCHA, payment and login widgets), closed shadow roots, canvas, or anything missing from `camofox snapshot`. For a Cloudflare "Verify you are human" checkbox, pass `target: "turnstile"` and no coordinates: the tool finds the checkbox itself. Otherwise take `camofox screenshot --output <file>` first, `file_read` it, and pass the pixel position from that image. Returns the page title and a fresh screenshot of the tab.',
-            parameters: {
-                type: "object",
-                properties: {
-                    target: {
-                        type: "string",
-                        enum: ["turnstile"],
-                        description: "Find and click this widget instead of x and y. turnstile = the Cloudflare checkbox.",
-                    },
-                    x: { type: "number", description: "X in pixels from the left of the tab screenshot." },
-                    y: { type: "number", description: "Y in pixels from the top of the tab screenshot." },
-                    tab_id: {
-                        type: "string",
-                        description:
-                            'camofox tab id, from any `--user` profile. Defaults to the tab showing the Cloudflare check for target "turnstile", else the tab the camofox CLI last opened.',
-                    },
-                    button: { type: "number", enum: [1, 2, 3], description: "1=left (default), 2=middle, 3=right." },
-                    double: { type: "boolean", description: "Double-click." },
-                    settle_ms: { type: "number", description: "Wait before the result screenshot. Default 1500; max 10000." },
-                },
-                required: [],
-            },
-        },
-    },
-];
+import { evaluate, locateTabWindow, tabScreenshot, xdo } from "../web/computer/windows.js";
 
 // 보안 확인 화면을 보고도 봇이 browser_click을 떠올리지 못하고 주소나 API만 다시 부르며 헤매는 일이 있었다.
-// camofox 명령 결과에 Cloudflare 확인 화면이 보이면 그 결과에 다음 할 일을 바로 붙인다.
+// 결과에 Cloudflare 확인 화면이 보이면 그 결과에 다음 할 일을 바로 붙인다.
 const CHALLENGE_RE = /Performing security verification|Verify you are human|Just a moment\.\.\.|challenges\.cloudflare\.com/i;
 const CHALLENGE_HINT =
     'This tab is showing a Cloudflare security check. Reopening the URL or calling the API again will not get past it. Click the checkbox now by calling the `browser_click` tool with `target: "turnstile"` (no coordinates needed), then check the returned title and screenshot.';
 
-export function withChallengeHint(args, result) {
-    if (!result || typeof result !== "object") return result;
-    const command = String(args?.command || result.cmd || "");
-    if (!/\bcamofox\b/.test(command) || !CHALLENGE_RE.test(JSON.stringify(result))) return result;
+export function withChallengeHint(result) {
+    if (!result || typeof result !== "object" || !CHALLENGE_RE.test(JSON.stringify(result))) return result;
     return { ...result, hint: CHALLENGE_HINT };
+}
+
+// 터미널에서 직접 부른 camofox 명령의 결과에도 같은 안내를 붙인다
+export function withTerminalChallengeHint(args, result) {
+    const command = String(args?.command || result?.cmd || "");
+    return /\bcamofox\b/.test(command) ? withChallengeHint(result) : result;
 }
 
 // Turnstile 위젯의 자리(CSS 픽셀). 위젯 iframe이 보이면 그 상자를 쓴다. 닫힌 shadow root 안이라 안 보이면
@@ -86,42 +50,8 @@ const LOCATE_TURNSTILE = `(() => {
     return found;
 })()`;
 const TURNSTILE_CHECKBOX_X = 24;
-
-function readActiveTab() {
-    try {
-        return fs.readFileSync(ACTIVE_TAB_FILE, "utf8").trim();
-    } catch {
-        return "";
-    }
-}
-
-// 누를 탭을 고른다. 탭 목록 순서는 연 순서가 아니라서, turnstile은 확인 화면이 실제로 떠 있는 탭을 찾아 고른다.
-async function resolveTab(ownUser, requested, target) {
-    const tabs = await listOpenTabs(ownUser);
-    if (!tabs) return { error: "The camofox server is not responding. Open a page with `camofox open <url>` first." };
-    if (!tabs.length) return { error: "No browser tab is open. Open one with `camofox open <url>` first." };
-    if (requested) {
-        const hit = tabs.find((t) => t.tabId === requested);
-        return hit || { error: `Tab ${requested} is not open. Open tabs: ${tabs.map((t) => t.tabId).join(", ")}` };
-    }
-    // CLI가 마지막으로 연 탭, 이 봇 프로필의 탭(나중 것부터), 다른 프로필의 탭 순서로 본다
-    const active = readActiveTab();
-    const rest = tabs.filter((t) => t.tabId !== active);
-    const ordered = [
-        ...tabs.filter((t) => t.tabId === active),
-        ...rest.filter((t) => t.user === ownUser).reverse(),
-        ...rest.filter((t) => t.user !== ownUser).reverse(),
-    ];
-    if (!target) return ordered[0];
-    for (const tab of ordered) {
-        const widget = await evaluate(tab.user, tab.tabId, LOCATE_TURNSTILE).catch(() => null);
-        if (widget) return { ...tab, widget };
-    }
-    return {
-        error: "No Cloudflare checkbox is visible on any open tab. If the page already passed, continue with it. Otherwise take a screenshot and pass x and y.",
-        tabs: ordered.map((t) => ({ tabId: t.tabId, url: t.url })),
-    };
-}
+// 누른 뒤 결과 스크린샷까지 기다리는 시간. Turnstile은 누르고 1초쯤 지나야 통과 표시가 뜬다.
+const SETTLE_MS = 1500;
 
 async function pointerAt(displayNum) {
     const r = await xdo(displayNum, ["getmouselocation", "--shell"], { stdout: true });
@@ -146,57 +76,51 @@ async function glideTo(displayNum, to) {
     }
 }
 
-async function tabScreenshot(user, tabId) {
-    try {
-        const res = await fetch(
-            `http://${process.env.CAMOFOX_HOST || "127.0.0.1"}:${process.env.CAMOFOX_PORT || "9377"}/tabs/${encodeURIComponent(tabId)}/screenshot?userId=${encodeURIComponent(user)}`,
-            { signal: AbortSignal.timeout(15_000) },
-        );
-        if (!res.ok) return null;
-        fs.mkdirSync(SHOTS_DIR, { recursive: true });
-        const file = path.join(SHOTS_DIR, `tab-${Date.now()}.png`);
-        fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-        return file;
-    } catch {
-        return null;
-    }
-}
-
 // 창을 올리고 포인터를 옮기는 사이에 다른 턴이 끼어들면 엉뚱한 창을 누르므로 한 번에 하나씩 한다.
 let queue = Promise.resolve();
 
-export function executeBrowserClick(args, ctx = {}) {
-    const run = queue.then(() => clickOnce(args || {}, ctx));
+// tabs: 누를 후보 탭(먼저 볼 것부터). 좌표 클릭은 첫 탭을 누르고, turnstile은 확인 화면이 떠 있는 탭을 찾아 누른다.
+export function clickAtPoint(user, tabs, args) {
+    const run = queue.then(() => clickOnce(user, tabs, args || {}));
     queue = run.catch(() => {
         // 실패한 클릭이 다음 클릭을 막지 않게 한다
     });
     return run;
 }
 
-async function clickOnce(args, { agentId } = {}) {
-    if (!isDockerRuntime()) return { error: "browser_click needs the shared Xvfb display, which exists only in the Docker container." };
+async function findTurnstile(user, tabs) {
+    for (const tab of tabs) {
+        const widget = await evaluate(user, tab.tabId, LOCATE_TURNSTILE).catch(() => null);
+        if (widget) return { tab, widget };
+    }
+    return null;
+}
+
+async function clickOnce(user, tabs, args) {
     const target = args.target === "turnstile" ? "turnstile" : "";
     let x = Number(args.x);
     let y = Number(args.y);
     if (!target && (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0)) {
-        return { error: 'numeric x and y (>= 0) are required, or target: "turnstile"' };
+        return { error: 'Pass ref, selector, numeric x and y (>= 0), or target: "turnstile".' };
     }
     const sess = display.loadSession();
     if (!sess) return { error: "The shared display is not running." };
 
-    const tab = await resolveTab(camofoxUser(agentId), args.tab_id ? String(args.tab_id) : "", target);
-    if (tab.error) return tab;
-    const { user } = tab;
-    const win = await locateTabWindow(user, tab.tabId, sess.display);
-    if (win.error) return win;
+    let tab = tabs[0];
+    let widget = null;
     if (target) {
-        const widget = tab.widget || (await evaluate(user, tab.tabId, LOCATE_TURNSTILE).catch(() => null));
-        if (!widget) {
+        const found = await findTurnstile(user, tabs);
+        if (!found) {
             return {
-                error: "No Cloudflare checkbox is visible on this tab. If the page already passed, continue with it. Otherwise take a screenshot and pass x and y.",
-                tabId: tab.tabId,
+                error: "No Cloudflare checkbox is visible on any open tab. If the page already passed, continue with it. Otherwise take browser_screenshot and pass x and y.",
+                tabs: tabs.map((t) => ({ tab_id: t.tabId, url: t.url })),
             };
         }
+        ({ tab, widget } = found);
+    }
+    const win = await locateTabWindow(user, tab.tabId, sess.display);
+    if (win.error) return win;
+    if (widget) {
         // 스크린샷 픽셀 단위로 맞춘다(아래 계산이 x, y를 스크린샷 픽셀로 받는다)
         x = Math.round((widget.left + Math.min(TURNSTILE_CHECKBOX_X, widget.width / 2)) * win.scale);
         y = Math.round((widget.top + widget.height / 2) * win.scale);
@@ -233,9 +157,9 @@ async function clickOnce(args, { agentId } = {}) {
         if (i + 1 < clicks) await display.sleep(90);
     }
 
-    await display.sleep(display.settleMs(args.settle_ms, 1500));
+    await display.sleep(SETTLE_MS);
     if (origin) await xdo(sess.display, ["windowmove", win.windowId, String(origin.x), String(origin.y)]);
-    const result = { ok, tabId: tab.tabId, x, y, screen: { x: screenX + shiftX, y: screenY + shiftY } };
+    const result = { ok, tab_id: tab.tabId, x, y };
     if (target) result.target = target;
     // 누른 뒤 확인 화면을 넘겼는지 제목으로 바로 알 수 있게 한다
     const title = await evaluate(user, tab.tabId, "document.title").catch(() => null);
@@ -243,7 +167,7 @@ async function clickOnce(args, { agentId } = {}) {
     const shot = await tabScreenshot(user, tab.tabId);
     if (shot) {
         result.__image = shot;
-        result.shotPath = shot;
+        result.screenshot_path = shot;
     }
     return result;
 }

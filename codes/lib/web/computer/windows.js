@@ -2,9 +2,13 @@
 // (scripts/camoufox-tabs.cfg). 창 관리자가 없어 프로필 창은 모두 (0,0)에 겹친다.
 // 탭을 앞으로 가져와 X 창과 잇고 맨 앞으로 올리는 일을 browser_click과 컴퓨터 화면이 같이 쓴다.
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { execFile } from "node:child_process";
 import * as display from "../../computer/display.js";
-import { camofoxApi, camofoxUserTabs } from "./camofox.js";
+import { camofoxApi, camofoxBase, camofoxUserTabs } from "./camofox.js";
+
+const SHOTS_DIR = "/tmp/tabybot-xvfb/screenshots";
 
 export function xdo(displayNum, args, { stdout = false } = {}) {
     return new Promise((resolve) => {
@@ -23,6 +27,22 @@ export async function evaluate(user, tabId, expression) {
     });
     if (!r.ok || r.json?.ok === false) throw new Error(r.json?.error || `evaluate failed (status ${r.status})`);
     return r.json?.result;
+}
+
+// 탭 화면을 PNG로 저장하고 그 경로를 돌려준다. 못 찍으면 null.
+export async function tabScreenshot(user, tabId) {
+    try {
+        const res = await fetch(`${camofoxBase()}/tabs/${encodeURIComponent(tabId)}/screenshot?userId=${encodeURIComponent(user)}`, {
+            signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) return null;
+        fs.mkdirSync(SHOTS_DIR, { recursive: true });
+        const file = path.join(SHOTS_DIR, `tab-${Date.now()}.png`);
+        fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+        return file;
+    } catch {
+        return null;
+    }
 }
 
 // 열린 탭 전부. 봇이 `camofox --user <이름>`으로 따로 연 프로필의 탭도 같은 화면에 떠 있으므로 함께 본다.

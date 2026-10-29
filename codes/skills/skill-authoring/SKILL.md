@@ -27,6 +27,6 @@ The skill list injects only `name` + `description` each turn. The description al
 
 - Write declarative playbook steps ("run X, then check Y"), not a narrative of what happened today.
 - Keep the main file tight; put bulky references (API tables, long examples) in `<slug>/references/` and link them.
-- Use `{{VAR}}` placeholders for environment paths instead of hardcoding. `{{SKILLS_DIR}}`, `{{MEMORY_PATH}}`, `{{USER_DIR}}`, `{{CODES_DIR}}`, `{{MCP_CONFIG_PATH}}`, `{{CAMOFOX_DATA_DIR}}` are rendered at load time.
+- Use `{{VAR}}` placeholders for environment paths instead of hardcoding. `{{SKILLS_DIR}}`, `{{MEMORY_PATH}}`, `{{USER_DIR}}`, `{{CODES_DIR}}`, `{{MCP_CONFIG_PATH}}` are rendered at load time.
 - Never embed secrets, tokens, or per-user data.
 - Write constraints that matter ("always check `code`", "never do X"). Future-you follows them literally, so keep them accurate and few.

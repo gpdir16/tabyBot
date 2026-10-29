@@ -2,7 +2,7 @@ import { loadAgentConfig } from "../config-loader.js";
 import { isDockerRuntime } from "../runtime.js";
 import * as display from "../computer/display.js";
 
-const XVFB_GUI_DESCRIPTION = `Linux GUI app automation on a virtual X display (Xvfb). Use this for non-browser Linux GUI programs in Docker. For web browsing, use camofox.
+const XVFB_GUI_DESCRIPTION = `Linux GUI app automation on a virtual X display (Xvfb). Use this for non-browser Linux GUI programs in Docker. For web browsing, use the browser_* tools.
 
 Actions: launch, kill_app, screenshot, click (button 1/2/3, optional double), drag, type, key, scroll, close.
 
