@@ -123,27 +123,27 @@ self.addEventListener("push", (event) => {
             // 페이로드 없음
         }
     }
+    // 받은 푸시는 언제나 알림으로 띄운다. iOS/Safari는 알림 없이 끝난 푸시가 세 번 쌓이면 구독을 끊는다.
+    // 앱을 보고 있는 기기로는 서버가 애초에 보내지 않는다(push.js의 foreground).
     event.waitUntil(
-        self.clients
-            .matchAll({ type: "window", includeUncontrolled: true })
-            .catch(() => [])
-            .then((list) => {
-                if (list.some((c) => c.visibilityState === "visible")) return;
-                return self.registration.showNotification(data.title || "tabyBot", {
-                    body: data.body || "",
-                    tag: data.tag || "tabybot",
-                    icon: "/assets/icons/icon-192.png",
-                    badge: "/assets/icons/icon-192.png",
-                    data: { url: data.url || "/" },
-                });
-            }),
+        self.registration.showNotification(data.title || "tabyBot", {
+            body: data.body || "",
+            tag: data.tag || "tabybot",
+            icon: "/assets/icons/icon-192.png",
+            badge: "/assets/icons/icon-192.png",
+            data: { url: data.url || "/" },
+        }),
     );
 });
 
 let appToken = "";
+let appDevice = "";
 
 self.addEventListener("message", (event) => {
-    if (event.data?.type === "auth-token") appToken = String(event.data.token || "");
+    if (event.data?.type === "auth-token") {
+        appToken = String(event.data.token || "");
+        appDevice = String(event.data.device || "");
+    }
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -186,7 +186,7 @@ self.addEventListener("pushsubscriptionchange", (event) => {
             await fetch("/api/push/subscribe", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...auth },
-                body: JSON.stringify(sub.toJSON()),
+                body: JSON.stringify({ ...sub.toJSON(), deviceId: appDevice }),
             });
         })().catch(() => {
             /* 푸시 구독 갱신은 최선 시도라 실패해도 다음 기회에 다시 한다 */

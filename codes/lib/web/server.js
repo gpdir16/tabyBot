@@ -12,6 +12,7 @@ import { createRouter } from "./http.js";
 import { registerComputerRoutes, initComputerWs, handleComputerUpgrade, dropRevokedComputerConns } from "./computer.js";
 import { registerAccountRoutes } from "./routes/account.js";
 import { registerChatRoutes } from "./routes/chat.js";
+import { pruneStaleSubs } from "./push.js";
 import { registerLibraryRoutes } from "./routes/library.js";
 import { registerSecretsRoutes } from "./routes/secrets.js";
 import { registerAgentsRoutes } from "./routes/agents.js";
@@ -32,6 +33,7 @@ const PORT = isDockerRuntime() ? 8999 : Number(process.env.TABYBOT_PORT || 8999)
 const HOST = process.env.TABYBOT_HOST?.trim() || "0.0.0.0";
 
 export function startWebServer() {
+    pruneStaleSubs();
     const router = createRouter({ publicDir: PUBLIC_DIR, auth: AUTH });
     router.setSseSubscribe(subscribe);
     router.setSeqNow(currentSeq);

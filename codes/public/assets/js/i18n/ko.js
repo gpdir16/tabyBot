@@ -432,6 +432,12 @@
         oauthReloginConfirmTitle: "다시 로그인할까요?",
         oauthReloginConfirmText: "시작하는 즉시 지금 로그인이 지워집니다. 중간에 그만두면 로그인이 없는 상태로 남습니다.",
         notificationsDenied: "알림 권한이 거부되었습니다",
+        notificationsTestSending: "테스트 알림을 보내는 중…",
+        notificationsTest: "테스트 알림 보내기",
+        notificationsTestSent: "테스트 알림을 보냈습니다. 이 기기의 알림 센터를 확인해 보세요.",
+        notificationsTestMissed: "푸시 서비스는 접수했지만 이 기기에서 도착 확인이 없습니다",
+        notificationsTestFailed: "푸시 서비스가 테스트 알림을 거절했습니다",
+
         installApp: "앱 설치",
         installGuideTitle: "tabyBot 설치",
         installGuidePrompt: "tabyBot을 홈 화면에 추가하면 앱처럼 열고 알림도 받을 수 있습니다.",

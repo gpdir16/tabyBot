@@ -11,7 +11,7 @@ import { SecretError } from "../../secrets/store.js";
 import { clearNotices, listNotices, markNoticesRead } from "../notices.js";
 import { listTasks } from "../tasks.js";
 import fs from "node:fs";
-import { getVapidPublicKey, removeSubscription, saveSubscription } from "../push.js";
+import { getVapidPublicKey, removeSubscription, saveSubscription, sendTest, setForeground } from "../push.js";
 
 // ── 대화와 질문(user_ask) 응답 API. ──
 
@@ -225,6 +225,21 @@ function registerPushRoutes(router) {
         const body = await ctx.json();
         removeSubscription(body);
         ctx.json200({ ok: true });
+    });
+
+    // 이 기기가 화면에 있는지 알린다. 화면에 있는 동안은 이 구독으로 푸시를 보내지 않는다.
+    router.add("POST", "/api/push/presence", async (ctx) => {
+        const body = await ctx.json();
+        if (!setForeground(body?.endpoint, body?.clientId, body?.visible === true)) return ctx.json400("invalid_presence");
+        ctx.json200({ ok: true });
+    });
+
+    // 설정 화면의 "테스트 알림": 이 기기로만 보내고 결과를 돌려준다.
+    router.add("POST", "/api/push/test", async (ctx) => {
+        const body = await ctx.json();
+        const result = await sendTest(body?.endpoint);
+        if (result.reason === "no_subscription") return ctx.json400("no_subscription");
+        ctx.json200(result);
     });
 }
 

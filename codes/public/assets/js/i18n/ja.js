@@ -436,6 +436,12 @@
         oauthReloginConfirmTitle: "再ログインしますか？",
         oauthReloginConfirmText: "開始するとすぐに現在のログインが削除されます。途中でやめるとログインのない状態になります。",
         notificationsDenied: "通知の許可が拒否されました",
+        notificationsTestSending: "テスト通知を送信中…",
+        notificationsTest: "テスト通知を送る",
+        notificationsTestSent: "テスト通知を送りました。このデバイスの通知センターを確認してください。",
+        notificationsTestMissed: "プッシュサービスは受け付けましたが、このデバイスから到達の確認がありません",
+        notificationsTestFailed: "プッシュサービスがテスト通知を拒否しました",
+
         installApp: "アプリをインストール",
         installGuideTitle: "tabyBotをインストール",
         installGuidePrompt: "tabyBotをホーム画面に追加すると、アプリのように開いて通知も受け取れます。",

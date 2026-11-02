@@ -1,4 +1,4 @@
-// 웹 푸시: VAPID 키 관리, 구독 저장, SSE 수신자가 없을 때 백그라운드 알림.
+// 웹 푸시: VAPID 키 관리, 구독 저장, 앱을 보고 있지 않은 기기로 백그라운드 알림.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,6 +11,14 @@ import { getGroup } from "../groups-store.js";
 const DIR = path.join(USER_DIR, "web-push");
 const KEYS_FILE = path.join(DIR, "vapid.json");
 const SUBS_DIR = path.join(DIR, "subs");
+
+// 앱을 화면에 띄워 둔 기기(구독 endpoint)에는 푸시를 보내지 않는다. 그 기기는 SSE와 화면 토스트로 받는다.
+// 거르는 일은 여기(서버)서 해야 한다. 서비스 워커가 푸시를 받고 알림을 띄우지 않으면
+// iOS/Safari는 userVisibleOnly 약속 위반으로 보고 세 번 만에 구독을 끊는다.
+// 클라이언트는 화면에 있는 동안 주기적으로 알린다. 숨김 알림이 유실돼도 FOREGROUND_TTL_MS 뒤에는 다시 푸시를 보낸다.
+const FOREGROUND_TTL_MS = 45_000;
+// endpoint -> (탭 id -> 만료 시각). 같은 기기에서 탭 여러 개가 같은 구독을 쓴다.
+const foreground = new Map();
 
 function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true });
@@ -46,6 +54,19 @@ function subPath(endpoint) {
     return path.join(SUBS_DIR, `${hash}.json`);
 }
 
+// 로그에는 endpoint 원문(비밀) 대신 파일 이름과 같은 해시 앞부분만 쓴다.
+function subLabel(endpoint) {
+    return crypto.createHash("sha256").update(String(endpoint)).digest("hex").slice(0, 8);
+}
+
+function subFiles() {
+    try {
+        return fs.readdirSync(SUBS_DIR).filter((f) => f.endsWith(".json"));
+    } catch {
+        return []; // 구독이 하나도 없음
+    }
+}
+
 function isValidSub(sub) {
     return Boolean(sub && typeof sub.endpoint === "string" && sub.keys?.p256dh && sub.keys?.auth);
 }
@@ -54,23 +75,41 @@ export function getVapidPublicKey() {
     return loadKeys().publicKey;
 }
 
+// 기기 하나에는 구독 하나만 남긴다. 다시 구독하면 예전 구독은 죽은 채로 쌓이기만 한다
+// (iOS는 알림을 못 띄운 푸시가 쌓이면 구독을 끊고, 다시 구독할 때마다 새 endpoint가 생긴다).
 export function saveSubscription(sub) {
     if (!isValidSub(sub)) return false;
     ensureDir(SUBS_DIR);
-    writeJsonAtomic(subPath(sub.endpoint), { endpoint: sub.endpoint, keys: sub.keys });
+    const deviceId = typeof sub.deviceId === "string" ? sub.deviceId.slice(0, 64) : "";
+    const file = subPath(sub.endpoint);
+    writeJsonAtomic(file, { endpoint: sub.endpoint, keys: sub.keys, ...(deviceId ? { deviceId } : {}) });
+    console.log(`[push] subscribe ${subLabel(sub.endpoint)}${deviceId ? ` device=${deviceId.slice(0, 8)}` : ""}`);
+    if (deviceId) dropOtherSubs(deviceId, file);
     return true;
+}
+
+// 같은 기기의 예전 구독 파일을 지운다.
+function dropOtherSubs(deviceId, keepFile) {
+    for (const name of subFiles()) {
+        const file = path.join(SUBS_DIR, name);
+        if (file === keepFile) continue;
+        try {
+            if (JSON.parse(fs.readFileSync(file, "utf8"))?.deviceId !== deviceId) continue;
+        } catch {
+            continue; // 깨진 파일은 건드리지 않는다
+        }
+        try {
+            fs.unlinkSync(file);
+            console.log(`[push] dropped stale ${name.slice(0, 8)} device=${deviceId.slice(0, 8)}`);
+        } catch {
+            // 이미 없으면 무시
+        }
+    }
 }
 
 // 모든 기기의 알림 구독을 지운다. 다시 로그인한 기기는 알림이 켜져 있으면 다시 구독한다.
 export function removeAllSubscriptions() {
-    let names = [];
-    try {
-        names = fs.readdirSync(SUBS_DIR);
-    } catch {
-        return; // 구독이 하나도 없었음
-    }
-    for (const name of names) {
-        if (!name.endsWith(".json")) continue;
+    for (const name of subFiles()) {
         try {
             fs.unlinkSync(path.join(SUBS_DIR, name));
         } catch {
@@ -89,22 +128,71 @@ export function removeSubscription(sub) {
     }
 }
 
-function listSubs() {
-    try {
-        return fs
-            .readdirSync(SUBS_DIR)
-            .filter((f) => f.endsWith(".json"))
-            .map((f) => {
-                try {
-                    return JSON.parse(fs.readFileSync(path.join(SUBS_DIR, f), "utf8"));
-                } catch {
-                    return null;
-                }
-            })
-            .filter(isValidSub);
-    } catch {
-        return [];
+export function setForeground(endpoint, clientId, visible) {
+    if (typeof endpoint !== "string" || !endpoint || typeof clientId !== "string" || !clientId) return false;
+    let tabs = foreground.get(endpoint);
+    const was = Boolean(tabs?.size);
+    if (visible) {
+        if (!tabs) {
+            tabs = new Map();
+            foreground.set(endpoint, tabs);
+        }
+        tabs.set(clientId, Date.now() + FOREGROUND_TTL_MS);
+    } else if (tabs) {
+        tabs.delete(clientId);
+        if (!tabs.size) foreground.delete(endpoint);
     }
+    const is = Boolean(foreground.get(endpoint)?.size);
+    if (was !== is) console.log(`[push] ${subLabel(endpoint)} ${is ? "foreground on" : "foreground off"}`);
+    return true;
+}
+
+function isForeground(endpoint) {
+    const tabs = foreground.get(endpoint);
+    if (!tabs) return false;
+    const now = Date.now();
+    for (const [id, until] of tabs) if (until <= now) tabs.delete(id);
+    if (!tabs.size) foreground.delete(endpoint);
+    return tabs.size > 0;
+}
+
+// 오래된 구독 파일을 정리한다. 앱을 다시 열면 스스로 다시 구독하므로 지워도 복구된다.
+// 기기 id가 없는 옛 구독은 다시 구독한 기기가 남긴 것일 가능성이 커서 더 짧게 본다.
+const STALE_MS = 30 * 24 * 60 * 60 * 1000;
+const LEGACY_STALE_MS = 24 * 60 * 60 * 1000;
+
+export function pruneStaleSubs() {
+    const now = Date.now();
+    for (const name of subFiles()) {
+        const file = path.join(SUBS_DIR, name);
+        let legacy;
+        let age;
+        try {
+            legacy = !JSON.parse(fs.readFileSync(file, "utf8"))?.deviceId;
+            age = now - fs.statSync(file).mtimeMs;
+        } catch {
+            continue; // 읽을 수 없는 파일은 건드리지 않는다
+        }
+        if (age < (legacy ? LEGACY_STALE_MS : STALE_MS)) continue;
+        try {
+            fs.unlinkSync(file);
+            console.log(`[push] pruned ${name.slice(0, 8)} age=${Math.round(age / 3600000)}h${legacy ? " legacy" : ""}`);
+        } catch {
+            // 이미 없으면 무시
+        }
+    }
+}
+
+function listSubs() {
+    return subFiles()
+        .map((f) => {
+            try {
+                return JSON.parse(fs.readFileSync(path.join(SUBS_DIR, f), "utf8"));
+            } catch {
+                return null;
+            }
+        })
+        .filter(isValidSub);
 }
 
 function eventTitle(event) {
@@ -173,11 +261,39 @@ function payloadFor(event) {
     return null;
 }
 
+// 설정 화면의 "테스트 알림". 이 기기 구독 하나로만 보내고 태그를 돌려준다.
+// 알림이 실제로 떴는지는 화면이 그 태그를 알림 목록에서 확인한다(서비스 워커 버전과 무관하게 확인된다).
+export async function sendTest(endpoint) {
+    const sub = listSubs().find((s) => s.endpoint === endpoint);
+    if (!sub) {
+        console.log(`[push] test missing ${subLabel(endpoint)}`);
+        return { sent: false, status: 0, tag: "", reason: "no_subscription" };
+    }
+    const tag = `push-test-${crypto.randomBytes(4).toString("hex")}`;
+    const keys = loadKeys();
+    webpush ??= (await import("web-push")).default;
+    try {
+        const res = await webpush.sendNotification(sub, JSON.stringify({ title: "tabyBot", body: "테스트 알림", tag, url: "/" }), {
+            vapidDetails: { subject: "https://github.com/gpdir16/tabyBot", publicKey: keys.publicKey, privateKey: keys.privateKey },
+            TTL: 60,
+        });
+        const status = res?.statusCode || 0;
+        console.log(`[push] test ${subLabel(sub.endpoint)} status=${status}`);
+        return { sent: true, status, tag, reason: "" };
+    } catch (err) {
+        const status = err?.statusCode || 0;
+        if (status === 404 || status === 410 || status === 401 || status === 403) removeSubscription(sub);
+        console.log(`[push] test failed ${subLabel(sub.endpoint)} status=${status || "?"} ${err?.message || err}`);
+        return { sent: false, status, tag: "", reason: String(err?.message || err).slice(0, 120) };
+    }
+}
+
 export async function maybePush(event) {
     const payload = payloadFor(event);
     if (!payload) return;
 
-    const subs = listSubs();
+    const all = listSubs();
+    const subs = all.filter((sub) => !isForeground(sub.endpoint));
     if (!subs.length) return;
     const keys = loadKeys();
     webpush ??= (await import("web-push")).default;
@@ -191,18 +307,24 @@ export async function maybePush(event) {
         TTL: 60 * 30,
     };
 
-    await Promise.all(
+    const results = await Promise.all(
         subs.map(async (sub) => {
             try {
                 await webpush.sendNotification(sub, body, opts);
+                return true;
             } catch (err) {
                 const status = err?.statusCode;
                 if (status === 404 || status === 410 || status === 401 || status === 403) {
                     removeSubscription(sub);
+                    console.log(`[push] dropped ${subLabel(sub.endpoint)} status=${status}`);
                 } else {
                     console.warn("[push] send failed:", status || "", err?.message || err);
                 }
+                return false;
             }
         }),
     );
+    const sent = results.filter(Boolean).length;
+    const skipped = all.length - subs.length;
+    console.log(`[push] ${payload.tag}: sent ${sent}/${subs.length}${skipped ? ` (foreground ${skipped})` : ""}`);
 }

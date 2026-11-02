@@ -435,6 +435,12 @@
         oauthReloginConfirmTitle: "Log in again?",
         oauthReloginConfirmText: "The current login is removed as soon as this starts. If you stop midway, the provider stays logged out.",
         notificationsDenied: "Notification permission was denied",
+        notificationsTestSending: "Sending a test notification…",
+        notificationsTest: "Send a test notification",
+        notificationsTestSent: "Test notification sent. Check this device's notification center.",
+        notificationsTestMissed: "The push service accepted it, but this device did not confirm delivery",
+        notificationsTestFailed: "The push service rejected the test notification",
+
         installApp: "Install app",
         installGuideTitle: "Install tabyBot",
         installGuidePrompt: "Add tabyBot to your home screen to open it like an app and get notifications.",

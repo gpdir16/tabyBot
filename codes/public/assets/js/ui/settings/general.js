@@ -170,6 +170,19 @@
             unsupported: "notificationsUnsupported",
         }[support];
         sec.append(T.h("div", { class: "set-desc", text: t(reason) }));
+        // 알림이 켜져 있으면 이 기기로 실제 푸시를 한 번 보내 확인할 수 있게 한다.
+        if (usable && T.notifications.enabled()) {
+            sec.append(
+                C.actionRow(t("notificationsTest"), async () => {
+                    // 기기 확인을 기다리는 동안 버튼이 먹통처럼 보이지 않게 바로 알린다.
+                    T.toast.show("info", t("notificationsTestSending"));
+                    const r = await T.notifications.testPush();
+                    if (r.delivered) T.toast.show("success", t("notificationsTestSent"));
+                    else if (r.ok) T.toast.show("warn", `${t("notificationsTestMissed")}${r.status ? ` (${r.status})` : ""}`);
+                    else T.toast.show("error", `${t("notificationsTestFailed")}${r.status ? ` (${r.status})` : ""}`);
+                }),
+            );
+        }
     }
 
     function buildNotices(body, win) {

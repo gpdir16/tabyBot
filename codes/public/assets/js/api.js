@@ -77,7 +77,8 @@
 
         let res;
         try {
-            res = await fetch(path, { method: o.method || "GET", headers, body });
+            // keepalive: 페이지가 숨겨지거나 닫히는 순간에 보낸 요청도 끝까지 보낸다.
+            res = await fetch(path, { method: o.method || "GET", headers, body, keepalive: Boolean(o.keepalive) });
         } catch (_) {
             throw new ApiError(0, null, true);
         }
@@ -231,6 +232,9 @@
         pushConfig: () => request("/api/push/config"),
         pushSubscribe: (sub) => request("/api/push/subscribe", { method: "POST", json: sub }),
         pushUnsubscribe: (sub) => request("/api/push/unsubscribe", { method: "POST", json: sub }),
+        pushPresence: (endpoint, clientId, visible) =>
+            request("/api/push/presence", { method: "POST", json: { endpoint, clientId, visible }, keepalive: true }),
+        pushTest: (endpoint) => request("/api/push/test", { method: "POST", json: { endpoint } }),
 
         // img src / 일반 링크는 Authorization 헤더를 못 붙이므로 쿼리 토큰을 쓴다.
         fileHref: (id) => {
