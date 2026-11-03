@@ -2,7 +2,8 @@
 // 보내 캐시를 살려 둔다. 핑도 앞부분 전체를 캐시에서 다시 읽으므로 그 값(입력 단가의 약 10~25%)이 든다.
 // 그래서 핑을 계속 보내는 비용보다 그동안 사용자가 돌아와 아끼는 값이 클 때만 보낸다.
 //
-// - 만료 시간은 프로바이더별 알려진 값에서 시작하고, 실제 응답의 캐시 적중 여부로 고쳐 나간다.
+// - 만료 시간은 프로바이더별 알려진 값에서 시작하고, 적중이 이어지면 일부러 간격을 늘려 실제 만료를 재고,
+//   빗나가면 이전 값으로 되돌린다. 줄기만 하지 않으므로 실제 만료가 길면 핑 간격도 그만큼 길어진다.
 // - 캐시 적중이 한 번이라도 확인된 모델에만 보낸다. 캐시를 안 쓰는 곳에 보내면 매번 입력 전체 값이 든다.
 // - 사용자가 돌아오기까지 걸린 시간을 저장된 대화 기록의 시각(본문은 읽지 않음)과 이후 실제 요청으로 모으고,
 //   "지금까지 쉰 시간"에서 앞으로 얼마나 더 유지하면 이득인지를 셈한다. 정해진 상한은 없다.
@@ -23,6 +24,14 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const MIN_TTL_MS = 3 * MINUTE;
 const MAX_TTL_MS = 24 * HOUR;
+// 탐색: 적중이 이어지면 핑 간격을 1.5배로 늘려 실제 만료가 더 긴지 확인한다. 적중하면 그 간격을 새 만료 시간으로
+// 쓰고, 빗나가면 이전 간격으로 되돌린 뒤 한동안 탐색을 멈춘다. 실패 한 번은 프롬프트 한 번 값이지만, 성공하면
+// 그 뒤 핑 횟수가 줄어 계속 이득이다.
+const PROBE_GROWTH = 1.5;
+const MAX_PROBE_MS = 6 * HOUR;
+const PROBE_BLOCK_MS = 3 * 24 * HOUR;
+// 이 비율 이상을 캐시에서 읽었을 때만 적중으로 본다. 시스템 프롬프트만 맞은 부분 적중은 만료 시간의 근거가 안 된다.
+const CACHE_HIT_SHARE = 0.8;
 // 이보다 짧은 프롬프트는 캐시되지 않거나(최소 길이 미만) 다시 읽어도 싸다.
 const MIN_PROMPT_TOKENS = 2048;
 const MAX_TOOL_WAIT_MS = 2 * HOUR;
@@ -200,23 +209,39 @@ function modelStat(provider, profile) {
 const clampTtl = (ms) => Math.min(MAX_TTL_MS, Math.max(MIN_TTL_MS, Math.round(ms)));
 
 // 응답의 캐시 사용량으로 만료 시간을 고친다. gap은 같은 대화의 앞 요청(핑 포함)부터 지난 시간.
-function learn(stat, { gap, usage }) {
+// kind가 "probe"면 일부러 간격을 늘려 보낸 핑이라 적중/실패로 만료 시간을 재고, shapeChanged면 앞 요청과
+// 도구 유무가 달라 앞부분이 어긋난 것이므로 간격을 만료 시간의 근거로 쓰지 않는다.
+function learn(stat, { gap, usage, kind = "call", probeFrom = 0, shapeChanged = false }) {
     if (!usage) return;
     const prompt = Number(usage.prompt_tokens ?? usage.input_tokens) || 0;
     const cached = Number(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens) || 0;
     const hinted = Number(usage.cache_ttl_ms) || 0;
     if (hinted) stat.ttlMs = clampTtl(hinted);
     if (prompt < MIN_PROMPT_TOKENS) return;
-    if (cached > 0) {
-        stat.cached = true;
-        if (gap > stat.hitGapMs) {
-            stat.hitGapMs = gap;
-            // 그만큼 쉬고도 적중했으면 만료 시간은 적어도 그만큼이다.
-            if (!hinted && gap > stat.ttlMs) stat.ttlMs = clampTtl(gap);
+    if (shapeChanged) {
+        saveStats();
+        return;
+    }
+    const hit = cached > 0 && cached >= prompt * CACHE_HIT_SHARE;
+    if (cached > 0) stat.cached = true;
+    if (hit) {
+        stat.streak = (Number(stat.streak) || 0) + 1;
+        if (gap > 0 && !(Number(stat.hitGapMs) >= gap)) stat.hitGapMs = gap;
+        // 그만큼 쉬고도 적중했으면 만료 시간은 적어도 그만큼이다. 탐색 핑과 실제 요청만 늘린다.
+        if (!hinted && gap > 0 && (kind === "probe" || (kind === "call" && gap > stat.ttlMs))) stat.ttlMs = clampTtl(gap);
+    } else if (cached <= 0 && stat.cached && gap != null) {
+        stat.streak = 0;
+        if (kind === "probe") {
+            // 늘린 간격에서 빗나갔으니 그 간격은 너무 길다. 이전 간격으로 돌리고 한동안 다시 재지 않는다.
+            if (probeFrom > 0) stat.ttlMs = clampTtl(probeFrom);
+            stat.probeBlockedUntil = Date.now() + PROBE_BLOCK_MS;
+        } else if (gap < stat.ttlMs) {
+            // 시스템 프롬프트까지 통째로 빗나감: 앞부분이 바뀐 게 아니라 만료된 것이다. 더 일찍 보낸다.
+            stat.ttlMs = clampTtl(gap * 0.8);
         }
-    } else if (stat.cached && gap != null && gap < stat.ttlMs) {
-        // 시스템 프롬프트까지 통째로 빗나감: 앞부분이 바뀐 게 아니라 만료된 것이다. 더 일찍 보낸다.
-        stat.ttlMs = clampTtl(gap * 0.8);
+    } else {
+        // 일부분만 캐시에서 읽힌 경우: 앞부분이 달라진 것일 수도 있어 만료 시간의 근거로 쓰지 않는다.
+        stat.streak = 0;
     }
     saveStats();
 }
@@ -424,9 +449,24 @@ function ttlFor(entry, settings = cacheKeepAliveSettings(entry.provider)) {
 
 function schedule(entry) {
     clearTimeout(entry.timer);
-    const ttl = ttlFor(entry);
-    const at = entry.touchedAt + ttl - Math.max(20_000, ttl * 0.1);
-    entry.timer = setTimeout(() => void fire(entry), Math.max(1000, at - Date.now()));
+    const settings = cacheKeepAliveSettings(entry.provider);
+    const ttl = ttlFor(entry, settings);
+    const stat = modelStat(entry.provider, entry.profile);
+    const now = Date.now();
+    // 사용자 지정은 정한 간격 그대로. 자동은 적중이 이어지고 최근 탐색이 실패하지 않았을 때만 간격을 늘려
+    // 실제 만료가 더 긴지 확인한다. 도구 없이 끝난 라운드 뒤에는 앞부분이 달라지므로 재지 않는다.
+    const probeFrom =
+        settings.mode !== "custom" &&
+        entry.toolsSent &&
+        (Number(stat.streak) || 0) > 0 &&
+        now >= (Number(stat.probeBlockedUntil) || 0) &&
+        ttl < MAX_PROBE_MS
+            ? ttl
+            : 0;
+    const probe = probeFrom ? Math.min(MAX_PROBE_MS, Math.round(probeFrom * PROBE_GROWTH)) : 0;
+    entry.probeFrom = probeFrom;
+    const at = entry.touchedAt + (probe || ttl - Math.max(20_000, ttl * 0.1));
+    entry.timer = setTimeout(() => void fire(entry), Math.max(1000, at - now));
     entry.timer.unref?.();
 }
 
@@ -494,10 +534,21 @@ async function fire(entry) {
             return;
         }
         const gap = result.sentAt - entry.touchedAt;
+        // 핑은 도구를 싣고 나가므로, 앞 요청이 도구 없이 끝났다면 앞부분이 달라져 이번 간격은 만료 시간의 근거가 아니다.
+        const toolsSent = Boolean(entry.tools?.length);
+        const shapeChanged = toolsSent !== Boolean(entry.toolsSent);
         entry.touchedAt = result.sentAt;
+        entry.toolsSent = toolsSent;
         entry.pings += 1;
         recordUsage(entry.provider, result.usage, "ping");
-        learn(modelStat(entry.provider, entry.profile), { gap, usage: result.usage });
+        learn(modelStat(entry.provider, entry.profile), {
+            gap,
+            usage: result.usage,
+            kind: entry.probeFrom > 0 ? "probe" : "ping",
+            probeFrom: entry.probeFrom,
+            shapeChanged,
+        });
+        entry.probeFrom = 0;
         const cached = Number(result.usage?.prompt_tokens_details?.cached_tokens ?? result.usage?.input_tokens_details?.cached_tokens);
         const prompt = Number(result.usage?.prompt_tokens ?? result.usage?.input_tokens);
         console.log(`tabyBot: cache keep-alive ${entry.key} #${entry.pings} cached=${Number.isFinite(cached) ? `${cached}/${prompt}` : "?"}`);
@@ -530,7 +581,11 @@ function beginCall(key, now) {
 function finishCall({ key, client, profile, args, response, startedAt, prev }) {
     const usage = response?.usage || null;
     const stat = modelStat(client.provider, profile);
-    learn(stat, { gap: prev ? startedAt - prev.touchedAt : null, usage });
+    // 도구 없이 끝난 라운드(마지막 정리 답변)가 앞에 있으면 다음 요청은 도구를 싣고 오므로
+    // 그 간격으로는 만료 시간을 재지 않는다.
+    const toolsSent = Boolean(args.tools?.length && (args.tool_choice ?? "auto") !== "none");
+    const shapeChanged = Boolean(prev) && toolsSent !== Boolean(prev.toolsSent);
+    learn(stat, { gap: prev && !shapeChanged ? startedAt - prev.touchedAt : null, usage, shapeChanged });
     const message = response?.choices?.[0]?.message;
     const waiting = message?.tool_calls?.length ? "tools" : "user";
     const endedAt = Date.now();
@@ -543,6 +598,7 @@ function finishCall({ key, client, profile, args, response, startedAt, prev }) {
         length: args.messages.length,
         // 도구 없이 부른 라운드(마지막 정리 답변)가 끝이어도 다음 요청은 도구를 싣고 온다.
         tools: args.tools?.length ? args.tools : prev?.tools,
+        toolsSent,
         promptTokens: Number(usage?.prompt_tokens ?? usage?.input_tokens) || 0,
         waiting,
         touchedAt: startedAt,
