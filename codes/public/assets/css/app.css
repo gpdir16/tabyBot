@@ -2745,7 +2745,10 @@ body.todos-route #main {
     padding: calc(var(--hdr-h) + var(--sp-3)) var(--sp-4) calc(28px + env(safe-area-inset-bottom));
     -webkit-overflow-scrolling: touch;
 }
+/* 본문 폭은 자동 바깥 여백으로 가운데 둔다. 여백이 자동이면 늘이기(stretch)가 꺼지므로
+   폭을 부모에 맞춰야 한다. flex 열인 본문(할 일 창)에서 이것이 빠지면 묶음들이 내용 폭만큼 줄어든다. */
 .sp-body > * {
+    width: 100%;
     max-width: 620px;
     margin-inline: auto;
 }
