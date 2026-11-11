@@ -1,6 +1,6 @@
 {
     "name": "tabybot",
-    "description": "Self-improving AI agent platform with a desktop web client",
+    "description": "Self-improving AI agent",
     "type": "module",
     "scripts": {
         "start": "node codes/index.js",

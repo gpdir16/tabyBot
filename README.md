@@ -2,11 +2,17 @@ English | [한국어](README.ko.md)
 
 # tabyBot
 
-An open-source alternative to Grok Bot. Built on my previous project [tabyAgent](https://github.com/gpdir16/tabyAgent).
+A personal open-source agent program inspired by the concept of Grok Bot and the usability of Telegram.
 
-Give it a task and it will do it, even if it takes hours or things go wrong.
+**Balanced:** Strikes a middle ground between ease of use and customizability. It’s not as complex as Hermes or as simple as Grok Bot.
 
-Memory, skills, self-improvement, scheduled tasks, todos, web browsing, and GUI apps work out of the box. No extra setup.
+**Persistent:** Give it a task, and it’ll find a way to get it done, no matter how many hours it takes or what problems come up.
+
+**Simple:** Features like memory, skills, self-improvement, scheduled tasks, to-do lists, web browsing, and GUI app usage work right out of the box.
+
+**Comfortable:** No noisy interjections. You no longer have to watch your agent spit out unnecessary stuff every turn.
+
+Want to skip the explanation and jump straight to installation? Click [here](#quick-start).
 
 <img width="1599" height="1103" alt="CleanShot 2026-10-24 at 4 46 09 PM" src="https://github.com/user-attachments/assets/06a90fc5-c668-41b4-9d29-62f726cb1150" />
 
