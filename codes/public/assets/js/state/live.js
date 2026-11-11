@@ -356,6 +356,25 @@
         void (async () => {
             const ok = await refreshTurnsQuietly(id);
             if (!ok) promoteLiveToTurn(c, { intermediate, text, fallback, silent, stats, attachments });
+            else {
+                // 서버 정본에는 user_say로 보낸 중간 발화가 들어 있지 않다.
+                // 새로 읽어온 기록에 그 발화가 없으면 라이브에서만 보이던 말이 사라지므로 로컬 기록에 남긴다.
+                const storedTexts = new Set();
+                for (const turn of c.turns || []) {
+                    for (const m of turn.messages || []) {
+                        if (m?.role === "assistant") storedTexts.add(String(m.content || "").trim());
+                    }
+                }
+                const missing = intermediate.filter((t) => !storedTexts.has(String(t || "").trim()));
+                if (missing.length) {
+                    promoteSpokenToTurn(
+                        c,
+                        missing.map((content) => ({ role: "assistant", content })),
+                        { stats, attachments },
+                    );
+                    C.emit("turns", { id });
+                }
+            }
             // 정본이 턴을 저장한 뒤에만 live를 해제한다. 답 버블이 깜빡 사라지지 않게.
             // 서버가 곧바로 다음 턴(끝나기 직전에 보낸 메시지)을 돌리고 있으면 새 라이브로 갈아 끼운다.
             if (c.live === liveSnap) c.live = ok && c.running ? freshLive(Boolean(c.meta?.runningAutomated)) : null;
