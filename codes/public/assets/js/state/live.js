@@ -206,7 +206,7 @@
     }
 
     // 서버의 실행 상태와 새 정본에 맞춰 라이브 상태를 정리한다. 바뀌었으면 true.
-    function settleLive(c, id, detail, incoming, requestedAt) {
+    function settleLive(c, id, detail, _incoming, requestedAt) {
         if (detail.running === false) {
             // 서버는 끝났는데 live만 남은 경우(turn_done 유실). 요청을 보낸 뒤에 시작된 live는
             // 새 턴의 것이므로(응답이 그 전 상태다) 건드리지 않는다.
@@ -222,12 +222,7 @@
             C.emit("status", { id });
             return true;
         }
-        if (!c.live?.intermediate.length) return false;
-        // 이미 저장된 라이브 중간 발화는 라이브에서 걷어 낸다.
-        const stored = runningTurnTexts(incoming);
-        const before = c.live.intermediate.length;
-        c.live.intermediate = c.live.intermediate.filter((x) => !stored.has(String(x || "").trim()));
-        return c.live.intermediate.length !== before;
+        return false;
     }
 
     async function loadTurns(id) {
