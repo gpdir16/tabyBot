@@ -1,12 +1,22 @@
-# Used by scripts/install.sh (GHCR image). For local dev, use docker-compose.yml.
+# 로컬 데모용
+
+name: tabybot-demo
+
 services:
-    tabybot:
-        image: ghcr.io/gpdir16/tabybot:latest
-        container_name: tabybot
+    tabybot-demo:
+        build:
+            context: .
+            args:
+                TABYBOT_VERSION: demo
+        image: tabybot-demo:local
+        pull_policy: build
+        container_name: tabybot-demo
+        labels:
+            - tabybot.environment=demo
         environment:
             TABYBOT_MODE: docker
-            TABYBOT_HOME: ${TABYBOT_HOME:-}
-            TABYBOT_DOCKER_SHELL: ${TABYBOT_DOCKER_SHELL:-docker}
+            TABYBOT_HOME: ""
+            TABYBOT_DOCKER_SHELL: docker
             CAMOFOX_HOST: 127.0.0.1
             CAMOFOX_PORT: 9377
             CAMOFOX_AUTH_MODE: disabled
@@ -20,10 +30,18 @@ services:
             CAMOFOX_DOWNLOADS_DIR: /app/user/camofox/downloads
             CAMOFOX_TRACES_DIR: /app/user/camofox/traces
         volumes:
-            - tabybot-user:/app/user
+            - tabybot-demo-user:/app/user
         ports:
-            - "${TABYBOT_BIND:-0.0.0.0}:${TABYBOT_PORT:-8999}:8999"
+            - "${TABYBOT_DEMO_BIND:-127.0.0.1}:${TABYBOT_DEMO_PORT:-8998}:8999"
+        networks:
+            - tabybot-demo-net
         restart: unless-stopped
 
+networks:
+    tabybot-demo-net:
+        name: tabybot-demo-net
+        driver: bridge
+
 volumes:
-    tabybot-user:
+    tabybot-demo-user:
+        name: tabybot-demo-user
