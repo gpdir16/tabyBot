@@ -9,7 +9,8 @@ import path from "node:path";
 import zlib from "node:zlib";
 
 const ENTRY = "modules/juggler/TargetRegistry.js";
-// 패치가 부르거나 바꿔 끼우는 코드
+// 패치가 부르거나 바꿔 끼우는 코드. 브라우저 릴리스가 CAMOFOX_BROWSER_RELEASE로 고정돼 있으므로
+// 고정된 버전의 코드 모양만 확인한다. 다른 버전이 들어오면 빌드를 멈춘다.
 const EXPECTED = [
     "export class TargetRegistry",
     "export class PageTarget",
@@ -19,7 +20,7 @@ const EXPECTED = [
     "hasFailedToOverrideTimezone()",
     "'TabOpen'",
     "async updateViewportSize()",
-    "this._window.resizeBy(",
+    "this._window.resizeTo(",
 ];
 const MARKER = "tabyBot: 새 페이지를 새 창이 아니라";
 

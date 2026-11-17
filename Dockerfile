@@ -2,6 +2,8 @@ FROM node:22-bookworm-slim
 
 ARG TABYBOT_VERSION=dev
 ARG CAMOFOX_VERSION=2.4.7
+# camoufox-js는 지원 범위의 최신 릴리스를 받는다. juggler 패치가 깨지지 않도록 브라우저 릴리스를 고정한다.
+ARG CAMOFOX_BROWSER_RELEASE=beta.42
 
 WORKDIR /app
 ENV TABYBOT_VERSION=${TABYBOT_VERSION}
@@ -20,6 +22,7 @@ ENV CONFIG_DIR=/app/codes/config
 ENV NODE_ENV=production
 ENV HEADLESS=true
 ENV CAMOFOX_VERSION=${CAMOFOX_VERSION}
+ENV CAMOFOX_BROWSER_RELEASE=${CAMOFOX_BROWSER_RELEASE}
 ENV CAMOFOX_HOST=127.0.0.1
 ENV CAMOFOX_PORT=9377
 ENV CAMOFOX_AUTH_MODE=disabled
@@ -75,7 +78,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# camoufox-js postinstall이 브라우저를 $HOME/.cache에 받는다. HOME=/app/user는
+# camoufox-js fetch가 브라우저를 $HOME/.cache에 받는다. HOME=/app/user는
 # 런타임에 볼륨이 마운트되는 경로라 이미지에 넣으면 그대로 가려진다.
 # 볼륨 밖 /opt에 두고 심볼릭 링크로 연결한다(엔트리포인트가 없으면 다시 만든다).
 # 번들 폰트 2GB 중 리눅스 지문이 쓰는 것만 남긴다(CAMOFOX_OS를 리눅스 밖으로 바꾸면 그 OS 폰트가 없다).
@@ -84,9 +87,13 @@ RUN apt-get update \
 # camoufox.cfg 기본값이라 에이전트가 따로 만든 프로필에도 적용된다.
 # 새 페이지는 창 대신 탭으로 연다(scripts/camoufox-tabs.cfg). 뒤에 있는 탭은 그리기를 멈춰 CPU가 크게 준다.
 # juggler 코드 모양이 바뀌었으면 패치 스크립트가 빌드를 멈춘다.
-COPY scripts/prune-camoufox-fonts.mjs scripts/patch-camoufox-tabs.mjs scripts/camoufox-tabs.cfg /tmp/
+# 브라우저 릴리스는 CAMOFOX_BROWSER_RELEASE로 고정한다. 설치 중 postinstall fetch는 건너뛰고,
+# 상한을 고정한 뒤 fetch를 따로 돌려 고정된 릴리스(+애드온·GeoIP)를 받는다.
+COPY scripts/prune-camoufox-fonts.mjs scripts/patch-camoufox-tabs.mjs scripts/pin-camoufox-version.mjs scripts/camoufox-tabs.cfg /tmp/
 RUN mkdir -p /app/user \
-    && npm install --global "camofox-browser@${CAMOFOX_VERSION}" \
+    && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --global "camofox-browser@${CAMOFOX_VERSION}" \
+    && node /tmp/pin-camoufox-version.mjs "$(npm root --global)/camofox-browser/node_modules/camoufox-js" "${CAMOFOX_BROWSER_RELEASE}" \
+    && node "$(npm root --global)/camofox-browser/node_modules/camoufox-js/dist/__main__.js" fetch \
     && npm cache clean --force \
     && mv /app/user/.cache/camoufox /opt/camoufox \
     && node /tmp/prune-camoufox-fonts.mjs /opt/camoufox "$(npm root --global)/camofox-browser/node_modules/camoufox-js" \
@@ -94,7 +101,7 @@ RUN mkdir -p /app/user \
     && node /tmp/patch-camoufox-tabs.mjs /opt/camoufox \
     && mkdir -p /app/user/.cache \
     && ln -s /opt/camoufox /app/user/.cache/camoufox \
-    && rm -rf /tmp/camoufox-* /tmp/node-compile-cache /tmp/prune-camoufox-fonts.mjs /tmp/patch-camoufox-tabs.mjs
+    && rm -rf /tmp/camoufox-* /tmp/node-compile-cache /tmp/prune-camoufox-fonts.mjs /tmp/patch-camoufox-tabs.mjs /tmp/pin-camoufox-version.mjs
 
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev && npm cache clean --force
