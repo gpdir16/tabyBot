@@ -5,20 +5,19 @@ import { restartUpdateScheduler } from "../update/scheduler.js";
 
 // nsfwLevel/approvalLevel은 에이전트가 스스로 완화할 수 없게 config_set에서 제외한다
 // (웹 설정에서만 변경 가능).
-const ALLOWED_KEYS = new Set(["language", "thinkingLevel", "showReplyFooter", "updateCheckEnabled"]);
+const ALLOWED_KEYS = new Set(["language", "thinkingLevel", "updateCheckEnabled"]);
 
 export const configToolDefinitions = [
     {
         type: "function",
         function: {
             name: "config_set",
-            description: "Update non-secret runtime config. language, thinkingLevel (provider /models), showReplyFooter, updateCheckEnabled.",
+            description: "Update non-secret runtime config. language, thinkingLevel (provider /models), updateCheckEnabled.",
             parameters: {
                 type: "object",
                 properties: {
                     language: { type: "string", enum: ["en", "ko", "ja"] },
                     thinkingLevel: { type: "string", description: "Level from provider /models metadata" },
-                    showReplyFooter: { type: "boolean" },
                     updateCheckEnabled: { type: "boolean" },
                 },
             },
@@ -53,10 +52,6 @@ export function executeConfigTool(name, args) {
         preset.thinkingLevel = normalizeThinkingLevel(a.thinkingLevel, getMergedProvider(config).id);
         updated = true;
     }
-    if (a.showReplyFooter !== undefined) {
-        config.showReplyFooter = Boolean(a.showReplyFooter);
-        updated = true;
-    }
     if (a.updateCheckEnabled !== undefined) {
         config.updateCheckEnabled = Boolean(a.updateCheckEnabled);
         updated = true;
@@ -68,7 +63,6 @@ export function executeConfigTool(name, args) {
         ok: true,
         language: config.language,
         thinkingLevel: defaultPreset(config).thinkingLevel,
-        showReplyFooter: config.showReplyFooter,
         updateCheckEnabled: config.updateCheckEnabled,
         nsfwLevel: config.nsfwLevel,
     };

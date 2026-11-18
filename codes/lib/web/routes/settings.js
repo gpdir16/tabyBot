@@ -346,7 +346,7 @@ function buildSettingsPayload() {
         thinkingLevel: normalizeThinkingLevel(merged?.thinkingLevel, pid),
         thinkingLevels: thinkingLevelsOf(pid, config.language),
         thinkingLevelsByProvider,
-        showReplyFooter: config.showReplyFooter !== false,
+        showReplyFooter: config.showReplyFooter !== false, // 레거시: 이제 UI에서 쓰지 않는다(활동 탭으로 이동). 이전 클라이언트 호환용으로만 남긴다
         updateCheckEnabled: config.updateCheckEnabled !== false,
         allTabExcludesFoldered: config.allTabExcludesFoldered === true,
         foldersInList: config.foldersInList === true,

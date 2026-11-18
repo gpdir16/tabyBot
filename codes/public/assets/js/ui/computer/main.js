@@ -28,6 +28,7 @@
         const header = document.getElementById("header");
         const hdrMenu = document.getElementById("btnMenu");
         const hdrComp = document.getElementById("btnHdrComputer");
+        const hdrInfo = document.getElementById("btnHdrInfo");
         const hdrAvatar = document.getElementById("hdrAvatar");
         const hdrName = document.getElementById("hdrName");
         const nameWrap = header?.querySelector(".hd-name-wrap");
@@ -36,6 +37,7 @@
             hdrMenu.after(C.els.backBtn);
             nameWrap.append(C.els.status);
             hdrComp.style.display = "none";
+            if (hdrInfo) hdrInfo.style.display = "none";
             header.append(C.els.tabs);
         }
 
@@ -100,8 +102,10 @@
         C.els.tabs?.remove();
         const hdrMenu = document.getElementById("btnMenu");
         const hdrComp = document.getElementById("btnHdrComputer");
+        const hdrInfo = document.getElementById("btnHdrInfo");
         if (hdrMenu) hdrMenu.style.display = "";
         if (hdrComp) hdrComp.style.display = "";
+        if (hdrInfo) hdrInfo.style.display = "";
         T.chat?.refreshHeader?.();
         if (C.screenWs) {
             try {

@@ -10,6 +10,7 @@
     const hdrAvatar = document.getElementById("hdrAvatar");
     const hdrName = document.getElementById("hdrName");
     const hdrNameWrap = hdrName?.parentElement;
+    const hdrInfoBtn = document.getElementById("btnHdrInfo");
 
     /* ── 대화 열기 ──────────────────────────────────────────── */
     const REVALIDATE_AFTER_MS = 3000;
@@ -152,12 +153,15 @@
             hdrAvatar.style.backgroundColor = "var(--accent)";
             hdrAvatar.style.color = "#fff";
             hdrName.textContent = name;
+            hdrInfoBtn?.classList.add("hidden");
             return;
         }
         const bot = T.state.currentChat();
         const name = bot ? bot.name : "";
         // 그룹 대화방에는 봇 컴퓨터가 없다. 헤더의 컴퓨터 버튼을 자리는 둔 채 감춘다.
         document.body.classList.toggle("group-chat", Boolean(bot?.isGroup));
+        // i 버튼: 대화방이 열려 있을 때만 보인다. 누르면 그 대화의 활동 창이 열린다.
+        hdrInfoBtn?.classList.toggle("hidden", !bot);
         document.title = name ? `${name} · tabyBot` : "tabyBot";
         const groupWrap = Boolean(bot?.isGroup && !bot.avatar);
         hdrAvatar.classList.toggle("group-wrap", groupWrap);
@@ -209,6 +213,9 @@
                 }
             });
         }
+        hdrInfoBtn?.addEventListener("click", () => {
+            T.chatInfo?.openActivity(T.state.currentChat());
+        });
         const routeIfCurrent = (p) => {
             if (p.id === state.state.currentId) C.requestSync();
         };

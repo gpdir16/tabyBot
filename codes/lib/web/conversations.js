@@ -285,6 +285,96 @@ function askMessageFromToolCall(tc, result, at) {
     return msg;
 }
 
+// ── 턴 상세 (활동 창의 턴 상세 창용) ────────────────────────
+// 화면용 턴 목록의 index로 원본 턴을 찾아, 모델이 오간 전체를 사용자 친화적 항목으로 재구성한다.
+// raw JSON은 그대로 보내지 않는다: 도구 호출은 {name, args}로, 결과는 짝지어 붙인다.
+export function getTurnDetail(id, index) {
+    if (!isValidId(id)) return null;
+    let raw;
+    try {
+        raw = loadFullChatHistory(id);
+    } catch {
+        return null;
+    }
+    const display = toDisplayTurns(raw);
+    const turn = display[Number(index)];
+    if (!turn) return null;
+    const source = raw.find((t) => (turn.id ? t.id === turn.id : t.at === turn.at)) || turn;
+    const results = new Map();
+    for (const m of source.messages || []) {
+        if (m?.role !== "tool" || !m.tool_call_id) continue;
+        let parsed;
+        try {
+            parsed = JSON.parse(m.content);
+        } catch {
+            parsed = { text: String(m.content ?? "") };
+        }
+        results.set(m.tool_call_id, parsed);
+    }
+    const items = [];
+    const pushCall = (calls, tc) => {
+        const name = tc?.function?.name;
+        if (!name) return;
+        calls.push({ name, args: parseToolArgs(tc), result: results.get(tc.id) ?? null });
+    };
+    for (const m of source.messages || []) {
+        if (m?.role === "user") {
+            // 비전 도구의 스크린샷 관찰 에코(user role + 배열 본문, id 없음)는 건너뛴다.
+            if (Array.isArray(m.content)) continue;
+            const text = stripAttachedFiles(String(m.content ?? ""));
+            if (isInternalHintText(text.trim()) || isScheduledTurnText(text) || text.startsWith(PENDING_USER_PREFIX)) continue;
+            items.push({ kind: "user", text });
+            for (const q of m.queued || []) {
+                const qt = stripAttachedFiles(String(q?.text ?? ""));
+                if (qt.trim()) items.push({ kind: "user", text: qt });
+            }
+            continue;
+        }
+        if (m?.role !== "assistant") continue;
+        const calls = [];
+        for (const tc of m.tool_calls || []) {
+            const name = tc?.function?.name;
+            if (!name) continue;
+            const args = parseToolArgs(tc) || {};
+            if (name === "user_say") {
+                const text = String(args.text ?? "").trim();
+                if (text && !isSilentMarkedText(text)) items.push({ kind: "say", text });
+                continue;
+            }
+            if (name === "user_ask" || name === "secret_request") {
+                const question = String(args.question || args.name || "").trim();
+                if (question) items.push({ kind: "ask", name, question, secret: name === "secret_request" });
+                continue;
+            }
+            pushCall(calls, tc);
+        }
+        const text = String(m.content ?? "").trim();
+        if (!calls.length && !text) continue;
+        items.push({ kind: "assistant", text: text || "", calls });
+    }
+    return { at: turn.at || null, status: turn.status || null, stats: turn.stats || null, items };
+}
+
+export function toDisplayTurns(rawTurns) {
+    const turns = [];
+    // 실행 턴(대기 턴이 아닌 턴)에 이미 들어 있는 사용자 메시지 id.
+    const absorbedIds = new Set();
+    for (const turn of rawTurns || []) {
+        if (isStandalonePendingTurn(turn)) continue;
+        for (const id of userMessageIdsOf(turn?.messages)) absorbedIds.add(id);
+    }
+    const legacyQueuedSeen = new Set();
+    for (const turn of rawTurns || []) {
+        if (isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen)) continue;
+        const toolResults = toolResultsOf(turn?.messages);
+        const messages = (turn?.messages || []).flatMap((m) => displayMessage(m, legacyQueuedSeen, toolResults));
+        // 도구 프레임 제거로 빈 turn이 되면 아예 생략. 질문 카드만 남은 턴과 방의 안내 줄도 화면에 남긴다.
+        if (messages.some((m) => m.role === "user" || m.role === "assistant" || m.role === "ask" || m.role === "notice"))
+            turns.push({ ...turn, messages });
+    }
+    return turns;
+}
+
 // assistant 메시지 → 화면용 메시지 목록(보이지 않으면 빈 배열).
 function displayAssistant(m, toolResults) {
     if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
@@ -368,22 +458,4 @@ function displayMessage(m, legacyQueuedSeen, toolResults) {
     return [m?.attachments ? publicMessage(m) : m];
 }
 
-export function toDisplayTurns(rawTurns) {
-    const turns = [];
-    // 실행 턴(대기 턴이 아닌 턴)에 이미 들어 있는 사용자 메시지 id.
-    const absorbedIds = new Set();
-    for (const turn of rawTurns || []) {
-        if (isStandalonePendingTurn(turn)) continue;
-        for (const id of userMessageIdsOf(turn?.messages)) absorbedIds.add(id);
-    }
-    const legacyQueuedSeen = new Set();
-    for (const turn of rawTurns || []) {
-        if (isDuplicateOfQueued(turn, absorbedIds, legacyQueuedSeen)) continue;
-        const toolResults = toolResultsOf(turn?.messages);
-        const messages = (turn?.messages || []).flatMap((m) => displayMessage(m, legacyQueuedSeen, toolResults));
-        // 도구 프레임 제거로 빈 turn이 되면 아예 생략. 질문 카드만 남은 턴과 방의 안내 줄도 화면에 남긴다.
-        if (messages.some((m) => m.role === "user" || m.role === "assistant" || m.role === "ask" || m.role === "notice"))
-            turns.push({ ...turn, messages });
-    }
-    return turns;
-}
+// ── 턴 상세 (활동 창의 턴 상세 창용) ────────────────────────

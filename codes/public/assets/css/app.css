@@ -756,17 +756,6 @@ kbd {
     margin-top: 2px;
     text-align: right;
 }
-/* 통계 푸터가 있으면 같은 줄의 오른쪽 끝에 둔다 */
-.stats-footer:has(> .msg-time) {
-    display: flex;
-    align-items: baseline;
-    gap: var(--sp-3);
-}
-.stats-footer > .msg-time {
-    margin-left: auto;
-    opacity: 1;
-    color: inherit;
-}
 /* 말풍선 없이 첨부만 있는 메시지: 첨부 아래 한 줄 */
 .msg-stack > .msg-time,
 .msg-user-stack > .msg-time {
@@ -910,18 +899,6 @@ kbd {
     to {
         background-position: 8em 0;
     }
-}
-
-/* ── 통계 푸터 ─────────────────────────────────────────── */
-.stats-footer {
-    margin-top: var(--sp-2);
-    font-size: var(--fs-xs);
-    color: var(--text-tertiary);
-    font-feature-settings: "tnum";
-    user-select: none;
-}
-.msg-row.assistant .bubble .stats-footer {
-    margin-top: var(--sp-3);
 }
 
 /* ── 7. 마크다운 콘텐츠 ────────────────────────────────── */
@@ -6895,6 +6872,61 @@ body.viewer-open {
     width: 32px;
     height: 32px;
     font-size: var(--fs-s);
+}
+/* 활동 창의 컨텍스트 링 */
+.ci-ring-wrap {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+}
+.ci-ring {
+    width: 64px;
+    height: 64px;
+    grid-column: 1;
+    grid-row: 1;
+    transform: rotate(-90deg);
+}
+.ci-ring circle {
+    fill: none;
+    stroke-width: 6;
+}
+.ci-ring-track {
+    stroke: var(--surface-3);
+}
+.ci-ring-fill {
+    stroke: var(--accent);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s var(--ease);
+}
+.ci-ring-pct {
+    grid-column: 1;
+    grid-row: 1;
+    place-self: center;
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    font-size: var(--fs-s);
+    font-weight: 600;
+    font-feature-settings: "tnum";
+}
+.ci-ring-label {
+    grid-column: 2;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    font-feature-settings: "tnum";
+}
+/* 턴 상세 창의 본문 행: 글자가 행을 채우고 줄바꿈된다(나머지는 설정 창의 행 언어를 그대로 쓴다).
+   세로 패딩이 없으면 여러 줄 텍스트가 둥근 카드의 위아래 끝에 붙는다. */
+.set-group > .ci-turn-row {
+    align-items: flex-start;
+    padding: var(--sp-3) var(--sp-4);
+}
+.ci-turn-row .set-label {
+    flex: 1;
+    white-space: pre-wrap;
 }
 /* 대화방 헤더의 아바타와 이름을 누르면 대화 정보 패널이 열린다 */
 .hdr-info {

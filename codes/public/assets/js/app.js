@@ -23,9 +23,13 @@
     // 이전 동기화 시점의 높이 (높이 변화 감지용)
     let vvLastHeight = 0;
     let revealTimer = 0;
-    // 키보드를 따라 진행 중인 입력 바 움직임, 포커스가 빠져 키보드를 내리는 중인 시각의 끝
+    // 키보드를 따라 진행 중인 입력 바 움직임
     let keyboardMove = null;
-    let kbClosingUntil = 0;
+    // 지금 --app-height에 반영된 높이(키보드 닫힘 상태에서의 축소 판정 기준)
+    let appliedHeight = 0;
+    // 키보드가 닫힌 상태에서 줄어든 읽기를 잠깐 지켜 보는 타이머와 그 확정 표시
+    let shrinkTimer = 0;
+    let shrinkConfirmed = false;
     // iOS 키보드의 움직임에 맞춘 시간과 곡선. 시뮬레이터 녹화에서 잰 키보드 윗변의 움직임을 따른다.
     const KB_OPEN_MS = 320;
     const KB_OPEN_EASE = "cubic-bezier(0.15, 0.9, 0.45, 1)";
@@ -33,7 +37,8 @@
     const KB_OPEN_DELAY_MS = 32;
     const KB_CLOSE_MS = 180;
     const KB_CLOSE_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
-    const KB_CLOSE_GRACE_MS = 1500;
+    // 키보드가 닫힌 상태에서 줄어든 읽기가 이만큼 버텨야 진짜 변화(회전 등)로 받아들인다.
+    const SHRINK_CONFIRM_MS = 250;
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
     // 가상 키보드가 있는 터치 화면
     const coarsePointer = window.matchMedia?.("(pointer: coarse)");
@@ -104,6 +109,7 @@
     }
 
     function setAppHeight(height) {
+        appliedHeight = height;
         document.documentElement.style.setProperty("--app-height", `${height}px`);
     }
 
@@ -180,13 +186,34 @@
     function syncViewportHeight() {
         if (window.scrollY) window.scrollTo(0, 0);
         const vv = window.visualViewport;
-        let height = Math.round(vv?.height || window.innerHeight);
-        if (vv && height > vvFullHeight) vvFullHeight = height;
-        // 키보드를 내리는 중: iOS가 다 내려간 뒤에야 보내는 줄어든 높이로 다시 올라가지 않게 한다.
-        if (vv && performance.now() < kbClosingUntil && !isTextEntry(document.activeElement || document.body))
-            height = Math.max(height, vvFullHeight);
+        const raw = Math.round(vv?.height || window.innerHeight);
+        const textEntry = isTextEntry(document.activeElement || document.body);
+        const touchVv = !!vv && coarsePointer?.matches;
+        // 키보드가 닫혀 있는데 갑자기 줄어든 읽기가 오면(iOS가 닫힌 뒤에도 몇 번이고 보내는 값), 바로 믿지
+        // 않고 이만큼 버텨야 진짜 변화(회전 등)로 받아들인다. 확정 전에는 지금 높이를 유지한다.
+        // 데스크톱은 확대/축소로 visualViewport가 줄어드는 것과 겹치지 않게 터치 기기에서만 본다.
+        const shrinkPending = touchVv && !textEntry && appliedHeight && raw < appliedHeight - 1 && !shrinkConfirmed;
+        if (shrinkPending) {
+            if (!shrinkTimer) {
+                shrinkTimer = setTimeout(() => {
+                    shrinkTimer = 0;
+                    if (isTextEntry(document.activeElement || document.body)) return;
+                    const h = Math.round(window.visualViewport?.height || window.innerHeight);
+                    if (appliedHeight && h < appliedHeight - 1) {
+                        shrinkConfirmed = true;
+                        syncViewportHeight();
+                    }
+                }, SHRINK_CONFIRM_MS);
+            }
+        } else if (shrinkTimer) {
+            clearTimeout(shrinkTimer);
+            shrinkTimer = 0;
+            shrinkConfirmed = false;
+        }
+        const height = shrinkPending ? appliedHeight : raw;
         const changed = vvLastHeight && Math.abs(height - vvLastHeight) > 1;
-        const kbOpen = !!vv && vvFullHeight - height > 100;
+        // 열림 판정: 텍스트 입력 중이고 뷰포트가 확실히 줄었을 때만 키보드가 열린 것으로 본다.
+        const kbOpen = touchVv && textEntry && !!vvFullHeight && vvFullHeight - height > 100;
         if (!vv) vvFullHeight = 0;
         if (keyboardMove && (changed || keyboardMove.height !== height)) finishKeyboardMove();
         if (changed && kbOpen && !document.body.classList.contains("kb-open") && canAnimateKeyboard()) {
@@ -200,6 +227,8 @@
             setAppHeight(height);
         }
         vvLastHeight = height;
+        // 키보드 없이 확정해 적용한 높이가 기준이다(복원 높이·열림 판정·회전 뒤 재잡기).
+        if (!keyboardMove && touchVv && !textEntry && !shrinkPending) vvFullHeight = height;
         // 키보드를 따라 올라가는 중에는 화면 아래 끝이 아직 대화라서 색을 다시 고르지 않는다
         if (!keyboardMove) syncKeyboardBackground();
         if (changed) {
@@ -216,7 +245,6 @@
         if (e.relatedTarget && isTextEntry(e.relatedTarget)) return;
         if (!window.visualViewport || !coarsePointer?.matches || reduceMotion?.matches || !vvFullHeight) return;
         finishKeyboardMove();
-        kbClosingUntil = performance.now() + KB_CLOSE_GRACE_MS;
         moveWithClosingKeyboard(vvFullHeight);
         vvLastHeight = vvFullHeight;
         syncKeyboardBackground();

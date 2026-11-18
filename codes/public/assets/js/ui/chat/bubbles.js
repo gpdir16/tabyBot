@@ -25,7 +25,7 @@
         if (!Number.isFinite(line)) line = (parseFloat(cs.fontSize) || 15) * 1.5;
         const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
         const inner = el.clientHeight - pad;
-        const block = el.querySelector("img, pre, table, ul, ol, h1, h2, h3, h4, blockquote, .thumb, .stats-footer, .codeblock");
+        const block = el.querySelector("img, pre, table, ul, ol, h1, h2, h3, h4, blockquote, .thumb, .codeblock");
         return !!block || inner > line + 2;
     }
 
@@ -119,17 +119,6 @@
         }
         C.placeTime(C.msgTimeEl(at), stack, stack.querySelector(".bubble"));
         return T.h("div", { class: `msg-row user${optimistic ? " optimistic" : ""}` }, [stack]);
-    }
-
-    function statsFooter(stats) {
-        const parts = [];
-        if (stats.modelCallCount != null) parts.push(t("statModelCalls", { n: C.fmt(stats.modelCallCount) }));
-        if (stats.toolCallCount != null) parts.push(t("statToolCalls", { n: C.fmt(stats.toolCallCount) }));
-        if (stats.tokensUsed != null && stats.contextWindow) {
-            parts.push(`${C.fmt(stats.tokensUsed)} / ${C.fmt(stats.contextWindow)}`);
-        }
-        if (!parts.length) return null;
-        return T.h("div", { class: "stats-footer", text: parts.join(" · ") });
     }
 
     /* ── 실제 파일 경로 링크 ───────────────────────────────────
@@ -285,9 +274,6 @@
         bubble.querySelectorAll("img").forEach((img) => {
             img.addEventListener("load", () => fitBubbleRadius(bubble));
         });
-
-        const sf = o.stats && state.state.settings?.showReplyFooter ? statsFooter(o.stats) : null;
-        if (sf) bubble.append(sf);
 
         const stack = T.h("div", { class: "msg-stack" }, [bubble]);
         // 그룹 대화방: 누가 말했는지 버블 위에 이름을 단다.

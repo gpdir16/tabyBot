@@ -115,6 +115,8 @@
 
         conversations: () => request("/api/conversations"),
         conversation: (id) => request(`/api/conversations/${enc(id)}`),
+        // 활동 창의 턴 상세: 화면용 턴 목록의 index로 그 턴의 전체 내용을 받는다.
+        turnDetail: (id, index) => request(`/api/conversations/${enc(id)}/turn/${Number(index)}`),
 
         sendMessage: (id, text, attachmentIds, clientId) => {
             const body = { text };

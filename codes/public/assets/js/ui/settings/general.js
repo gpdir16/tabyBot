@@ -82,14 +82,6 @@
 
         sec.append(T.h("hr", { class: "divider" }));
 
-        // 응답 통계 푸터
-        sec.append(
-            T.h("div", { class: "set-row" }, [
-                T.h("div", { class: "set-label", text: t("statsFooter") }),
-                C.switchEl(s.showReplyFooter, (v) => C.put({ showReplyFooter: v }), t("statsFooter")),
-            ]),
-        );
-
         // 업데이트 확인
         sec.append(
             T.h("div", { class: "set-row" }, [

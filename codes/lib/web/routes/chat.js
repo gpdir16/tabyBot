@@ -34,6 +34,13 @@ function registerConversationsRoutes(router) {
         ctx.json200(detail);
     });
 
+    // 활동 창의 턴 상세: 화면용 턴 목록의 index로 그 턴의 전체 내용을 되돌린다.
+    router.add("GET", "/api/conversations/:id/turn/:index", (ctx) => {
+        const detail = conversationsStore.getTurnDetail(ctx.params.id, ctx.params.index);
+        if (!detail) return ctx.json404();
+        ctx.json200(detail);
+    });
+
     router.add("POST", "/api/conversations/:id/messages", async (ctx) => {
         const id = ctx.params.id;
         const meta = resolveConversationMeta(id);
